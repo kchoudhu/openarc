@@ -8,7 +8,7 @@ from   env       import *
 
 ## Exportable classes
 
-class LCDao(object):
+class OADao(object):
     """Wrapper around psycopg2 with additional functionality
     for logging, connection management and sql execution"""
     def __init__(self, schema):

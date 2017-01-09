@@ -4,7 +4,7 @@ import os
 import json
 import pprint
 
-class LCEnv(object):
+class OAEnv(object):
     @property
     def static_http_root(self):
         if self.envcfg['httpinfo']['secure'] is True:
@@ -37,12 +37,12 @@ p_env = None
 
 def initenv(envstr):
     """envstr: one of local, dev, qa, prod.
-    Does not return LCEnv variable; for that, you
+    Does not return OAEnv variable; for that, you
     must call getenv"""
     global p_env
     global p_refcount_env
     if p_refcount_env == 0:
-        p_env = LCEnv(envstr)
+        p_env = OAEnv(envstr)
         p_refcount_env += 1
 
 def getenv():

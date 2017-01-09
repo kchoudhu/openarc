@@ -3,9 +3,9 @@
 import time
 
 from textwrap       import dedent as td
-from openlibarc.dao import LCDao
+from openlibarc.dao import OADao
 
-class LCTime(object):
+class OATime(object):
     """Executes time queries on database, returning
     consistent time view to caller"""
     def __init__(self, dt=None, extcur=None):
@@ -15,7 +15,7 @@ class LCTime(object):
     @property
     def now(self):
         if self.cur is None:
-            self.cur = LCDao("common").cur
+            self.cur = OADao("common").cur
         self.cur.execute(self.SQL.get_current_time)
         return self.cur.fetchall()[0]['timezone']
 

@@ -7,11 +7,11 @@ import psycopg2
 
 sys.path.append('../')
 
-from openlibarc.test import TestLCBase
-from openlibarc.dao  import LCDao
+from openlibarc.test import TestOABase
+from openlibarc.dao  import OADao
 from openlibarc.env  import initenv, getenv
 
-class TestLCDao(unittest.TestCase, TestLCBase):
+class TestOADao(unittest.TestCase, TestOABase):
     def setUp(self):
         self.setUp_db()
 
@@ -19,12 +19,12 @@ class TestLCDao(unittest.TestCase, TestLCBase):
         self.tearDown_db()
 
     def test_connection_lifecycle(self):
-        """Both constructor and ctxmgr should return consistent LCDao"""
+        """Both constructor and ctxmgr should return consistent OADao"""
 
         # Constructor based lifecycle
         # 1) __init__ returns valid dao
-        dao_init = LCDao("test")
-        self.assertEqual(type(dao_init).__name__, "LCDao")
+        dao_init = OADao("test")
+        self.assertEqual(type(dao_init).__name__, "OADao")
         # 2) Explicit close results in unusable dao
         dao_init.close()
         with self.assertRaises(psycopg2.InterfaceError):
@@ -32,15 +32,15 @@ class TestLCDao(unittest.TestCase, TestLCBase):
 
         # Ctxmgr based lifecyle
         # 1) ctxmgr returns valid dao
-        with LCDao("test") as dao_ctx:
-            self.assertEqual(type(dao_ctx).__name__, "LCDao")
+        with OADao("test") as dao_ctx:
+            self.assertEqual(type(dao_ctx).__name__, "OADao")
         # 2) Leave "with" block results in unusable dao
         with self.assertRaises(psycopg2.InterfaceError):
             dao_ctx.cur
 
     def test_cursor_generation(self):
-        """Property cur on LCDao should return cursor with correct search_path"""
-        with LCDao("test") as dao:
+        """Property cur on OADao should return cursor with correct search_path"""
+        with OADao("test") as dao:
             with dao.cur as cur:
                 # Cursor generation returns dicts
                 self.assertEqual(type(cur).__name__, "RealDictCursor")
@@ -56,7 +56,7 @@ class TestLCDao(unittest.TestCase, TestLCBase):
             self.dbconn.commit()
 
         # Nothing committed if commit() method is not called
-        with LCDao("test") as dao:
+        with OADao("test") as dao:
             with dao.cur as cur:
                 for i in xrange(10):
                     cur.execute(self.SQL.insert_sample_row, [i])
@@ -65,7 +65,7 @@ class TestLCDao(unittest.TestCase, TestLCBase):
                 self.assertEqual(testcur.rowcount, 0)
 
         # Data committed if commit() method is called
-        with LCDao("test") as dao:
+        with OADao("test") as dao:
             with dao.cur as cur:
                 for i in xrange(10):
                     cur.execute(self.SQL.insert_sample_row, [i])
@@ -74,7 +74,7 @@ class TestLCDao(unittest.TestCase, TestLCBase):
                 testcur.execute(self.SQL.get_rows_from_sample_table)
                 self.assertEqual(testcur.rowcount, 10)
 
-    class SQL(TestLCBase.SQL):
+    class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
             SHOW search_path""")

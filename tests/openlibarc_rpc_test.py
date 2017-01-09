@@ -6,9 +6,9 @@ import sys
 from datetime                 import datetime
 from openlibarc.exception     import *
 from openlibarc.rpc           import *
-from openlibarc.test          import TestLCBase
+from openlibarc.test          import TestOABase
 
-class TestLCRpc(unittest.TestCase, TestLCBase):
+class TestOARpc(unittest.TestCase, TestOABase):
     initialized = False
 
     def setUp(self):
@@ -24,7 +24,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         """Status checks, registration and deregistration work as expected"""
         # Lookup
         svc = RpcReqSink(42)
-        with self.assertRaises(LCGraphRetrieveError):
+        with self.assertRaises(OAGraphRetrieveError):
             status = svc.status
             print status[0]._rawdata
 
@@ -35,7 +35,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
 
         # Deregister
         svc.stop()
-        with self.assertRaises(LCGraphRetrieveError):
+        with self.assertRaises(OAGraphRetrieveError):
             status = svc.status
 
     def test_reqrep(self):
@@ -44,7 +44,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         rep = RpcReqSink(42).start()
         req = RpcReqPump(42).start()
 
-        req_send_string = "[%s] req" % LCTime().now
+        req_send_string = "[%s] req" % OATime().now
         req._send(req_send_string)
         rep_recv_string = rep._recv()
         rep._send(rep_recv_string)
@@ -59,7 +59,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         req  = RpcBrokeredReqPump(42).start()
         rep  = RpcBrokeredReqSink(42).start()
 
-        req_send_string = "[%s] req" % LCTime().now
+        req_send_string = "[%s] req" % OATime().now
         req._send(req_send_string)
         rep_recv_string = rep._recv()
         rep._send(rep_recv_string)
@@ -74,7 +74,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         sub1 = RpcSub(42, 1).start()
         sub2 = RpcSub(42, 2).start()
 
-        pub_send_string_1 = "[%s] pub" % LCTime().now
+        pub_send_string_1 = "[%s] pub" % OATime().now
         pub._send(pub_send_string_1)
         sub1_recv_string_1 = sub1._recv()
         sub2_recv_string_1 = sub2._recv()
@@ -83,7 +83,7 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         self.assertEqual(pub_send_string_1, sub2_recv_string_1)
         self.assertEqual(sub1_recv_string_1, sub2_recv_string_1)
 
-        pub_send_string_2 = "[%s] pub" % LCTime().now
+        pub_send_string_2 = "[%s] pub" % OATime().now
         pub._send(pub_send_string_2)
         sub1_recv_string_2 = sub1._recv()
         sub2_recv_string_2 = sub2._recv()
@@ -92,10 +92,10 @@ class TestLCRpc(unittest.TestCase, TestLCBase):
         self.assertEqual(pub_send_string_2, sub2_recv_string_2)
         self.assertEqual(sub1_recv_string_2, sub2_recv_string_2)
 
-    class SQL(TestLCBase.SQL):
+    class SQL(TestOABase.SQL):
         pass
 
-class RpcBroker(LCRpcBase):
+class RpcBroker(OARpcBase):
     """Test RPC service"""
     def __init__(self, entity_id):
         self.servicename   =  "lcreqbrk"
@@ -104,7 +104,7 @@ class RpcBroker(LCRpcBase):
         self._owner_id     =   entity_id
         super(RpcBroker, self).__init__()
 
-class RpcPub(LCRpcBase):
+class RpcPub(OARpcBase):
     def __init__(self, entity_id):
         self.servicename   =  "lcpub"
         self.roles         = ["pub"]
@@ -112,7 +112,7 @@ class RpcPub(LCRpcBase):
         self._owner_id     =   entity_id
         super(RpcPub, self).__init__()
 
-class RpcSub(LCRpcBase):
+class RpcSub(OARpcBase):
     def __init__(self, entity_id, count):
         self.servicename   =  "lcsub_%s" % count
         self.roles         = ["sub"]
@@ -124,7 +124,7 @@ class RpcSub(LCRpcBase):
                                                "pub"), "property")
         super(RpcSub, self).__init__()
 
-class RpcReqPump(LCRpcBase):
+class RpcReqPump(OARpcBase):
     def __init__(self, entity_id):
         self.roles         = ["req"]
         self._owning_class =  "entities"
@@ -135,11 +135,11 @@ class RpcReqPump(LCRpcBase):
                                                  self._owning_class,
                                                  self._owner_id,
                                                 "rep"), "property")
-        except LCGraphRetrieveError:
+        except OAGraphRetrieveError:
             self.connects_to  = None
         super(RpcReqPump, self).__init__()
 
-class RpcReqSink(LCRpcBase):
+class RpcReqSink(OARpcBase):
     def __init__(self, entity_id):
         self.servicename   =  "lcreqsink"
         self.roles         = ["rep"]

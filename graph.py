@@ -27,17 +27,17 @@ class lcgprop(object):
     def getter(self, fget):
         return type(self)(fget, self.fset, self.fdel, self.__doc__)
 
-class LCGraphRootNode(object):
+class OAGraphRootNode(object):
 
     def __iter__(self):
         if self.is_unique:
-            raise LCError("__iter__: Unique LCGraph object is not iterable")
+            raise OAError("__iter__: Unique OAGraph object is not iterable")
         else:
             return self
 
     def __next__(self):
         if self.is_unique:
-            raise LCError("__next__: Unique LCGraph object is not iterable")
+            raise OAError("__next__: Unique OAGraph object is not iterable")
         else:
             return self.next()
 
@@ -50,7 +50,7 @@ class LCGraphRootNode(object):
 
     def next(self):
         if self.is_unique:
-            raise LCError("next: Unique LCGraph object is not iterable")
+            raise OAError("next: Unique OAGraph object is not iterable")
         else:
             if self.__iteridx < self.size:
                 self._lcgcache = {}
@@ -74,20 +74,20 @@ class LCGraphRootNode(object):
             self.refresh(gotodb=True)
 
             if len(self._rawdata) == 0:
-                raise LCGraphRetrieveError("No results found in database")
+                raise OAGraphRetrieveError("No results found in database")
 
             if self.is_unique:
                 self.__set_uniq_attrs()
 
     def __set_uniq_attrs(self):
         if len(self._rawdata) != 1:
-            raise LCGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
+            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
         for k,v in self._rawdata[0].items():
             setattr(self, k, v)
 
     def create(self, initparams):
         if self._rawdata is not None:
-            raise LCError("Cannot create item that has already been initiated")
+            raise OAError("Cannot create item that has already been initiated")
 
         ### TODO: scehma validation
 
@@ -97,7 +97,7 @@ class LCGraphRootNode(object):
         insert_sql = self.SQL['insert'][self._indexparm] % (attrstr, formatstrs)
 
         if self._extcur is None:
-            with LCDao(self.dbcontext) as dao:
+            with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     cur.execute(insert_sql, vals)
                     index_val = cur.fetchall()
@@ -125,7 +125,7 @@ class LCGraphRootNode(object):
         elif type(self.SQL).__name__ == "dict":
             cur.execute(self.SQL['read'][self._indexparm], self._clauseprms)
         else:
-            raise LCError("Cannot find correct SQL to execute")
+            raise OAError("Cannot find correct SQL to execute")
         self._rawdata = cur.fetchall()
 
     def refresh(self, gotodb=False):
@@ -133,7 +133,7 @@ class LCGraphRootNode(object):
         refresh instreams from the database"""
         if gotodb is True:
             if self._extcur is None:
-                with LCDao(self.dbcontext) as dao:
+                with OADao(self.dbcontext) as dao:
                     with dao.cur as cur:
                         self.__refresh_from_cursor(cur)
             else:
@@ -151,7 +151,7 @@ class LCGraphRootNode(object):
                         % (update_clause, getattr(self, index_key, ""))
         update_values = [getattr(self, attr, "") for attr in member_attrs]
         if cur is None:
-            with LCDao(self.dbcontext) as dao:
+            with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     cur.execute(update_sql, update_values)
                     dao.commit()
@@ -161,12 +161,12 @@ class LCGraphRootNode(object):
 
     @property
     def dbcontext(self):
-        raise NotImplementedError("Must be implemented in deriving LCGraph class")
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     @property
     def is_unique(self):
-        raise NotImplementedError("Must be implemented in deriving LCGraph class")
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     @property
     def SQL(self):
-        raise NotImplementedError("Must be implemneted in deriving LCGraph class")
+        raise NotImplementedError("Must be implemneted in deriving OAGraph class")

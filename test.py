@@ -7,7 +7,7 @@ from textwrap            import dedent as td
 
 from openlibarc.env      import *
 
-class TestLCBase(object):
+class TestOABase(object):
     """Mixin class to assist with database testing"""
     def setUp_db(self):
         """Create scratch "test" schema in database"""

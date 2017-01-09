@@ -13,7 +13,7 @@ from openlibarc.dao       import *
 from openlibarc.graph     import *
 from openlibarc.lctime    import *
 
-class OAG_RpcService(LCGraphRootNode):
+class OAG_RpcService(OAGraphRootNode):
     # Global interface
     @property
     def is_unique(self): return True
@@ -39,7 +39,7 @@ class OAG_RpcService(LCGraphRootNode):
         }
       }
 
-class LCRpcBase(object):
+class OARpcBase(object):
     def __init__(self):
         # centralize all access to common database
         self.dbcontext = "openlibarc"
@@ -116,7 +116,7 @@ class LCRpcBase(object):
                     ctxsoc.connect("tcp://%s:%s" % (connhost, connport))
                     ctxsoc.setsockopt(zmq.SUBSCRIBE, '')
                 else:
-                    raise LCError("Invalid role specified, should be one of:\n"+
+                    raise OAError("Invalid role specified, should be one of:\n"+
                                   "* req/rep\n"+
                                   "* dealer/router\n"+
                                   "* pub/sub")
@@ -126,10 +126,10 @@ class LCRpcBase(object):
                 self._zmqctx[role]['connport'] = connport
 
                 # Database stuff
-                with LCDao(self.dbcontext) as dao:
+                with OADao(self.dbcontext) as dao:
                     with dao.cur as cur:
                         try:
-                            now  = LCTime(cur).now
+                            now  = OATime(cur).now
                             ret  = cur.execute(self.SQL.register_status,
                                               [self.servicename,
                                                self._owning_class,
@@ -138,11 +138,11 @@ class LCRpcBase(object):
                                                connport, now])
                             dao.commit()
                         except Exception as e:
-                           raise LCError("Database error:\n%s" % e)
-        except LCError as e:
+                           raise OAError("Database error:\n%s" % e)
+        except OAError as e:
             self.stop()
-            # reraise LCError for further processing
-            raise LCError("Error registering service\n%s" % str(e))
+            # reraise OAError for further processing
+            raise OAError("Error registering service\n%s" % str(e))
 
         self.__start_proxy()
 
@@ -161,21 +161,21 @@ class LCRpcBase(object):
 
     def _send(self, message, role=None):
         if self.is_proxy is True:
-            raise LCError("Send not available for proxy components")
+            raise OAError("Send not available for proxy components")
         else:
             socket = self._zmqctx[self.roles[0]]['socket']
             socket.send(msgpack.dumps(message))
 
     def _recv(self, role=None):
         if self.is_proxy is True:
-            raise LCError("Recv not available for proxy components")
+            raise OAError("Recv not available for proxy components")
         else:
             socket = self._zmqctx[self.roles[0]]['socket']
             return msgpack.loads(socket.recv())
 
     def stop(self):
         for role in self.roles:
-            with LCDao(self.dbcontext) as dao:
+            with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     try:
                         ret = cur.execute(self.SQL.delete_registration,
@@ -185,7 +185,7 @@ class LCRpcBase(object):
                                           role])
                         dao.commit()
                     except:
-                        raise LCError("Error deleting service registration")
+                        raise OAError("Error deleting service registration")
 
     def heartbeat(self):
         raise NotImplementedError("Heartbeat not yet supported")
