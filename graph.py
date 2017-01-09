@@ -3,7 +3,7 @@
 from openlibarc.dao       import *
 from openlibarc.exception import *
 
-class lcgprop(object):
+class oagprop(object):
 
     def __init__(self, fget=None, fset=None, fdel=None, doc=None):
         self.fget = fget
@@ -19,10 +19,10 @@ class lcgprop(object):
         if self.fget is None:
             raise AttributeError("unreadable attribute")
         try:
-            return obj._lcgcache[self.fget.func_name]
+            return obj._oagcache[self.fget.func_name]
         except:
-            obj._lcgcache[self.fget.func_name] = self.fget(obj)
-            return obj._lcgcache[self.fget.func_name]
+            obj._oagcache[self.fget.func_name] = self.fget(obj)
+            return obj._oagcache[self.fget.func_name]
 
     def getter(self, fget):
         return type(self)(fget, self.fset, self.fdel, self.__doc__)
@@ -53,7 +53,7 @@ class OAGraphRootNode(object):
             raise OAError("next: Unique OAGraph object is not iterable")
         else:
             if self.__iteridx < self.size:
-                self._lcgcache = {}
+                self._oagcache = {}
                 for k in self._rawdata[self.__iteridx]:
                     setattr(self, k, self._rawdata[self.__iteridx][k])
                 self.__iteridx += 1
@@ -65,7 +65,7 @@ class OAGraphRootNode(object):
     def __init__(self, clauseprms=None, indexparm='id', extcur=None):
 
         self._rawdata    = None
-        self._lcgcache   = {}
+        self._oagcache   = {}
         self._clauseprms = clauseprms
         self._indexparm  = indexparm
         self._extcur     = extcur
@@ -113,7 +113,7 @@ class OAGraphRootNode(object):
         # Refresh to set iteridx
         self.refresh()
 
-        # Set attrs if this is a unique lcg
+        # Set attrs if this is a unique oag
         if self.is_unique:
             self.__set_uniq_attrs()
 
@@ -139,7 +139,7 @@ class OAGraphRootNode(object):
             else:
                 self.__refresh_from_cursor(self._extcur)
         self.__iteridx = 0
-        self._lcgcache = {}
+        self._oagcache = {}
         return self
 
     def update(self, cur=None):

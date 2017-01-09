@@ -11,7 +11,7 @@ from textwrap             import dedent as td
 from openlibarc.exception import *
 from openlibarc.dao       import *
 from openlibarc.graph     import *
-from openlibarc.lctime    import *
+from openlibarc.oatime    import *
 
 class OAG_RpcService(OAGraphRootNode):
     # Global interface

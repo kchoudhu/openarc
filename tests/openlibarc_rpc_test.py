@@ -98,7 +98,7 @@ class TestOARpc(unittest.TestCase, TestOABase):
 class RpcBroker(OARpcBase):
     """Test RPC service"""
     def __init__(self, entity_id):
-        self.servicename   =  "lcreqbrk"
+        self.servicename   =  "oareqbrk"
         self.roles         = ["dealer", "router"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
@@ -106,7 +106,7 @@ class RpcBroker(OARpcBase):
 
 class RpcPub(OARpcBase):
     def __init__(self, entity_id):
-        self.servicename   =  "lcpub"
+        self.servicename   =  "oapub"
         self.roles         = ["pub"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
@@ -114,11 +114,11 @@ class RpcPub(OARpcBase):
 
 class RpcSub(OARpcBase):
     def __init__(self, entity_id, count):
-        self.servicename   =  "lcsub_%s" % count
+        self.servicename   =  "oasub_%s" % count
         self.roles         = ["sub"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
-        self.connects_to   =   OAG_RpcService(("lcpub",
+        self.connects_to   =   OAG_RpcService(("oapub",
                                                 self._owning_class,
                                                 self._owner_id,
                                                "pub"), "property")
@@ -129,9 +129,9 @@ class RpcReqPump(OARpcBase):
         self.roles         = ["req"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
-        self.servicename   =  "lcreqpump"
+        self.servicename   =  "oareqpump"
         try:
-            self.connects_to  = OAG_RpcService(("lcreqsink",
+            self.connects_to  = OAG_RpcService(("oareqsink",
                                                  self._owning_class,
                                                  self._owner_id,
                                                 "rep"), "property")
@@ -141,7 +141,7 @@ class RpcReqPump(OARpcBase):
 
 class RpcReqSink(OARpcBase):
     def __init__(self, entity_id):
-        self.servicename   =  "lcreqsink"
+        self.servicename   =  "oareqsink"
         self.roles         = ["rep"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
@@ -150,8 +150,8 @@ class RpcReqSink(OARpcBase):
 class RpcBrokeredReqPump(RpcReqPump):
     def __init__(self, entity_id):
         super(RpcBrokeredReqPump, self).__init__(entity_id)
-        self.servicename   =  "lcbrkreqpump"
-        self.connects_to   = OAG_RpcService(("lcreqbrk",
+        self.servicename   =  "oabrkreqpump"
+        self.connects_to   = OAG_RpcService(("oareqbrk",
                                               self._owning_class,
                                               self._owner_id,
                                              "router"), "property")
@@ -159,8 +159,8 @@ class RpcBrokeredReqPump(RpcReqPump):
 class RpcBrokeredReqSink(RpcReqSink):
     def __init__(self, entity_id):
         super(RpcBrokeredReqSink, self).__init__(entity_id)
-        self.servicename   =  "lcbrkreqsink"
-        self.connects_to   = OAG_RpcService(("lcreqbrk",
+        self.servicename   =  "oabrkreqsink"
+        self.connects_to   = OAG_RpcService(("oareqbrk",
                                               self._owning_class,
                                               self._owner_id,
                                              "dealer"), "property")
