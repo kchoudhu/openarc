@@ -6,10 +6,10 @@ from textwrap import dedent as td
 
 sys.path.append('../')
 
-from openlibarc.dao       import *
-from openlibarc.exception import *
-from openlibarc.graph     import *
-from openlibarc.test      import *
+from openarc.dao       import *
+from openarc.exception import *
+from openarc.graph     import *
+from openarc.test      import *
 
 class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def setUp(self):

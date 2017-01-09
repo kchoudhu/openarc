@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 
-from openlibarc.dao       import *
-from openlibarc.exception import *
+from openarc.dao       import *
+from openarc.exception import *
 
 class oagprop(object):
 

@@ -2,8 +2,8 @@
 
 import time
 
-from textwrap       import dedent as td
-from openlibarc.dao import OADao
+from textwrap    import dedent as td
+from openarc.dao import OADao
 
 class OATime(object):
     """Executes time queries on database, returning

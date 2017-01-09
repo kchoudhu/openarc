@@ -5,20 +5,20 @@ import random
 import socket
 import zmq.green as zmq
 
-from gevent               import spawn
-from textwrap             import dedent as td
+from gevent            import spawn
+from textwrap          import dedent as td
 
-from openlibarc.exception import *
-from openlibarc.dao       import *
-from openlibarc.graph     import *
-from openlibarc.oatime    import *
+from openarc.exception import *
+from openarc.dao       import *
+from openarc.graph     import *
+from openarc.oatime    import *
 
 class OAG_RpcService(OAGraphRootNode):
     # Global interface
     @property
     def is_unique(self): return True
     @property
-    def dbcontext(self): return "openlibarc"
+    def dbcontext(self): return "openarc"
 
     # Other stuff
     @property
@@ -42,7 +42,7 @@ class OAG_RpcService(OAGraphRootNode):
 class OARpcBase(object):
     def __init__(self):
         # centralize all access to common database
-        self.dbcontext = "openlibarc"
+        self.dbcontext = "openarc"
         self.is_proxy  = False
         self._proxy    = []
         self._zmqctx   = {r:{} for r in self.roles}

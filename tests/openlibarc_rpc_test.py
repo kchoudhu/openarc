@@ -3,10 +3,10 @@
 import unittest
 import sys
 
-from datetime                 import datetime
-from openlibarc.exception     import *
-from openlibarc.rpc           import *
-from openlibarc.test          import TestOABase
+from datetime              import datetime
+from openarc.exception     import *
+from openarc.rpc           import *
+from openarc.test          import TestOABase
 
 class TestOARpc(unittest.TestCase, TestOABase):
     initialized = False

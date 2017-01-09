@@ -7,9 +7,9 @@ import psycopg2
 
 sys.path.append('../')
 
-from openlibarc.test import TestOABase
-from openlibarc.dao  import OADao
-from openlibarc.env  import initenv, getenv
+from openarc.test import TestOABase
+from openarc.dao  import OADao
+from openarc.env  import initenv, getenv
 
 class TestOADao(unittest.TestCase, TestOABase):
     def setUp(self):

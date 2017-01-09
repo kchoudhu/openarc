@@ -3,9 +3,9 @@
 import psycopg2
 import psycopg2.extras
 
-from textwrap            import dedent as td
+from textwrap         import dedent as td
 
-from openlibarc.env      import *
+from openarc.env      import *
 
 class TestOABase(object):
     """Mixin class to assist with database testing"""
@@ -13,7 +13,7 @@ class TestOABase(object):
         """Create scratch "test" schema in database"""
         initenv("local")
         dbinfo = getenv().dbinfo
-        self.dbconn = psycopg2.connect(dbname='openlibarc',
+        self.dbconn = psycopg2.connect(dbname='openarc',
                                        user=dbinfo['user'],
                                        host=dbinfo['host'])
         with self.dbconn.cursor() as cur:
@@ -28,12 +28,12 @@ class TestOABase(object):
         self.dbconn.close()
 
     def nuke_database(self):
-        self.clear_openlibarc_schema()
+        self.clear_openarc_schema()
         self.dbconn.commit()
 
-    def clear_openlibarc_schema(self):
+    def clear_openarc_schema(self):
         with self.dbconn.cursor() as setupcur:
-            setupcur.execute(self.SQL.delete_openlibarc_rpc)
+            setupcur.execute(self.SQL.delete_openarc_rpc)
 
     class SQL(object):
         ## Test schema helper SQL
@@ -42,5 +42,5 @@ class TestOABase(object):
         create_test_schema = td("""
             CREATE SCHEMA test""")
         ## Common schema helper SQL
-        delete_openlibarc_rpc = td("""
-            DELETE FROM openlibarc.rpc_registry""")
+        delete_openarc_rpc = td("""
+            DELETE FROM openarc.rpc_registry""")

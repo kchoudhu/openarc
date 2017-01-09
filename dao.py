@@ -19,7 +19,7 @@ class OADao(object):
         self.__enter__()
 
     def __enter__(self):
-        self.dbconn = psycopg2.connect(dbname='openlibarc',
+        self.dbconn = psycopg2.connect(dbname='openarc',
                                        user=self.__dbinfo['user'],
                                        host=self.__dbinfo['host'])
         return self

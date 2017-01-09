@@ -2,9 +2,9 @@ DBRUNDIR?=~/run/db
 DBCFGDIR?=./cfg/env/dev/db/
 PYTEST_BIN?="python -m unittest discover"
 PYTEST_FILE_PATTERN?="*_test.py"
-PROJECT=openlibarc
+PROJECT=openarc
 
-clean: 
+clean:
 	@rm *.pyc
 	@rm ./tests/*.pyc
 dbinit:

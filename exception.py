@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 
 class OAError(Exception):
-    """Exception for general purpose openlibarc error"""
+    """Exception for general purpose openarc error"""
     def __init__(self, message):
         super(OAError, self).__init__(message)
         self.message = message
