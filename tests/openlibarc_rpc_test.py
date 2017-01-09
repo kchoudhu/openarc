@@ -118,7 +118,7 @@ class RpcSub(LCRpcBase):
         self.roles         = ["sub"]
         self._owning_class =  "entities"
         self._owner_id     =   entity_id
-        self.connects_to   =   LCG_RpcService(("lcpub",
+        self.connects_to   =   OAG_RpcService(("lcpub",
                                                 self._owning_class,
                                                 self._owner_id,
                                                "pub"), "property")
@@ -131,7 +131,7 @@ class RpcReqPump(LCRpcBase):
         self._owner_id     =   entity_id
         self.servicename   =  "lcreqpump"
         try:
-            self.connects_to  = LCG_RpcService(("lcreqsink",
+            self.connects_to  = OAG_RpcService(("lcreqsink",
                                                  self._owning_class,
                                                  self._owner_id,
                                                 "rep"), "property")
@@ -151,7 +151,7 @@ class RpcBrokeredReqPump(RpcReqPump):
     def __init__(self, entity_id):
         super(RpcBrokeredReqPump, self).__init__(entity_id)
         self.servicename   =  "lcbrkreqpump"
-        self.connects_to   = LCG_RpcService(("lcreqbrk",
+        self.connects_to   = OAG_RpcService(("lcreqbrk",
                                               self._owning_class,
                                               self._owner_id,
                                              "router"), "property")
@@ -160,7 +160,7 @@ class RpcBrokeredReqSink(RpcReqSink):
     def __init__(self, entity_id):
         super(RpcBrokeredReqSink, self).__init__(entity_id)
         self.servicename   =  "lcbrkreqsink"
-        self.connects_to   = LCG_RpcService(("lcreqbrk",
+        self.connects_to   = OAG_RpcService(("lcreqbrk",
                                               self._owning_class,
                                               self._owner_id,
                                              "dealer"), "property")

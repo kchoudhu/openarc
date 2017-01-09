@@ -13,7 +13,7 @@ from openlibarc.dao       import *
 from openlibarc.graph     import *
 from openlibarc.lctime    import *
 
-class LCG_RpcService(LCGraphRootNode):
+class OAG_RpcService(LCGraphRootNode):
     # Global interface
     @property
     def is_unique(self): return True
@@ -53,7 +53,7 @@ class LCRpcBase(object):
 
     @property
     def status(self):
-        return [LCG_RpcService([self.servicename,
+        return [OAG_RpcService([self.servicename,
                                 self._owning_class,
                                 self._owner_id,
                                 r], "property")
@@ -64,7 +64,7 @@ class LCRpcBase(object):
         return { r:self._zmqctx[r]['socket'] for r in self._roles }
 
     def __get_connect_target_info(self):
-        rpc = LCG_RpcService((self.connects_to.servicename,
+        rpc = OAG_RpcService((self.connects_to.servicename,
                               self.connects_to.owning_class,
                               self.connects_to.owner_id,
                               self.connects_to.role), "property")
