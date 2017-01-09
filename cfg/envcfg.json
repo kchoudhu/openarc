@@ -1,0 +1,44 @@
+{
+    "local" : {
+        "httpinfo" : {
+            "secure"       :  false,
+            "httproot"     : "localhost"
+        },
+        "dbinfo"       : {
+            "host"     : "localhost",
+            "user"     : "kchoudhu",
+            "password" : ""
+        },
+        "crypto"       : {
+            "rounds"   : 4
+        }
+    },
+    "qa" : {
+        "httpinfo" : {
+            "secure"       :  false,
+            "httproot"     : "localhost"
+        },
+        "dbinfo"       : {
+            "host"     : "localhost",
+            "user"     : "inara",
+            "password" : ""
+        },
+        "crypto"       : {
+            "rounds"   : 12
+        }
+    },
+    "prod" : {
+        "httpinfo" : {
+            "secure"       :  true,
+            "httproot"     : "www-static.levelcompute.com"
+        },
+        "dbinfo"       : {
+            "host"     : "localhost",
+            "user"     : "inara",
+            "password" : ""
+        },
+        "crypto"       : {
+            "rounds"   : 12
+        }
+    }
+}
