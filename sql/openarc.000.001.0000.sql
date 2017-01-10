@@ -1,9 +1,9 @@
 drop function if exists openarc.schemamigrate(); create or replace function openarc.schemamigrate() returns int as $$ declare ret int;
 
-declare major  varchar(3)  := '001';
+declare major  varchar(3)  := '000';
 declare minor  varchar(4)  := '0001';
 declare secrel varchar(4)  := '0000';
-declare script varchar(50) := 'openarc.001.0001.0000.sql';
+declare script varchar(50) := 'openarc.000.0001.0000.sql';
 
 begin
 if openarc.schema_check( major, minor, secrel ) = 0 then
