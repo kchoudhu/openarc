@@ -5,8 +5,8 @@ PYTEST_FILE_PATTERN?="*_test.py"
 PROJECT=openarc
 
 clean:
-	@rm *.pyc
-	@rm ./tests/*.pyc
+	@rm ./${PROJECT}/*.pyc
+	@rm ./${PROJECT}/tests/*.pyc
 dbinit:
 	-@pkill postgres
 	@rm -rf /tmp/.s.PGSQL*
@@ -29,6 +29,6 @@ dbrefresh: dbinit dbschemainit dbmigrate
 test:
 	# Todo: replace this with TAP output
 	@echo "Running tests"
-	@export LC_CFG_DIR=./cfg && python -m unittest discover ./tests -p ${PYTEST_FILE_PATTERN}
+	@export LC_CFG_DIR=./cfg && python -m unittest discover ./${PROJECT}/tests -p ${PYTEST_FILE_PATTERN}
 
 testclean: dbrefresh test
