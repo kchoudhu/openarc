@@ -2,7 +2,6 @@
 
 import os
 import json
-import pprint
 
 class OAEnv(object):
     @property
