@@ -7,7 +7,8 @@ PROJECT=openarc
 clean:
 	@rm ./${PROJECT}/*.pyc
 	@rm ./${PROJECT}/tests/*.pyc
-dbinit:
+
+dbmsinit:
 	-@pkill postgres
 	@rm -rf /tmp/.s.PGSQL*
 	@rm -rf ${DBRUNDIR}/${PROJECT}
@@ -16,15 +17,20 @@ dbinit:
 	@cp ${DBCFGDIR}/*.conf ${DBRUNDIR}/${PROJECT}
 	@pg_ctl -D ${DBRUNDIR}/${PROJECT} -l /tmp/logfile start
 	@sleep 10
+
+dbcreate:
+	-dropdb ${PROJECT}
 	createdb ${PROJECT}
 
-dbschemainit:
+dbschemacreate:
 	@psql -d${PROJECT} < ./sql/schemacontrol.sql
 
 dbmigrate:
 	cat ./sql/${PROJECT}.*.sql | psql -d ${PROJECT}
 
-dbrefresh: dbinit dbschemainit dbmigrate
+dbinit: dbcreate dbschemacreate dbmigrate
+
+dbhardinit: dbmsinit dbinit
 
 test:
 	# Todo: replace this with TAP output
