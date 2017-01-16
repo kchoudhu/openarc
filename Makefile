@@ -2,7 +2,7 @@ DBRUNDIR?=~/run/db
 DBCFGDIR?=./cfg/env/dev/db/
 PYTEST_BIN?="python -m unittest discover"
 PYTEST_FILE_PATTERN?="*_test.py"
-PROJECT=openarc
+PROJECT=arc
 
 clean:
 	@rm ./${PROJECT}/*.pyc
@@ -23,10 +23,10 @@ dbcreate:
 	createdb ${PROJECT}
 
 dbschemacreate:
-	@psql -d${PROJECT} < ./sql/schemacontrol.sql
+	@psql -d${PROJECT} < ./sql/schemacontrol-openarc.sql
 
 dbmigrate:
-	cat ./sql/${PROJECT}.*.sql | psql -d ${PROJECT}
+	cat ./sql/openarc.*.sql | psql -d${PROJECT}
 
 dbinit: dbcreate dbschemacreate dbmigrate
 
@@ -35,6 +35,6 @@ dbhardinit: dbmsinit dbinit
 test:
 	# Todo: replace this with TAP output
 	@echo "Running tests"
-	@export LC_CFG_DIR=./cfg && python -m unittest discover ./${PROJECT}/tests -p ${PYTEST_FILE_PATTERN}
+	@export OPENARC_CFG_DIR=./cfg && python -m unittest discover ./openarc/tests -p ${PYTEST_FILE_PATTERN}
 
 testclean: dbrefresh test

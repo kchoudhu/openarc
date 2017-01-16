@@ -13,7 +13,7 @@ class TestOABase(object):
         """Create scratch "test" schema in database"""
         initenv("local")
         dbinfo = getenv().dbinfo
-        self.dbconn = psycopg2.connect(dbname='openarc',
+        self.dbconn = psycopg2.connect(dbname='arc',
                                        user=dbinfo['user'],
                                        host=dbinfo['host'])
         with self.dbconn.cursor() as cur:

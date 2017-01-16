@@ -15,7 +15,7 @@ class OATime(object):
     @property
     def now(self):
         if self.cur is None:
-            self.cur = OADao("common").cur
+            self.cur = OADao("openarc").cur
         self.cur.execute(self.SQL.get_current_time)
         return self.cur.fetchall()[0]['timezone']
 

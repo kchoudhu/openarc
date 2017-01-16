@@ -16,10 +16,11 @@ class OADao(object):
         to: auth, trading etc"""
         self.schema = schema
         self.__dbinfo = getenv().dbinfo
+        self.dbinfo = self.__dbinfo
         self.__enter__()
 
     def __enter__(self):
-        self.dbconn = psycopg2.connect(dbname='openarc',
+        self.dbconn = psycopg2.connect(dbname=self.__dbinfo['dbname'],
                                        user=self.__dbinfo['user'],
                                        host=self.__dbinfo['host'])
         return self
