@@ -13,6 +13,15 @@ from openarc.dao       import *
 from openarc.graph     import *
 from openarc.oatime    import *
 
+class RpcLocator(object):
+    # Services exposed by entity
+    def rpcrl(self, locator_list):
+        try:
+            daemon = OAG_RpcService(locator_list, "property")
+        except:
+            daemon = None
+        return daemon
+
 class OAG_RpcService(OAGraphRootNode):
     # Global interface
     @property
