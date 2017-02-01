@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='openarc',
-      version='0.2.0',
+      version='0.3.0',
       description='Functional reactive graph backed by PostgreSQL',
       classifiers=[
         'Development Status :: 3 - Alpha',
