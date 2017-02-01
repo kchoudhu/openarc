@@ -94,7 +94,7 @@ class OAGraphRootNode(object):
         attrstr    = ', '.join([k for k in initparams])
         vals       = [initparams[k] for k in initparams]
         formatstrs = ', '.join(['%s' for v in vals])
-        insert_sql = self.SQL['insert'][self._indexparm] % (attrstr, formatstrs)
+        insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
@@ -147,7 +147,7 @@ class OAGraphRootNode(object):
         index_key     = [k for k in self._rawdata[0] if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
                                     for attr in member_attrs])
-        update_sql    = self.SQL['update'][self._indexparm]\
+        update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self, index_key, ""))
         update_values = [getattr(self, attr, "") for attr in member_attrs]
         if self._extcur is None:
