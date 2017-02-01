@@ -142,7 +142,7 @@ class OAGraphRootNode(object):
         self._oagcache = {}
         return self
 
-    def update(self, cur=None):
+    def update(self):
         member_attrs  = [k for k in self._rawdata[0] if k[0] != '_']
         index_key     = [k for k in self._rawdata[0] if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
@@ -150,13 +150,13 @@ class OAGraphRootNode(object):
         update_sql    = self.SQL['update'][self._indexparm]\
                         % (update_clause, getattr(self, index_key, ""))
         update_values = [getattr(self, attr, "") for attr in member_attrs]
-        if cur is None:
+        if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     cur.execute(update_sql, update_values)
                     dao.commit()
         else:
-            cur.execute(update_sql, update_values)
+            self._extcur.execute(update_sql, update_values)
         return self
 
     @property

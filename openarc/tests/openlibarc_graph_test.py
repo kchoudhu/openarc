@@ -18,6 +18,40 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def tearDown(self):
         self.tearDown_db()
 
+    def test_graph_isolation_control(self):
+        with self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            self.dbconn.commit()
+
+            # Object not created until commit
+            oa = OAGraphUniqNode(extcur=setupcur).create({
+                    'field2' : 485,
+                    'field3' : 486
+                 })
+
+            with self.assertRaises(OAGraphRetrieveError):
+                oa_chk = OAGraphUniqNode((485,))
+
+            self.dbconn.commit()
+            oa_chk = OAGraphUniqNode((485,))
+            self.assertEqual(oa.field2, oa_chk.field2)
+            self.assertEqual(oa.field3, oa_chk.field3)
+
+            # Object not updated until commit
+            oa.field2 = 487
+            oa.update()
+            # -> no change yet, retrieval ok
+            oa_chk = OAGraphUniqNode((485,))
+            self.assertEqual(oa_chk.field2, 485)
+            self.assertEqual(oa_chk.field3, 486)
+            self.dbconn.commit()
+            # -> update commited, retrieval fails
+            with self.assertRaises(OAGraphRetrieveError):
+                oa_chk = OAGraphUniqNode((485,))
+            oa_chk = OAGraphUniqNode((487,))
+            self.assertEqual(oa.field2, oa_chk.field2)
+            self.assertEqual(oa.field3, oa_chk.field3)
+
     def test_uniquenode_creation(self):
         with self.dbconn.cursor() as setupcur:
             setupcur.execute(self.SQL.create_sample_table)

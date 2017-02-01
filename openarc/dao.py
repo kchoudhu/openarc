@@ -36,6 +36,10 @@ class OADao(object):
         """Proxy method for closing dbconnection"""
         self.dbconn.close()
 
+    def rollback(self):
+        """Proxy method for rolling back any existing action"""
+        self.dbconn.rollback()
+
     @property
     def cur(self):
         cursor = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
