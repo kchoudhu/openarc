@@ -62,13 +62,16 @@ class OAGraphRootNode(object):
                 self.__iteridx = 0
                 raise StopIteration()
 
-    def __init__(self, clauseprms=None, indexparm='id', extcur=None):
+    def __init__(self, clauseprms=None, indexparm='id', extcur=None, debug=False):
 
         self._rawdata    = None
         self._oagcache   = {}
         self._clauseprms = clauseprms
         self._indexparm  = indexparm
         self._extcur     = extcur
+
+        # Flip to True to see SQL being executed
+        self._debug      = debug
 
         if self._clauseprms is not None:
             self.refresh(gotodb=True)
@@ -99,12 +102,16 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
+                    if self._debug:
+                        print cur.mogrify(insert_sql, vals)
                     cur.execute(insert_sql, vals)
                     index_val = cur.fetchall()
                     self._clauseprms = index_val[0].values()
                     self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
+            if self._debug:
+                print self._extcur.mogrify(insert_sql, vals)
             self._extcur.execute(insert_sql, vals)
             index_val = self._extcur.fetchall()
             self._clauseprms = index_val[0].values()
@@ -121,8 +128,12 @@ class OAGraphRootNode(object):
 
     def __refresh_from_cursor(self, cur):
         if type(self.SQL).__name__ == "str":
+            if self._debug:
+                print cur.mogrify(self.SQL, self._claseprms)
             cur.execute(self.SQL, self._clauseprms)
         elif type(self.SQL).__name__ == "dict":
+            if self._debug:
+                print cur.mogrify(self.SQL['read'][self._indexparm], self._clauseprms)
             cur.execute(self.SQL['read'][self._indexparm], self._clauseprms)
         else:
             raise OAError("Cannot find correct SQL to execute")
@@ -153,9 +164,13 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
+                    if self._debug:
+                        print cur.mogrify(update_sql, update_values)
                     cur.execute(update_sql, update_values)
                     dao.commit()
         else:
+            if self._debug:
+                print self._extcur.mogrify(update_sql, update_values)
             self._extcur.execute(update_sql, update_values)
         return self
 
