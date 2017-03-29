@@ -21,6 +21,10 @@ class OAEnv(object):
     def crypto(self):
         return self.envcfg['crypto']
 
+    @property
+    def extcreds(self):
+        return self.envcfg['extcreds']
+
     def __init__(self, requested_env):
         cfg_file = "%s/envcfg.json" % ( os.environ.get("OPENARC_CFG_DIR") )
         with open( cfg_file ) as f:
