@@ -26,6 +26,7 @@ class OAEnv(object):
         return self.envcfg['extcreds']
 
     def __init__(self, requested_env):
+        self.envname = requested_env
         cfg_file = "%s/envcfg.json" % ( os.environ.get("OPENARC_CFG_DIR") )
         with open( cfg_file ) as f:
             self.envcfg = json.loads( f.read() )[requested_env]
