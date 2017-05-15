@@ -254,6 +254,61 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             sub_node_nm = nm.subnode
             self.assertEqual(len(nm._oagcache), 1)
 
+    def test_infname_functionality(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(10):
+                setupcur.execute(self.SQL.insert_sample_row, [i, 2])
+            self.dbconn.commit()
+
+        # In memory/database retrieved objects are the same
+        node_uniq = OAGraphUniqNode((2,))
+        node_uniq2 =\
+            OAGraphUniqNode(initparms={
+                '_field1' : 3,
+                'field2' : 2,
+                'field3' : 2
+            })
+        self.assertEqual(node_uniq.infname,node_uniq2.infname)
+
+        # Changing initparm changes infname for relevant item
+        node_uniq3 =\
+            OAGraphUniqNode(initparms={
+                '_field1' : 3,
+                'field2' : 3,
+                'field3' : 2
+            })
+        self.assertNotEqual(node_uniq.infname, node_uniq3.infname)
+
+        # Changing in-memory index value doesn't alter infname
+        node_uniq4 =\
+            OAGraphUniqNode(initparms={
+                '_field1' : 22,
+                'field2' : 2,
+                'field3' : 2
+            })
+        self.assertEqual(node_uniq.infname,node_uniq4.infname)
+
+        # Infname cannot be calculated until cframe is set on multinode
+        node_multi = OAGraphMultiNode((2,))
+        with self.assertRaises(OAError):
+            print node_multi.infname
+
+        # Looping through multinode results in different infnames
+        hashes =[]
+        for x in node_multi:
+            hashes.append(x.infname)
+        no_dupe_hashes = list(set(hashes))
+        self.assertEqual(len(hashes), len(no_dupe_hashes))
+
+        # Infname doesn't change if non-specified field changed
+        # when custom infname_field list defined
+        node_cust_multi = next(OAGraphMultiWithCustomInfnameList((2,)))
+        infname1 = node_cust_multi.infname
+        node_cust_multi.field3 = 'i am a very fake value'
+        infname2 = node_cust_multi.infname
+        self.assertEqual(infname1, infname2)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -338,3 +393,8 @@ class OAGraphMultiNode(OAGraphRootNode):
           RETURNING field3""")
         }
       }
+
+class OAGraphMultiWithCustomInfnameList(OAGraphMultiNode):
+    @property
+    def infname_fields(self):
+        return [ 'field2' ]

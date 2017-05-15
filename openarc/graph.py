@@ -1,5 +1,7 @@
 #!/usr/bin/env python2.7
 
+import hashlib
+
 from openarc.dao       import *
 from openarc.exception import *
 
@@ -48,30 +50,39 @@ class OAGraphRootNode(object):
         else:
             return len(self._rawdata)
 
+    @property
+    def infname(self):
+        if len(self.infname_fields)==0:
+            raise OAError("Cannot calculate infname if infname_fields not set")
+        return hashlib.sha256(str().join([str(getattr(self, k, ""))
+                                          for k in self.infname_fields
+                                          if k[0] != '_'])).hexdigest()
+
     def next(self):
         if self.is_unique:
             raise OAError("next: Unique OAGraph object is not iterable")
         else:
             if self.__iteridx < self.size:
                 self._oagcache = {}
-                for k in self._rawdata[self.__iteridx]:
-                    setattr(self, k, self._rawdata[self.__iteridx][k])
+                self._cframe = self._rawdata[self.__iteridx]
                 self.__iteridx += 1
+                self.__set_attrs_from_cframe()
                 return self
             else:
                 self.__iteridx = 0
                 raise StopIteration()
 
-    def __init__(self, clauseprms=None, indexparm='id', extcur=None, debug=False):
+    def __init__(self, clauseprms=None, indexparm='id', initparms={}, extcur=None, debug=False):
 
-        self._rawdata    = None
-        self._oagcache   = {}
-        self._clauseprms = clauseprms
-        self._indexparm  = indexparm
-        self._extcur     = extcur
+        self._cframe         = initparms
+        self._rawdata        = None
+        self._oagcache       = {}
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexparm
+        self._extcur         = extcur
 
         # Flip to True to see SQL being executed
-        self._debug      = debug
+        self._debug          = debug
 
         if self._clauseprms is not None:
             self.refresh(gotodb=True)
@@ -82,20 +93,28 @@ class OAGraphRootNode(object):
             if self.is_unique:
                 self.__set_uniq_attrs()
 
+        self.__set_attrs_from_cframe()
+
+    def __set_attrs_from_cframe(self):
+        for k, v in self._cframe.items():
+            setattr(self, k, v)
+
     def __set_uniq_attrs(self):
         if len(self._rawdata) != 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        for k,v in self._rawdata[0].items():
-            setattr(self, k, v)
+        self._cframe = self._rawdata[0]
+        self.__set_attrs_from_cframe()
 
-    def create(self, initparams):
+    def create(self, initparm):
+        self._cframe = initparm
+
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
 
         ### TODO: scehma validation
 
-        attrstr    = ', '.join([k for k in initparams])
-        vals       = [initparams[k] for k in initparams]
+        attrstr    = ', '.join([k for k in self._cframe])
+        vals       = [self._cframe[k] for k in self._cframe]
         formatstrs = ', '.join(['%s' for v in vals])
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
@@ -154,8 +173,8 @@ class OAGraphRootNode(object):
         return self
 
     def update(self):
-        member_attrs  = [k for k in self._rawdata[0] if k[0] != '_']
-        index_key     = [k for k in self._rawdata[0] if k[0] == '_'][0]
+        member_attrs  = [k for k in self._cframe if k[0] != '_']
+        index_key     = [k for k in self._cframe if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
                                     for attr in member_attrs])
         update_sql    = self.SQL['update']['id']\
@@ -177,6 +196,11 @@ class OAGraphRootNode(object):
     @property
     def dbcontext(self):
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    @property
+    def infname_fields(self):
+        """Override in deriving classes as necessary"""
+        return [k for k, v in self._cframe.items()]
 
     @property
     def is_unique(self):
