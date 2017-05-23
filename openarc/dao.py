@@ -22,7 +22,8 @@ class OADao(object):
     def __enter__(self):
         self.dbconn = psycopg2.connect(dbname=self.__dbinfo['dbname'],
                                        user=self.__dbinfo['user'],
-                                       host=self.__dbinfo['host'])
+                                       host=self.__dbinfo['host'],
+                                       port=self.__dbinfo['port'])
         return self
 
     def __exit__(self, type, value, traceback):
