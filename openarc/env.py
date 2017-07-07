@@ -2,6 +2,7 @@
 
 import os
 import json
+import traceback
 
 class OAEnv(object):
     @property
@@ -38,6 +39,15 @@ class OAEnv(object):
 
 p_refcount_env = 0
 p_env = None
+
+def OALog(loginfo=None, ignore_exceptions=False):
+    # Information about run env: hostname, pid, time
+    if loginfo:
+        print loginfo
+    # redirect to stdout, other logger as necessary
+    logstr = traceback.format_exc()
+    if logstr != "None\n" and ignore_exceptions is False:
+	   print logstr
 
 def initenv(envstr):
     """envstr: one of local, dev, qa, prod.
