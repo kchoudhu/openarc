@@ -4,7 +4,13 @@
             "host"     : "localhost",
             "user"     : "kchoudhu",
             "password" : "",
-            "dbname"   : "arc"
+            "dbname"   : "arc",
+            "port"     : 5433
+        },
+        "crypto"       : {
+            "rounds"   : 4
+        },
+        "extcreds"     : {
         }
     },
     "qa" : {
@@ -13,6 +19,9 @@
             "user"     : "inara",
             "password" : "",
             "dbname"   : "arc"
+        },
+        "crypto"       : {
+            "rounds"   : 12
         }
     },
     "prod" : {
@@ -21,6 +30,9 @@
             "user"     : "inara",
             "password" : "",
             "dbname"   : "arc"
+        },
+        "crypto"       : {
+            "rounds"   : 12
         }
     }
 }
