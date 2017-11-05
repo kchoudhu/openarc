@@ -116,6 +116,24 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(oa_upd.field2, 14)
         self.assertEqual(oa_upd.field3, 14)
 
+    def test_uniquenode_dict_based_update(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(10):
+                setupcur.execute(self.SQL.insert_sample_row, [i, 2])
+            self.dbconn.commit()
+
+        oa = OAGraphUniqNode((2,))
+        oa.update({
+            'field2' : 14,
+            'field3' : 14
+        })
+
+        oa_upd = OAGraphUniqNode((14,))
+        self.assertEqual(oa_upd._field1, oa._field1)
+        self.assertEqual(oa_upd.field2, 14)
+        self.assertEqual(oa_upd.field3, 14)
+
     def test_multinode_prop_based_update(self):
         with self.dbconn.cursor() as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
@@ -127,6 +145,24 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         n = next(nm)
         n.field2 = 14
         n.update()
+
+        nm_upd = OAGraphMultiNode((2,))
+        nu = next(nm_upd)
+        self.assertEqual(nu._field1, n._field1)
+        self.assertEqual(nu.field2, 14)
+
+    def test_multinode_dict_based_update(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(10):
+                setupcur.execute(self.SQL.insert_sample_row, [i, 2])
+            self.dbconn.commit()
+
+        nm = OAGraphMultiNode((2,))
+        n = next(nm)
+        n.update({
+            'field2' : 14
+        })
 
         nm_upd = OAGraphMultiNode((2,))
         nu = next(nm_upd)

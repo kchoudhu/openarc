@@ -172,7 +172,12 @@ class OAGraphRootNode(object):
         self._oagcache = {}
         return self
 
-    def update(self):
+    def update(self, updparms={}):
+
+        if len(updparms)>0:
+            for k, v in updparms.items():
+                setattr(self, k, v)
+
         member_attrs  = [k for k in self._cframe if k[0] != '_']
         index_key     = [k for k in self._cframe if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
