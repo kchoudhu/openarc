@@ -11,9 +11,10 @@ from   env       import *
 class OADao(object):
     """Wrapper around psycopg2 with additional functionality
     for logging, connection management and sql execution"""
-    def __init__(self, schema):
+    def __init__(self, schema, cdict=True):
         """Schema refers to the api entity we're referring
         to: auth, trading etc"""
+        self.cdict  = cdict
         self.schema = schema
         self.__dbinfo = getenv().dbinfo
         self.dbinfo = self.__dbinfo
@@ -43,7 +44,10 @@ class OADao(object):
 
     @property
     def cur(self):
-        cursor = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if self.cdict:
+            cursor = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            cursor = self.dbconn.cursor()
         cursor.execute("SET search_path TO %s", [self.schema])
         return cursor
 
