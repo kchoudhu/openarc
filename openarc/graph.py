@@ -47,17 +47,13 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
-                    if self._debug:
-                        print cur.mogrify(insert_sql, vals)
-                    cur.execute(insert_sql, vals)
+                    self.__exec_query(cur, insert_sql, vals)
                     index_val = cur.fetchall()
                     self._clauseprms = index_val[0].values()
                     self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
-            if self._debug:
-                print self._extcur.mogrify(insert_sql, vals)
-            self._extcur.execute(insert_sql, vals)
+            self.__exec_query(self._extcur, insert_sql, vals)
             index_val = self._extcur.fetchall()
             self._clauseprms = index_val[0].values()
             self.__refresh_from_cursor(self._extcur)
@@ -145,20 +141,22 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
-                    if self._debug:
-                        print cur.mogrify(update_sql, update_values)
-                    cur.execute(update_sql, update_values)
+                    self.__exec_query(cur, update_sql, update_values)
                     dao.commit()
         else:
-            if self._debug:
-                print self._extcur.mogrify(update_sql, update_values)
-            self._extcur.execute(update_sql, update_values)
+            self.__exec_query(self._extcur, update_sql, update_values)
+
         return self
 
     @property
     def SQL(self):
 
         raise NotImplementedError("Must be implemneted in deriving OAGraph class")
+
+    def __exec_query(self, cur, query, parms=[]):
+        if self._debug:
+            print cur.mogrify(query, parms)
+        cur.execute(query, parms)
 
     def __init__(self, clauseprms=None, indexparm='id', initparms={}, extcur=None, debug=False):
 
@@ -197,15 +195,9 @@ class OAGraphRootNode(object):
 
     def __refresh_from_cursor(self, cur):
         if type(self.SQL).__name__ == "str":
-            if self._debug:
-                print cur.mogrify(self.SQL, self._claseprms)
-            cur.execute(self.SQL, self._clauseprms)
+            self.__exec_query(cur, self.SQL, self._clauseprms)
         elif type(self.SQL).__name__ == "dict":
-            if self._debug:
-                print cur.mogrify(self.SQL['read'][self._indexparm], self._clauseprms)
-            cur.execute(self.SQL['read'][self._indexparm], self._clauseprms)
-        else:
-            raise OAError("Cannot find correct SQL to execute")
+            self.__exec_query(cur, self.SQL['read'][self._indexparm], self._clauseprms)
         self._rawdata = cur.fetchall()
 
     def __set_attrs_from_cframe(self):
