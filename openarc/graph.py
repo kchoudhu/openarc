@@ -31,80 +31,6 @@ class oagprop(object):
 
 class OAGraphRootNode(object):
 
-    def __iter__(self):
-        if self.is_unique:
-            raise OAError("__iter__: Unique OAGraph object is not iterable")
-        else:
-            return self
-
-    def __next__(self):
-        if self.is_unique:
-            raise OAError("__next__: Unique OAGraph object is not iterable")
-        else:
-            return self.next()
-
-    @property
-    def size(self):
-        if self._rawdata is None:
-            return 0
-        else:
-            return len(self._rawdata)
-
-    @property
-    def infname(self):
-        if len(self.infname_fields)==0:
-            raise OAError("Cannot calculate infname if infname_fields not set")
-        return hashlib.sha256(str().join([str(getattr(self, k, ""))
-                                          for k in self.infname_fields
-                                          if k[0] != '_'])).hexdigest()
-
-    def next(self):
-        if self.is_unique:
-            raise OAError("next: Unique OAGraph object is not iterable")
-        else:
-            if self.__iteridx < self.size:
-                self._oagcache = {}
-                self._cframe = self._rawdata[self.__iteridx]
-                self.__iteridx += 1
-                self.__set_attrs_from_cframe()
-                return self
-            else:
-                self.__iteridx = 0
-                raise StopIteration()
-
-    def __init__(self, clauseprms=None, indexparm='id', initparms={}, extcur=None, debug=False):
-
-        self._cframe         = initparms
-        self._rawdata        = None
-        self._oagcache       = {}
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexparm
-        self._extcur         = extcur
-
-        # Flip to True to see SQL being executed
-        self._debug          = debug
-
-        if self._clauseprms is not None:
-            self.refresh(gotodb=True)
-
-            if len(self._rawdata) == 0:
-                raise OAGraphRetrieveError("No results found in database")
-
-            if self.is_unique:
-                self.__set_uniq_attrs()
-
-        self.__set_attrs_from_cframe()
-
-    def __set_attrs_from_cframe(self):
-        for k, v in self._cframe.items():
-            setattr(self, k, v)
-
-    def __set_uniq_attrs(self):
-        if len(self._rawdata) != 1:
-            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        self._cframe = self._rawdata[0]
-        self.__set_attrs_from_cframe()
-
     def create(self, initparm):
         self._cframe = initparm
 
@@ -145,18 +71,42 @@ class OAGraphRootNode(object):
 
         return self
 
-    def __refresh_from_cursor(self, cur):
-        if type(self.SQL).__name__ == "str":
-            if self._debug:
-                print cur.mogrify(self.SQL, self._claseprms)
-            cur.execute(self.SQL, self._clauseprms)
-        elif type(self.SQL).__name__ == "dict":
-            if self._debug:
-                print cur.mogrify(self.SQL['read'][self._indexparm], self._clauseprms)
-            cur.execute(self.SQL['read'][self._indexparm], self._clauseprms)
+    @property
+    def dbcontext(self):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    @property
+    def infname(self):
+        if len(self.infname_fields)==0:
+            raise OAError("Cannot calculate infname if infname_fields not set")
+        return hashlib.sha256(str().join([str(getattr(self, k, ""))
+                                          for k in self.infname_fields
+                                          if k[0] != '_'])).hexdigest()
+
+    @property
+    def infname_fields(self):
+        """Override in deriving classes as necessary"""
+        return [k for k, v in self._cframe.items()]
+
+    @property
+    def is_unique(self):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    def next(self):
+        if self.is_unique:
+            raise OAError("next: Unique OAGraph object is not iterable")
         else:
-            raise OAError("Cannot find correct SQL to execute")
-        self._rawdata = cur.fetchall()
+            if self.__iteridx < self.size:
+                self._oagcache = {}
+                self._cframe = self._rawdata[self.__iteridx]
+                self.__iteridx += 1
+                self.__set_attrs_from_cframe()
+                return self
+            else:
+                self.__iteridx = 0
+                raise StopIteration()
 
     def refresh(self, gotodb=False):
         """Generally we want to simply reset the iterator; set gotodb=True to also
@@ -171,6 +121,13 @@ class OAGraphRootNode(object):
         self.__iteridx = 0
         self._oagcache = {}
         return self
+
+    @property
+    def size(self):
+        if self._rawdata is None:
+            return 0
+        else:
+            return len(self._rawdata)
 
     def update(self, updparms={}):
 
@@ -199,18 +156,64 @@ class OAGraphRootNode(object):
         return self
 
     @property
-    def dbcontext(self):
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
-
-    @property
-    def infname_fields(self):
-        """Override in deriving classes as necessary"""
-        return [k for k, v in self._cframe.items()]
-
-    @property
-    def is_unique(self):
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
-
-    @property
     def SQL(self):
+
         raise NotImplementedError("Must be implemneted in deriving OAGraph class")
+
+    def __init__(self, clauseprms=None, indexparm='id', initparms={}, extcur=None, debug=False):
+
+        self._cframe         = initparms
+        self._rawdata        = None
+        self._oagcache       = {}
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexparm
+        self._extcur         = extcur
+
+        # Flip to True to see SQL being executed
+        self._debug          = debug
+
+        if self._clauseprms is not None:
+            self.refresh(gotodb=True)
+
+            if len(self._rawdata) == 0:
+                raise OAGraphRetrieveError("No results found in database")
+
+            if self.is_unique:
+                self.__set_uniq_attrs()
+
+        self.__set_attrs_from_cframe()
+
+    def __iter__(self):
+        if self.is_unique:
+            raise OAError("__iter__: Unique OAGraph object is not iterable")
+        else:
+            return self
+
+    def __next__(self):
+        if self.is_unique:
+            raise OAError("__next__: Unique OAGraph object is not iterable")
+        else:
+            return self.next()
+
+    def __refresh_from_cursor(self, cur):
+        if type(self.SQL).__name__ == "str":
+            if self._debug:
+                print cur.mogrify(self.SQL, self._claseprms)
+            cur.execute(self.SQL, self._clauseprms)
+        elif type(self.SQL).__name__ == "dict":
+            if self._debug:
+                print cur.mogrify(self.SQL['read'][self._indexparm], self._clauseprms)
+            cur.execute(self.SQL['read'][self._indexparm], self._clauseprms)
+        else:
+            raise OAError("Cannot find correct SQL to execute")
+        self._rawdata = cur.fetchall()
+
+    def __set_attrs_from_cframe(self):
+        for k, v in self._cframe.items():
+            setattr(self, k, v)
+
+    def __set_uniq_attrs(self):
+        if len(self._rawdata) != 1:
+            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
+        self._cframe = self._rawdata[0]
+        self.__set_attrs_from_cframe()
