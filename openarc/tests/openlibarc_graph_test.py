@@ -24,16 +24,16 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.dbconn.commit()
 
             # Object not created until commit
-            oa = OAGraphUniqNode(extcur=setupcur).create({
+            oa = OAG_UniqNode(extcur=setupcur).create({
                     'field2' : 485,
                     'field3' : 486
                  })
 
             with self.assertRaises(OAGraphRetrieveError):
-                oa_chk = OAGraphUniqNode((485,))
+                oa_chk = OAG_UniqNode((485,))
 
             self.dbconn.commit()
-            oa_chk = OAGraphUniqNode((485,))
+            oa_chk = OAG_UniqNode((485,))
             self.assertEqual(oa.field2, oa_chk.field2)
             self.assertEqual(oa.field3, oa_chk.field3)
 
@@ -41,14 +41,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             oa.field2 = 487
             oa.update()
             # -> no change yet, retrieval ok
-            oa_chk = OAGraphUniqNode((485,))
+            oa_chk = OAG_UniqNode((485,))
             self.assertEqual(oa_chk.field2, 485)
             self.assertEqual(oa_chk.field3, 486)
             self.dbconn.commit()
             # -> update commited, retrieval fails
             with self.assertRaises(OAGraphRetrieveError):
-                oa_chk = OAGraphUniqNode((485,))
-            oa_chk = OAGraphUniqNode((487,))
+                oa_chk = OAG_UniqNode((485,))
+            oa_chk = OAG_UniqNode((487,))
             self.assertEqual(oa.field2, oa_chk.field2)
             self.assertEqual(oa.field3, oa_chk.field3)
 
@@ -57,11 +57,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             setupcur.execute(self.SQL.create_sample_table)
             self.dbconn.commit()
 
-        oa = OAGraphUniqNode().create({
+        oa = OAG_UniqNode().create({
                 'field2' : 485,
                 'field3' : 486
              })
-        oa_chk = OAGraphUniqNode((485,))
+        oa_chk = OAG_UniqNode((485,))
 
         self.assertEqual(oa.field2, oa_chk.field2)
         self.assertEqual(oa.field3, oa_chk.field3)
@@ -74,14 +74,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         with OADao("test") as dao:
             with dao.cur as cur:
                 for i in xrange(10):
-                    oa = OAGraphMultiNode(extcur=cur).create({
+                    oa = OAG_MultiNode(extcur=cur).create({
                             'field2' : i,
                             'field3' : 2
                          })
             dao.commit()
 
         i = 0
-        mn_chk = OAGraphMultiNode((2,))
+        mn_chk = OAG_MultiNode((2,))
         for mn in mn_chk:
             self.assertEqual(mn.field3, 2)
             self.assertEqual(mn.field2, i)
@@ -94,7 +94,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        oa = OAGraphUniqNode((2,))
+        oa = OAG_UniqNode((2,))
         self.assertEqual(oa._field1, 3)
         self.assertEqual(oa.field2, 2)
         self.assertEqual(oa.field3, 2)
@@ -106,12 +106,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        oa = OAGraphUniqNode((2,))
+        oa = OAG_UniqNode((2,))
         oa.field2 = 14
         oa.field3 = 14
         oa.update()
 
-        oa_upd = OAGraphUniqNode((14,))
+        oa_upd = OAG_UniqNode((14,))
         self.assertEqual(oa_upd._field1, oa._field1)
         self.assertEqual(oa_upd.field2, 14)
         self.assertEqual(oa_upd.field3, 14)
@@ -123,13 +123,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        oa = OAGraphUniqNode((2,))
+        oa = OAG_UniqNode((2,))
         oa.update({
             'field2' : 14,
             'field3' : 14
         })
 
-        oa_upd = OAGraphUniqNode((14,))
+        oa_upd = OAG_UniqNode((14,))
         self.assertEqual(oa_upd._field1, oa._field1)
         self.assertEqual(oa_upd.field2, 14)
         self.assertEqual(oa_upd.field3, 14)
@@ -141,12 +141,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        nm = OAGraphMultiNode((2,))
+        nm = OAG_MultiNode((2,))
         n = next(nm)
         n.field2 = 14
         n.update()
 
-        nm_upd = OAGraphMultiNode((2,))
+        nm_upd = OAG_MultiNode((2,))
         nu = next(nm_upd)
         self.assertEqual(nu._field1, n._field1)
         self.assertEqual(nu.field2, 14)
@@ -158,13 +158,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        nm = OAGraphMultiNode((2,))
+        nm = OAG_MultiNode((2,))
         n = next(nm)
         n.update({
             'field2' : 14
         })
 
-        nm_upd = OAGraphMultiNode((2,))
+        nm_upd = OAG_MultiNode((2,))
         nu = next(nm_upd)
         self.assertEqual(nu._field1, n._field1)
         self.assertEqual(nu.field2, 14)
@@ -175,7 +175,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             setupcur.execute(self.SQL.create_sample_table)
             self.dbconn.commit()
         with self.assertRaises(OAGraphRetrieveError):
-            oa = OAGraphUniqNode((2,))
+            oa = OAG_UniqNode((2,))
 
     def test_data_retrieval_with_external_cursor(self):
         """Graph nodes can do internal queries with external cursors"""
@@ -187,9 +187,9 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             # Before commit, internal cursor impl throws retrieval error,
             # but external cursor impl sees contents
             with self.assertRaises(OAGraphRetrieveError):
-                oa = OAGraphUniqNode((2,))
+                oa = OAG_UniqNode((2,))
             with self.assertRaises(OAGraphIntegrityError):
-                oa = OAGraphUniqNode((2,), extcur=setupcur)
+                oa = OAG_UniqNode((2,), extcur=setupcur)
 
     def test_mutltiquery_node_retrieval(self):
         """Mutliple queries can be used to retrieve data for graph node"""
@@ -199,11 +199,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.dbconn.commit()
 
         # Default "id" query does not throw
-        oa = OAGraphUniqNode((2,))
+        oa = OAG_UniqNode((2,))
         self.assertEqual(oa.is_unique, True)
 
         # Secondary "id_2" query also works
-        oa = OAGraphUniqNode((2,2), indexparm="id_2")
+        oa = OAG_UniqNode((2,2), indexparm="id_2")
         self.assertEqual(oa.is_unique, True)
 
     def test_uniquenode_data_integrity(self):
@@ -214,7 +214,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.dbconn.commit()
 
         with self.assertRaises(Exception):
-            oa = OAGraphUniqNode((2,))
+            oa = OAG_UniqNode((2,))
 
     def test_db_to_property_translation_multinode(self):
         with self.dbconn.cursor() as setupcur:
@@ -223,7 +223,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        node_multi = OAGraphMultiNode((2,))
+        node_multi = OAG_MultiNode((2,))
 
         for idx, oa in enumerate(node_multi):
             self.assertEqual(idx, oa._field1-1)
@@ -237,7 +237,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        node_multi = OAGraphMultiNode((2,))
+        node_multi = OAG_MultiNode((2,))
 
         # Exhausted MultiNode is implicitly refreshed
         for oa in node_multi:
@@ -260,7 +260,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        node_multi = OAGraphMultiNode((2,))
+        node_multi = OAG_MultiNode((2,))
         self.assertEqual(node_multi.size, 10)
 
     def test_oanode_oagprop_caching(self):
@@ -270,7 +270,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        node_uniq = OAGraphUniqNode((2,))
+        node_uniq = OAG_UniqNode((2,))
         self.assertEqual(len(node_uniq._oagcache), 0)
         sub_node_uniq = node_uniq.subnode
         self.assertEqual(sub_node_uniq._field1, node_uniq._field1)
@@ -283,7 +283,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
-        node_multi = OAGraphMultiNode((2,))
+        node_multi = OAG_MultiNode((2,))
 
         for i, nm in enumerate(node_multi):
             self.assertEqual(len(nm._oagcache), 0)
@@ -298,9 +298,9 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.dbconn.commit()
 
         # In memory/database retrieved objects are the same
-        node_uniq = OAGraphUniqNode((2,))
+        node_uniq = OAG_UniqNode((2,))
         node_uniq2 =\
-            OAGraphUniqNode(initparms={
+            OAG_UniqNode(initparms={
                 '_field1' : 3,
                 'field2' : 2,
                 'field3' : 2
@@ -309,7 +309,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Changing initparm changes infname for relevant item
         node_uniq3 =\
-            OAGraphUniqNode(initparms={
+            OAG_UniqNode(initparms={
                 '_field1' : 3,
                 'field2' : 3,
                 'field3' : 2
@@ -318,7 +318,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Changing in-memory index value doesn't alter infname
         node_uniq4 =\
-            OAGraphUniqNode(initparms={
+            OAG_UniqNode(initparms={
                 '_field1' : 22,
                 'field2' : 2,
                 'field3' : 2
@@ -326,7 +326,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(node_uniq.infname,node_uniq4.infname)
 
         # Infname cannot be calculated until cframe is set on multinode
-        node_multi = OAGraphMultiNode((2,))
+        node_multi = OAG_MultiNode((2,))
         with self.assertRaises(OAError):
             print node_multi.infname
 
@@ -339,7 +339,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Infname doesn't change if non-specified field changed
         # when custom infname_field list defined
-        node_cust_multi = next(OAGraphMultiWithCustomInfnameList((2,)))
+        node_cust_multi = next(OAG_MultiWithCustomInfnameList((2,)))
         infname1 = node_cust_multi.infname
         node_cust_multi.field3 = 'i am a very fake value'
         infname2 = node_cust_multi.infname
@@ -356,7 +356,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         get_rows_from_sample_table = td("""
             SELECT field2 FROM test.sample_table""")
 
-class OAGraphUniqNode(OAGraphRootNode):
+class OAG_UniqNode(OAGraphRootNode):
     @property
     def is_unique(self): return True
 
@@ -364,7 +364,7 @@ class OAGraphUniqNode(OAGraphRootNode):
     def dbcontext(self): return "test"
 
     @oagprop
-    def subnode(self): return OAGraphUniqNode((self.field2,))
+    def subnode(self): return OAG_UniqNode((self.field2,))
 
     @property
     def SQL(self):
@@ -396,7 +396,7 @@ class OAGraphUniqNode(OAGraphRootNode):
         }
       }
 
-class OAGraphMultiNode(OAGraphRootNode):
+class OAG_MultiNode(OAGraphRootNode):
     @property
     def is_unique(self): return False
 
@@ -404,7 +404,7 @@ class OAGraphMultiNode(OAGraphRootNode):
     def dbcontext(self): return "test"
 
     @oagprop
-    def subnode(self): return OAGraphMultiNode((self.field3,))
+    def subnode(self): return OAG_MultiNode((self.field3,))
 
     @property
     def SQL(self):
@@ -430,7 +430,7 @@ class OAGraphMultiNode(OAGraphRootNode):
         }
       }
 
-class OAGraphMultiWithCustomInfnameList(OAGraphMultiNode):
+class OAG_MultiWithCustomInfnameList(OAG_MultiNode):
     @property
     def infname_fields(self):
         return [ 'field2' ]
