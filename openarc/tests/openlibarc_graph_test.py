@@ -203,7 +203,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(oa.is_unique, True)
 
         # Secondary "id_2" query also works
-        oa = OAG_UniqNode((2,2), indexparm="id_2")
+        oa = OAG_UniqNode((2,2), indexprm="id_2")
         self.assertEqual(oa.is_unique, True)
 
     def test_uniquenode_data_integrity(self):
@@ -300,7 +300,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # In memory/database retrieved objects are the same
         node_uniq = OAG_UniqNode((2,))
         node_uniq2 =\
-            OAG_UniqNode(initparms={
+            OAG_UniqNode(initprms={
                 '_field1' : 3,
                 'field2' : 2,
                 'field3' : 2
@@ -309,7 +309,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Changing initparm changes infname for relevant item
         node_uniq3 =\
-            OAG_UniqNode(initparms={
+            OAG_UniqNode(initprms={
                 '_field1' : 3,
                 'field2' : 3,
                 'field3' : 2
@@ -318,7 +318,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Changing in-memory index value doesn't alter infname
         node_uniq4 =\
-            OAG_UniqNode(initparms={
+            OAG_UniqNode(initprms={
                 '_field1' : 22,
                 'field2' : 2,
                 'field3' : 2

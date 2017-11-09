@@ -31,13 +31,12 @@ class oagprop(object):
 
 class OAGraphRootNode(object):
 
-    def create(self, initparm):
-        self._cframe = initparm
+    def create(self, initprms):
+        attrs = self._set_attrs_from_userprms(initprms, fullhouse=True)
+        self._set_cframe_from_attrs(attrs)
 
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
-
-        ### TODO: scehma validation
 
         attrstr    = ', '.join([k for k in self._cframe])
         vals       = [self._cframe[k] for k in self._cframe]
@@ -47,23 +46,23 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
-                    self.__exec_query(cur, insert_sql, vals)
+                    self.SQLexec(cur, insert_sql, vals)
                     index_val = cur.fetchall()
                     self._clauseprms = index_val[0].values()
-                    self.__refresh_from_cursor(cur)
+                    self._refresh_from_cursor(cur)
                     dao.commit()
         else:
-            self.__exec_query(self._extcur, insert_sql, vals)
+            self.SQLexec(self._extcur, insert_sql, vals)
             index_val = self._extcur.fetchall()
             self._clauseprms = index_val[0].values()
-            self.__refresh_from_cursor(self._extcur)
+            self._refresh_from_cursor(self._extcur)
 
         # Refresh to set iteridx
         self.refresh()
 
         # Set attrs if this is a unique oag
         if self.is_unique:
-            self.__set_uniq_attrs()
+            self._set_attrs_from_cframe_uniq()
 
         return self
 
@@ -85,6 +84,33 @@ class OAGraphRootNode(object):
         """Override in deriving classes as necessary"""
         return [k for k, v in self._cframe.items()]
 
+    def init_state_cls(self, clauseprms, indexprm, initprms, extcur, debug):
+        self._cframe         = {}
+        self._rawdata        = None
+        self._oagcache       = {}
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexprm
+        self._extcur         = extcur
+        self._debug          = debug
+
+        if len(initprms)>0:
+            attrs = self._set_attrs_from_userprms(initprms)
+            self._set_cframe_from_attrs(attrs)
+
+    def init_state_dbschema(self):
+
+        return
+
+    def init_state_oag(self):
+        if self._clauseprms is not None:
+            self.refresh(gotodb=True)
+
+            if len(self._rawdata) == 0:
+                raise OAGraphRetrieveError("No results found in database")
+
+            if self.is_unique:
+                self._set_attrs_from_cframe_uniq()
+
     @property
     def is_unique(self):
 
@@ -98,7 +124,7 @@ class OAGraphRootNode(object):
                 self._oagcache = {}
                 self._cframe = self._rawdata[self.__iteridx]
                 self.__iteridx += 1
-                self.__set_attrs_from_cframe()
+                self._set_attrs_from_cframe()
                 return self
             else:
                 self.__iteridx = 0
@@ -111,9 +137,9 @@ class OAGraphRootNode(object):
             if self._extcur is None:
                 with OADao(self.dbcontext) as dao:
                     with dao.cur as cur:
-                        self.__refresh_from_cursor(cur)
+                        self._refresh_from_cursor(cur)
             else:
-                self.__refresh_from_cursor(self._extcur)
+                self._refresh_from_cursor(self._extcur)
         self.__iteridx = 0
         self._oagcache = {}
         return self
@@ -128,8 +154,8 @@ class OAGraphRootNode(object):
     def update(self, updparms={}):
 
         if len(updparms)>0:
-            for k, v in updparms.items():
-                setattr(self, k, v)
+            attrs = self._set_attrs_from_userprms(updparms)
+            self._set_cframe_from_attrs(attrs)
 
         member_attrs  = [k for k in self._cframe if k[0] != '_']
         index_key     = [k for k in self._cframe if k[0] == '_'][0]
@@ -141,10 +167,10 @@ class OAGraphRootNode(object):
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
-                    self.__exec_query(cur, update_sql, update_values)
+                    self.SQLexec(cur, update_sql, update_values)
                     dao.commit()
         else:
-            self.__exec_query(self._extcur, update_sql, update_values)
+            self.SQLexec(self._extcur, update_sql, update_values)
 
         return self
 
@@ -153,33 +179,15 @@ class OAGraphRootNode(object):
 
         raise NotImplementedError("Must be implemneted in deriving OAGraph class")
 
-    def __exec_query(self, cur, query, parms=[]):
+    def SQLexec(self, cur, query, parms=[]):
         if self._debug:
             print cur.mogrify(query, parms)
         cur.execute(query, parms)
 
-    def __init__(self, clauseprms=None, indexparm='id', initparms={}, extcur=None, debug=False):
-
-        self._cframe         = initparms
-        self._rawdata        = None
-        self._oagcache       = {}
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexparm
-        self._extcur         = extcur
-
-        # Flip to True to see SQL being executed
-        self._debug          = debug
-
-        if self._clauseprms is not None:
-            self.refresh(gotodb=True)
-
-            if len(self._rawdata) == 0:
-                raise OAGraphRetrieveError("No results found in database")
-
-            if self.is_unique:
-                self.__set_uniq_attrs()
-
-        self.__set_attrs_from_cframe()
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):
+        self.init_state_cls(clauseprms, indexprm, initprms, extcur, debug)
+        self.init_state_dbschema()
+        self.init_state_oag()
 
     def __iter__(self):
         if self.is_unique:
@@ -193,19 +201,30 @@ class OAGraphRootNode(object):
         else:
             return self.next()
 
-    def __refresh_from_cursor(self, cur):
+    def _refresh_from_cursor(self, cur):
         if type(self.SQL).__name__ == "str":
-            self.__exec_query(cur, self.SQL, self._clauseprms)
+            self.SQLexec(cur, self.SQL, self._clauseprms)
         elif type(self.SQL).__name__ == "dict":
-            self.__exec_query(cur, self.SQL['read'][self._indexparm], self._clauseprms)
+            self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
         self._rawdata = cur.fetchall()
 
-    def __set_attrs_from_cframe(self):
+    def _set_attrs_from_cframe(self):
         for k, v in self._cframe.items():
             setattr(self, k, v)
 
-    def __set_uniq_attrs(self):
+    def _set_attrs_from_cframe_uniq(self):
         if len(self._rawdata) != 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
         self._cframe = self._rawdata[0]
-        self.__set_attrs_from_cframe()
+        self._set_attrs_from_cframe()
+
+    def _set_attrs_from_userprms(self, userprms, fullhouse=False):
+        """Set attributes corresponding to params in userprms, return list of
+        attrs created"""
+        for k, v in userprms.items():
+            setattr(self, k, v)
+        return userprms.keys()
+
+    def _set_cframe_from_attrs(self, keys):
+        for k in keys:
+            self._cframe[k] = getattr(self, k, "")
