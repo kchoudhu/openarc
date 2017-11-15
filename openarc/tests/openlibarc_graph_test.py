@@ -18,6 +18,35 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def tearDown(self):
         self.tearDown_db()
 
+    def __check_autonode_equivalence(self, oag1, oag2):
+        for oagkey in oag1.dbstreams.keys():
+            if oag1.is_oagnode(oagkey):
+                self.assertEqual(getattr(oag1, oagkey, "").id, getattr(oag2, oagkey, "").id)
+            else:
+                self.assertEqual(getattr(oag1, oagkey, ""), getattr(oag2, oagkey, ""))
+    def __generate_autonode_system(self):
+        a2 =\
+            OAG_AutoNode2().create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        a1 =\
+            OAG_AutoNode1().create({
+                'field2'   : 2,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3
+            })
+
+        return (a1, a2, a3)
+
     def test_graph_isolation_control(self):
         with self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
@@ -345,6 +374,100 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         infname2 = node_cust_multi.infname
         self.assertEqual(infname1, infname2)
 
+    def test_autonode_create_inmemory_with_userprms(self):
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        self.assertEqual(a2.field4,  1)
+        self.assertEqual(a2.field5, 'this is an autonode2')
+
+        with self.assertRaises(OAGraphRetrieveError):
+            OAG_AutoNode2((a2.field4,), "id_2")
+
+    def test_autonode_create_with_null_userprms(self):
+        a1 = OAG_AutoNode1()
+        for stream, streaminfo in OAG_AutoNode1.dbstreams.items():
+            self.assertEqual(getattr(a1, stream), None)
+
+    def test_autonode_create_via_create_call(self):
+        with self.assertRaises(OAGraphIntegrityError):
+            a3 =\
+                OAG_AutoNode3().create({
+                    'field7' : 8,
+                    #'field8' : 'this is an autonode3'
+                })
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        self.assertEqual(a3.field7, 8)
+        self.assertEqual(a3.field8, 'this is an autonode3')
+
+        a3_chk = OAG_AutoNode3((a3.id,))
+        self.__check_autonode_equivalence(a3, a3_chk)
+
+    def test_autonode_create_nested(self):
+        (a1, a2, a3) = self.__generate_autonode_system()
+        a1_chk = OAG_AutoNode1((a1.id,))
+        self.__check_autonode_equivalence(a1, a1_chk)
+
+    def test_autonode_create_with_properties(self):
+        (a1, a2, a3) = self.__generate_autonode_system()
+        a1 = OAG_AutoNode1()
+        for oagkey in a1.dbstreams.keys():
+            self.assertEqual(getattr(a1, oagkey, ""), None)
+
+        a1.field2 = 3
+        a1.field3 = 3
+        a1.subnode1 = a2
+
+        with self.assertRaises(OAGraphIntegrityError):
+            a1.create()
+
+        a1.subnode2 = a3
+        a1.create()
+
+        a1_chk = OAG_AutoNode1((a1.id,))
+        self.__check_autonode_equivalence(a1, a1_chk)
+
+    def test_autonode_update_with_userprms(self):
+        (a1,   a2,   a3)   = self.__generate_autonode_system()
+        (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
+        a3.update({
+            'field8' : 'this is an updated autonode3'
+        })
+
+        a3_chk = OAG_AutoNode3((a3.id,))
+        self.assertEqual(a3.field8, a3_chk.field8)
+
+        a1.update({
+            'subnode1' : a2_b
+        })
+
+        a1_chk = OAG_AutoNode1((a1.id,))
+        self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
+
+    def test_autonode_udpate_with_properties(self):
+        (a1,   a2,   a3)   = self.__generate_autonode_system()
+        (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
+        a3.field8 = 'this is an updated autonode3'
+        a3.update()
+
+        a3_chk = OAG_AutoNode3((a3.id,))
+        self.assertEqual(a3.field8, a3_chk.field8)
+
+        a1.subnode1 = a2_b
+        a1.update()
+
+        a1_chk = OAG_AutoNode1((a1.id,))
+        self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -434,3 +557,67 @@ class OAG_MultiWithCustomInfnameList(OAG_MultiNode):
     @property
     def infname_fields(self):
         return [ 'field2' ]
+
+class OAG_AutoNode1(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'field2'   : [ 'int', 0 ],
+        'field3'   : [ 'int', 0 ],
+        'subnode1' : [ OAG_AutoNode2 ],
+        'subnode2' : [ OAG_AutoNode3 ]
+    }
+
+    @property
+    def sql_local(self): return {
+        'read' : {
+          'id_2' : self.SQLpp("""
+              SELECT _field1, field2, field3
+                FROM {0}
+               WHERE field2=%s
+                     AND field3=%s""")
+        }
+    }
+
+class OAG_AutoNode2(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'field4'   : [ 'int', 0 ],
+        'field5'   : [ 'varchar(50)', 0 ],
+    }
+
+    @property
+    def sql_local(self):
+        return{
+          "read" : {
+            "id_2" : self.SQLpp("""
+                SELECT *
+                  FROM {0}
+                 WHERE field4=%s
+              ORDER BY {1}""")
+          }
+        }
+
+class OAG_AutoNode3(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'field7'   : [ 'int', 0 ],
+        'field8'   : [ 'varchar(50)', 0 ],
+    }

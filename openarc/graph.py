@@ -1,19 +1,24 @@
 #!/usr/bin/env python2.7
 
 import hashlib
+import inflection
+import inspect
+
+from textwrap          import dedent as td
 
 from openarc.dao       import *
 from openarc.exception import *
 
 class oagprop(object):
-
-    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
+    """Responsible for maitaining _oagcache on decorated properties"""
+    def __init__(self, fget=None, fset=None, fdel=None, doc=None, extkey=None):
         self.fget = fget
         self.fset = fset
         self.fdel = fdel
         if doc is None and fget is not None:
             doc = fget.__doc__
         self.__doc__ = doc
+        self.extkey=extkey
 
     def __get__(self, obj, objtype=None):
         if obj is None:
@@ -26,14 +31,19 @@ class oagprop(object):
             obj._oagcache[self.fget.func_name] = self.fget(obj)
             return obj._oagcache[self.fget.func_name]
 
-    def getter(self, fget):
-        return type(self)(fget, self.fset, self.fdel, self.__doc__)
+    def __set__(self, obj, value):
+        obj._oagcache[self.extkey] = value
+
+class staticproperty(property):
+    def __get__(self, cls, owner):
+        return classmethod(self.fget).__get__(None, owner)()
 
 class OAGraphRootNode(object):
 
-    def create(self, initprms):
-        attrs = self._set_attrs_from_userprms(initprms, fullhouse=True)
-        self._set_cframe_from_attrs(attrs)
+    def create(self, initprms={}):
+
+        attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
+        self._set_cframe_from_attrs(attrs, fullhouse=True)
 
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
@@ -93,9 +103,8 @@ class OAGraphRootNode(object):
         self._extcur         = extcur
         self._debug          = debug
 
-        if len(initprms)>0:
-            attrs = self._set_attrs_from_userprms(initprms)
-            self._set_cframe_from_attrs(attrs)
+        attrs = self._set_attrs_from_userprms(initprms)
+        self._set_cframe_from_attrs(attrs)
 
     def init_state_dbschema(self):
 
@@ -153,9 +162,8 @@ class OAGraphRootNode(object):
 
     def update(self, updparms={}):
 
-        if len(updparms)>0:
-            attrs = self._set_attrs_from_userprms(updparms)
-            self._set_cframe_from_attrs(attrs)
+        attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
+        self._set_cframe_from_attrs(attrs)
 
         member_attrs  = [k for k in self._cframe if k[0] != '_']
         index_key     = [k for k in self._cframe if k[0] == '_'][0]
@@ -163,7 +171,7 @@ class OAGraphRootNode(object):
                                     for attr in member_attrs])
         update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self, index_key, ""))
-        update_values = [getattr(self, attr, "") for attr in member_attrs]
+        update_values = [self._cframe[attr] for attr in member_attrs]
         if self._extcur is None:
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
@@ -218,13 +226,231 @@ class OAGraphRootNode(object):
         self._cframe = self._rawdata[0]
         self._set_attrs_from_cframe()
 
-    def _set_attrs_from_userprms(self, userprms, fullhouse=False):
+    def _set_attrs_from_userprms(self, userprms):
         """Set attributes corresponding to params in userprms, return list of
         attrs created"""
         for k, v in userprms.items():
             setattr(self, k, v)
         return userprms.keys()
 
-    def _set_cframe_from_attrs(self, keys):
-        for k in keys:
-            self._cframe[k] = getattr(self, k, "")
+    def _set_cframe_from_attrs(self, keys, fullhouse=False):
+        if len(keys)==0:
+            dbstreams = self._cframe.keys()
+        else:
+            dbstreams = keys
+        for stream in dbstreams:
+            self._cframe[stream] = getattr(self, stream, "")
+
+class OAG_RootNode(OAGraphRootNode):
+
+    @staticproperty
+    def db_oag_mapping(cls):
+        schema = {}
+        for stream, streaminfo in cls.dbstreams.items():
+            if cls.is_oagnode(stream):
+                schema[stream] = streaminfo[0].dbpkname[1:]
+            else:
+                schema[stream] = stream
+        return schema
+
+    @staticproperty
+    def dbpkname(cls): return "_%s_id" % cls.dbtable
+
+    @staticproperty
+    def dbtable(cls): return inflection.underscore(cls.__name__)[4:]
+
+    @staticproperty
+    def dbstreams(cls):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    @property
+    def id(self): return self._cframe[self.dbpkname]
+
+    def init_state_dbschema(self):
+        with OADao(self.dbcontext, cdict=False) as dao:
+            with dao.cur as cur:
+                # Check that dbcontext schema exists
+                schemachk_sql = self.SQLpp("SELECT 1 FROM information_schema.schemata WHERE schema_name=%s")
+                self.SQLexec(cur, schemachk_sql, parms=[self.dbcontext])
+                check = cur.fetchall()
+                if len(check)==0:
+                    if self._debug:
+                        print "Creating missing schema [%s]" % self.dbcontext
+                    mkschema_sql = "CREATE SCHEMA %s" % self.dbcontext
+                    self.SQLexec(cur, mkschema_sql)
+
+                # Check for presence of table
+                try:
+                    column_sql = self.SQLpp("SELECT * FROM {0} WHERE 1=0")
+                    self.SQLexec(cur, column_sql)
+                except psycopg2.ProgrammingError as e:
+                    dao.commit()
+                    if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
+                        if self._debug:
+                            print "Creating missing table [%s]" % self.dbtable
+                        mktbl_sql = "CREATE table %s.%s(%s serial primary key)" % (self.dbcontext, self.dbtable, self.dbpkname)
+                        self.SQLexec(cur, mktbl_sql)
+                        self.SQLexec(cur, column_sql)
+
+                # Check for table schema integrity
+                oag_columns     = self.dbstreams.keys()
+                db_columns_ext  = [desc[0] for desc in cur.description if desc[0][0] != '_']
+                db_columns_reqd = self.db_oag_mapping.values()
+
+                dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
+                if len(dropped_cols)>0:
+                    raise OAGraphIntegrityError("Dropped columns %s detected, cannot initialize" % dropped_cols)
+
+                add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
+                if len(add_cols)>0:
+                    if self._debug:
+                        print "Adding new columns %s to [%s]" % (add_cols, self.dbtable)
+                    add_col_clauses = []
+                    for i, col in enumerate(oag_columns):
+                        if db_columns_reqd[i] in add_cols:
+                            if oag_columns[i] != db_columns_reqd[i]:
+                                subnode = self.dbstreams[col][0](debug=self._debug)
+                                add_clause = "ADD COLUMN %s int NOT NULL references %s.%s(%s)"\
+                                             % (subnode.dbpkname[1:],
+                                                subnode.dbcontext,
+                                                subnode.dbtable,
+                                                subnode.dbpkname)
+                            else:
+                                add_clause = "ADD COLUMN %s %s NOT NULL" % (col, self.dbstreams[col][0])
+                            add_col_clauses.append(add_clause)
+
+                    addcol_sql = self.SQLpp("ALTER TABLE {0} %s") % ",".join(add_col_clauses)
+                    self.SQLexec(cur, addcol_sql)
+
+                # End of the road: commit
+                dao.commit()
+
+    @classmethod
+    def is_oagnode(cls, stream):
+        streaminfo = cls.dbstreams[stream][0]
+        if type(streaminfo).__name__=='type':
+            return 'OAGraphRootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
+        else:
+            return False
+
+    @property
+    def SQL(self):
+        default_sql = {
+            "read" : {
+              "id" : self.SQLpp("""
+                  SELECT *
+                    FROM {0}
+                   WHERE {1}=%s
+                ORDER BY {1}""")
+            },
+            "update" : {
+              "id" : self.SQLpp("""
+                  UPDATE {0}
+                     SET %s
+                   WHERE {1}=%s""")
+            },
+            "insert" : {
+              "id" : self.SQLpp("""
+             INSERT INTO {0}(%s)
+                  VALUES (%s)
+               RETURNING {1}""")
+            }
+        }
+
+        for action, sqlinfo in self.sql_local.items():
+            for index, sql in sqlinfo.items():
+                default_sql[action][index] = sql
+
+        return default_sql
+
+    def SQLpp(self, SQL):
+        """Pretty prints SQL and populates schema+table{0} and its primary
+        key{1} in given SQL string"""
+        return td(SQL.format(self.dbcontext+"."+self.dbtable, self.dbpkname))
+
+    @property
+    def sql_local(self): return {}
+
+    def _set_attrs_from_cframe(self):
+        oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
+        for stream, streaminfo in self._cframe.items():
+            try:
+                stream = oag_db_mapping[stream]
+                if self.is_oagnode(stream):
+                    def fget(obj, streaminfo=streaminfo, stream=stream):
+                        return self.dbstreams[stream][0](clauseprms=[streaminfo], debug=self._debug)
+                    fget.__name__ = stream
+                    prop = oagprop(fget, extkey=stream)
+                    setattr(self.__class__, stream, prop)
+                else:
+                    setattr(self, stream, self._cframe[stream])
+            except KeyError as e:
+                setattr(self, stream, self._cframe[stream])
+
+    def _set_attrs_from_cframe_uniq(self):
+        if len(self._rawdata) != 1:
+            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
+        self._cframe = self._rawdata[0]
+        self._set_attrs_from_cframe()
+
+    def _set_attrs_from_userprms(self, userprms):
+        missing_streams = []
+        invalid_streams = []
+        processed_streams = {}
+
+        # blank everything
+        for oagkey in self.dbstreams.keys():
+            setattr(self, oagkey, None)
+
+        if len(userprms)==0:
+            return []
+
+        invalid_streams = [ s for s in userprms.keys() if s not in self.dbstreams.keys() ]
+        if len(invalid_streams)>0:
+            raise OAGraphIntegrityError("Invalid update stream(s) detected %s" % invalid_streams)
+
+        processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
+        for stream, streaminfo in processed_streams.items():
+            if self.is_oagnode(stream):
+                def fget(obj):
+                    return streaminfo
+                fget.__name__ = stream
+                prop = oagprop(fget, extkey=stream)
+                setattr(self.__class__, stream, prop)
+            setattr(self, stream, streaminfo)
+        return processed_streams.keys()
+
+    def _set_cframe_from_attrs(self, attrs, fullhouse=False):
+        cframe_tmp = {}
+        missing_streams = []
+
+        all_streams = self.dbstreams.keys()
+        if len(self._cframe) > 0:
+            all_streams.append(self.dbpkname)
+
+        for oagkey in all_streams:
+            cfkey = oagkey
+            cfval = getattr(self, oagkey, None)
+
+            # Special handling for indices
+            if cfkey[0] == '_':
+                cframe_tmp[cfkey] = cfval
+                continue
+
+            # Is a value missing for this stream?
+            if cfval is None:
+                missing_streams.append(oagkey)
+                continue
+
+            # Ok, actualy set cframe
+            if self.is_oagnode(oagkey):
+                cfkey = self.db_oag_mapping[oagkey]
+                cfval = cfval.id
+            cframe_tmp[cfkey] = cfval
+
+        if fullhouse:
+            if len(missing_streams)>0:
+                raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
+
+        self._cframe = cframe_tmp
