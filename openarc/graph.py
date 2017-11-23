@@ -95,7 +95,10 @@ class OAGraphRootNode(object):
         return [k for k, v in self._cframe.items()]
 
     def init_state_cls(self, clauseprms, indexprm, initprms, extcur, debug):
+        self._clear_oagprops()
+
         self._cframe         = {}
+        self._fkframe        = {}
         self._rawdata        = None
         self._oagcache       = {}
         self._clauseprms     = clauseprms
@@ -151,6 +154,7 @@ class OAGraphRootNode(object):
                 self._refresh_from_cursor(self._extcur)
         self.__iteridx = 0
         self._oagcache = {}
+        self._set_attrs_from_cframe()
         return self
 
     @property
@@ -209,6 +213,13 @@ class OAGraphRootNode(object):
         else:
             return self.next()
 
+    def _clear_oagprops(self):
+        oagproplist = getattr(self.__class__, "oagproplist", [])
+        for op in oagproplist:
+            if getattr(self.__class__, op, None) is not None:
+                delattr(self.__class__, op)
+        setattr(self.__class__, 'oagproplist', [])
+
     def _refresh_from_cursor(self, cur):
         if type(self.SQL).__name__ == "str":
             self.SQLexec(cur, self.SQL, self._clauseprms)
@@ -241,6 +252,19 @@ class OAGraphRootNode(object):
         for stream in dbstreams:
             self._cframe[stream] = getattr(self, stream, "")
 
+    def _set_oagprop(self, stream, payload):
+        # Maintain list of oagprops that have been set
+        oagproplist = getattr(self.__class__, "oagproplist", None)
+        if oagproplist is None:
+            oagproplist = []
+        oagproplist.append(stream)
+        setattr(self.__class__, 'oagproplist', oagproplist)
+
+        # And actually set oagprop
+        setattr(self.__class__, stream, payload)
+
+
+
 class OAG_RootNode(OAGraphRootNode):
 
     @staticproperty
@@ -271,27 +295,23 @@ class OAG_RootNode(OAGraphRootNode):
         with OADao(self.dbcontext, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that dbcontext schema exists
-                schemachk_sql = self.SQLpp("SELECT 1 FROM information_schema.schemata WHERE schema_name=%s")
-                self.SQLexec(cur, schemachk_sql, parms=[self.dbcontext])
+                self.SQLexec(cur, self.SQL['admin']['schema'], parms=[self.dbcontext])
                 check = cur.fetchall()
                 if len(check)==0:
                     if self._debug:
                         print "Creating missing schema [%s]" % self.dbcontext
-                    mkschema_sql = "CREATE SCHEMA %s" % self.dbcontext
-                    self.SQLexec(cur, mkschema_sql)
+                    self.SQLexec(cur, self.SQL['admin']['mkschema'])
 
                 # Check for presence of table
                 try:
-                    column_sql = self.SQLpp("SELECT * FROM {0} WHERE 1=0")
-                    self.SQLexec(cur, column_sql)
+                    self.SQLexec(cur, self.SQL['admin']['table'])
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
                         if self._debug:
                             print "Creating missing table [%s]" % self.dbtable
-                        mktbl_sql = "CREATE table %s.%s(%s serial primary key)" % (self.dbcontext, self.dbtable, self.dbpkname)
-                        self.SQLexec(cur, mktbl_sql)
-                        self.SQLexec(cur, column_sql)
+                        self.SQLexec(cur, self.SQL['admin']['mktable'])
+                        self.SQLexec(cur, self.SQL['admin']['table'])
 
                 # Check for table schema integrity
                 oag_columns     = self.dbstreams.keys()
@@ -320,11 +340,10 @@ class OAG_RootNode(OAGraphRootNode):
                                 add_clause = "ADD COLUMN %s %s NOT NULL" % (col, self.dbstreams[col][0])
                             add_col_clauses.append(add_clause)
 
-                    addcol_sql = self.SQLpp("ALTER TABLE {0} %s") % ",".join(add_col_clauses)
+                    addcol_sql = self.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
                     self.SQLexec(cur, addcol_sql)
 
-                # End of the road: commit
-                dao.commit()
+            dao.commit()
 
     @classmethod
     def is_oagnode(cls, stream):
@@ -336,28 +355,73 @@ class OAG_RootNode(OAGraphRootNode):
 
     @property
     def SQL(self):
+
+        # Default SQL defined for all tables
         default_sql = {
             "read" : {
-              "id" : self.SQLpp("""
+              "id"       : self.SQLpp("""
                   SELECT *
-                    FROM {0}
-                   WHERE {1}=%s
-                ORDER BY {1}""")
+                    FROM {0}.{1}
+                   WHERE {2}=%s
+                ORDER BY {2}"""),
+
             },
             "update" : {
-              "id" : self.SQLpp("""
-                  UPDATE {0}
+              "id"       : self.SQLpp("""
+                  UPDATE {0}.{1}
                      SET %s
-                   WHERE {1}=%s""")
+                   WHERE {2}=%s""")
             },
             "insert" : {
-              "id" : self.SQLpp("""
-             INSERT INTO {0}(%s)
+              "id"       : self.SQLpp("""
+             INSERT INTO {0}.{1}(%s)
                   VALUES (%s)
-               RETURNING {1}""")
+               RETURNING {2}""")
+            },
+            "admin"  : {
+              "fkeys"    : self.SQLpp("""
+                  SELECT tc.constraint_name,
+                         kcu.column_name as id,
+                         kcu.constraint_schema as schema,
+                         tc.table_name as table,
+                         ccu.table_schema as points_to_schema,
+                         ccu.table_name as points_to_table_name,
+                         ccu.column_name as points_to_id
+                    FROM information_schema.table_constraints as tc
+                         INNER JOIN information_schema.key_column_usage as kcu
+                             ON tc.constraint_name=kcu.constraint_name
+                         INNER JOIN information_schema.constraint_column_usage as ccu
+                             ON ccu.constraint_name = tc.constraint_name
+                   WHERE constraint_type = 'FOREIGN KEY'
+                         AND ccu.table_schema='{0}'
+                         AND ccu.table_name='{1}'"""),
+              "mkschema" : self.SQLpp("""
+                 CREATE SCHEMA {0}"""),
+              "mktable"  : self.SQLpp("""
+                  CREATE table {0}.{1}({2} serial primary key)"""),
+              "schema"   : self.SQLpp("""
+                  SELECT 1
+                    FROM information_schema.schemata
+                   WHERE schema_name=%s"""),
+              "table"    : self.SQLpp("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE 1=0""")
             }
         }
 
+        # Add in id retrieval for oagprops
+        for stream, streaminfo in self.dbstreams.items():
+            if self.is_oagnode(stream):
+                stream_sql_key = 'by_'+stream
+                stream_sql     = td("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE {2}=%s
+                ORDER BY {3}""").format(self.dbcontext, self.dbtable, streaminfo[0].dbpkname[1:], self.dbpkname)
+                default_sql['read'][stream_sql_key] = stream_sql
+
+        # Add in user defined SQL
         for action, sqlinfo in self.sql_local.items():
             for index, sql in sqlinfo.items():
                 default_sql[action][index] = sql
@@ -365,15 +429,22 @@ class OAG_RootNode(OAGraphRootNode):
         return default_sql
 
     def SQLpp(self, SQL):
-        """Pretty prints SQL and populates schema+table{0} and its primary
-        key{1} in given SQL string"""
-        return td(SQL.format(self.dbcontext+"."+self.dbtable, self.dbpkname))
+        """Pretty prints SQL and populates schema{0}.table{1} and its primary
+        key{2} in given SQL string"""
+        return td(SQL.format(self.dbcontext, self.dbtable, self.dbpkname))
 
     @property
     def sql_local(self): return {}
 
+    def _refresh_from_cursor(self, cur):
+        self.SQLexec(cur, self.SQL['admin']['fkeys'])
+        self._fkframe = cur.fetchall()
+        super(OAG_RootNode, self)._refresh_from_cursor(cur)
+
     def _set_attrs_from_cframe(self):
         oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
+
+        # Set dbstream attributes
         for stream, streaminfo in self._cframe.items():
             try:
                 stream = oag_db_mapping[stream]
@@ -381,14 +452,28 @@ class OAG_RootNode(OAGraphRootNode):
                     def fget(obj, streaminfo=streaminfo, stream=stream):
                         return self.dbstreams[stream][0](clauseprms=[streaminfo], debug=self._debug)
                     fget.__name__ = stream
-                    prop = oagprop(fget, extkey=stream)
-                    setattr(self.__class__, stream, prop)
+                    self._set_oagprop(stream, oagprop(fget, extkey=stream))
                 else:
                     setattr(self, stream, self._cframe[stream])
             except KeyError as e:
                 setattr(self, stream, self._cframe[stream])
 
+        # Set forward lookup attributes
+        for fk in self._fkframe:
+            classname = "OAG_"+inflection.camelize(fk['table'])
+            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                if cls.__name__==classname:
+                    stream = fk['table']
+                    def fget(obj,
+                              cls=cls,
+                              clauseprms=[getattr(self, fk['points_to_id'], None)],
+                              indexprm='by_'+{cls.db_oag_mapping[k]:k for k in cls.db_oag_mapping}[fk['id']]):
+                        return cls(clauseprms, indexprm, debug=self._debug)
+                    fget.__name__ = stream
+                    self._set_oagprop(stream, oagprop(fget))
+
     def _set_attrs_from_cframe_uniq(self):
+
         if len(self._rawdata) != 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
         self._cframe = self._rawdata[0]
@@ -416,8 +501,7 @@ class OAG_RootNode(OAGraphRootNode):
                 def fget(obj):
                     return streaminfo
                 fget.__name__ = stream
-                prop = oagprop(fget, extkey=stream)
-                setattr(self.__class__, stream, prop)
+                self._set_oagprop(stream, oagprop(fget, extkey=stream))
             setattr(self, stream, streaminfo)
         return processed_streams.keys()
 

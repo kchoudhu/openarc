@@ -24,6 +24,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 self.assertEqual(getattr(oag1, oagkey, "").id, getattr(oag2, oagkey, "").id)
             else:
                 self.assertEqual(getattr(oag1, oagkey, ""), getattr(oag2, oagkey, ""))
+
     def __generate_autonode_system(self):
         a2 =\
             OAG_AutoNode2().create({
@@ -38,7 +39,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             })
 
         a1 =\
-            OAG_AutoNode1().create({
+            OAG_AutoNode1a().create({
                 'field2'   : 2,
                 'field3'   : 2,
                 'subnode1' : a2,
@@ -388,8 +389,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_AutoNode2((a2.field4,), "id_2")
 
     def test_autonode_create_with_null_userprms(self):
-        a1 = OAG_AutoNode1()
-        for stream, streaminfo in OAG_AutoNode1.dbstreams.items():
+        a1 = OAG_AutoNode1a()
+        for stream, streaminfo in OAG_AutoNode1a.dbstreams.items():
             self.assertEqual(getattr(a1, stream), None)
 
     def test_autonode_create_via_create_call(self):
@@ -414,12 +415,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_autonode_create_nested(self):
         (a1, a2, a3) = self.__generate_autonode_system()
-        a1_chk = OAG_AutoNode1((a1.id,))
+        next(a1)
+        a1_chk = next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1, a1_chk)
 
     def test_autonode_create_with_properties(self):
         (a1, a2, a3) = self.__generate_autonode_system()
-        a1 = OAG_AutoNode1()
+
+        a1 = OAG_AutoNode1a()
         for oagkey in a1.dbstreams.keys():
             self.assertEqual(getattr(a1, oagkey, ""), None)
 
@@ -432,8 +435,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a1.subnode2 = a3
         a1.create()
-
-        a1_chk = OAG_AutoNode1((a1.id,))
+        next(a1)
+        a1_chk = next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1, a1_chk)
 
     def test_autonode_update_with_userprms(self):
@@ -446,14 +449,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
-        a1.update({
+        a1.next().update({
             'subnode1' : a2_b
         })
 
-        a1_chk = OAG_AutoNode1((a1.id,))
+        a1_chk = next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
 
-    def test_autonode_udpate_with_properties(self):
+    def test_autonode_update_with_properties(self):
         (a1,   a2,   a3)   = self.__generate_autonode_system()
         (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
         a3.field8 = 'this is an updated autonode3'
@@ -462,11 +465,61 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
-        a1.subnode1 = a2_b
+        a1.next().subnode1 = a2_b
         a1.update()
 
-        a1_chk = OAG_AutoNode1((a1.id,))
+        a1_chk =next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
+
+    def test_autonode_fwdoag_creation(self):
+
+        a2 =\
+            OAG_AutoNode2().create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for x in xrange(0,10):
+            a1a =\
+                OAG_AutoNode1a().create({
+                    'field2'   : x,
+                    'field3'   : 10-x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+            a1b =\
+                OAG_AutoNode1b().create({
+                    'field2'   : 10-x,
+                    'field3'   : x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        with self.assertRaises(AttributeError):
+            a2.auto_node1a
+        with self.assertRaises(AttributeError):
+            a2.auto_node1b
+        with self.assertRaises(AttributeError):
+            a3.auto_node1a
+        with self.assertRaises(AttributeError):
+            a3.auto_node1b
+
+
+        # refresh a2 and a3 to generate fwdoags
+        a2.refresh(gotodb=True)
+        a3.refresh(gotodb=True)
+
+        self.assertEqual(a2.auto_node1a.size, 10)
+        self.assertEqual(a2.auto_node1b.size, 10)
+        self.assertEqual(a3.auto_node1a.size, 10)
+        self.assertEqual(a3.auto_node1b.size, 10)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
@@ -558,9 +611,9 @@ class OAG_MultiWithCustomInfnameList(OAG_MultiNode):
     def infname_fields(self):
         return [ 'field2' ]
 
-class OAG_AutoNode1(OAG_RootNode):
+class OAG_AutoNode1a(OAG_RootNode):
     @property
-    def is_unique(self): return True
+    def is_unique(self): return False
 
     @property
     def dbcontext(self): return "test"
@@ -573,15 +626,19 @@ class OAG_AutoNode1(OAG_RootNode):
         'subnode2' : [ OAG_AutoNode3 ]
     }
 
+class OAG_AutoNode1b(OAG_RootNode):
     @property
-    def sql_local(self): return {
-        'read' : {
-          'id_2' : self.SQLpp("""
-              SELECT _field1, field2, field3
-                FROM {0}
-               WHERE field2=%s
-                     AND field3=%s""")
-        }
+    def is_unique(self): return False
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'field2'   : [ 'int', 0 ],
+        'field3'   : [ 'int', 0 ],
+        'subnode1' : [ OAG_AutoNode2 ],
+        'subnode2' : [ OAG_AutoNode3 ]
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -603,9 +660,9 @@ class OAG_AutoNode2(OAG_RootNode):
           "read" : {
             "id_2" : self.SQLpp("""
                 SELECT *
-                  FROM {0}
+                  FROM {0}.{1}
                  WHERE field4=%s
-              ORDER BY {1}""")
+              ORDER BY {2}""")
           }
         }
 
