@@ -153,6 +153,7 @@ class OAGraphRootNode(object):
                         self._refresh_from_cursor(cur)
             else:
                 self._refresh_from_cursor(self._extcur)
+        self._rawdata_window = self._rawdata
         self.__iteridx = 0
         self._oagcache = {}
         self._set_attrs_from_cframe()
@@ -197,12 +198,18 @@ class OAGraphRootNode(object):
             print cur.mogrify(query, parms)
         cur.execute(query, parms)
 
-    def __getitem__(self, index):
+    def __getitem__(self, indexinfo):
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
         self._oagcache = {}
-        self._cframe = self._rawdata_window[index]
+        if type(indexinfo)==int:
+            self._cframe = self._rawdata_window[indexinfo]
+        elif type(indexinfo)==slice:
+            self._rawdata_window = self._rawdata[indexinfo]
+            self._cframe = self._rawdata_window[0]
+
         self._set_attrs_from_cframe()
+
         return self
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):

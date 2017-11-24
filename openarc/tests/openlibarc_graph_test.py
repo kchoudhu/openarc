@@ -529,6 +529,10 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 setupcur.execute(self.SQL.insert_sample_row, [i, 2])
             self.dbconn.commit()
 
+        # Can't index unique OAGs
+        node_uniq = OAG_UniqNode((2,))
+        with self.assertRaises(OAError):
+            node_uniq[2]
 
         node_multi = OAG_MultiNode((2,))
 
@@ -543,11 +547,17 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         with self.assertRaises(IndexError):
             node_multi[294]
 
-        node_uniq = OAG_UniqNode((2,))
+        # Vanilla slicing works as expected
+        node_multi = node_multi[2:8]
+        self.assertEqual(node_multi.size, 6)
 
+        # Stepped slciing works
+        node_multi = node_multi[2:8:2]
+        self.assertEqual(node_multi.size, 3)
 
-        with self.assertRaises(OAError):
-            node_uniq[2]
+        # Slicing can be "reset"
+        node_multi.refresh()
+        self.assertEqual(node_multi.size, 10)
 
 
     class SQL(TestOABase.SQL):
