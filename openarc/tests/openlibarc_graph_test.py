@@ -521,6 +521,35 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a3.auto_node1a.size, 10)
         self.assertEqual(a3.auto_node1b.size, 10)
 
+
+    def test_multinode_indexing(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(10):
+                setupcur.execute(self.SQL.insert_sample_row, [i, 2])
+            self.dbconn.commit()
+
+
+        node_multi = OAG_MultiNode((2,))
+
+        # Normal indexing works as expected
+        for i in xrange(10):
+            self.assertEqual(node_multi[i].field2, i)
+
+        # Negative indexing works
+        self.assertEqual(node_multi[-1].field2, 9)
+
+        # Out of bounds indexing throws
+        with self.assertRaises(IndexError):
+            node_multi[294]
+
+        node_uniq = OAG_UniqNode((2,))
+
+
+        with self.assertRaises(OAError):
+            node_uniq[2]
+
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

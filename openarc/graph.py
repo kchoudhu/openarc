@@ -100,6 +100,7 @@ class OAGraphRootNode(object):
         self._cframe         = {}
         self._fkframe        = {}
         self._rawdata        = None
+        self._rawdata_window = None
         self._oagcache       = {}
         self._clauseprms     = clauseprms
         self._indexparm      = indexprm
@@ -117,7 +118,7 @@ class OAGraphRootNode(object):
         if self._clauseprms is not None:
             self.refresh(gotodb=True)
 
-            if len(self._rawdata) == 0:
+            if len(self._rawdata_window) == 0:
                 raise OAGraphRetrieveError("No results found in database")
 
             if self.is_unique:
@@ -134,7 +135,7 @@ class OAGraphRootNode(object):
         else:
             if self.__iteridx < self.size:
                 self._oagcache = {}
-                self._cframe = self._rawdata[self.__iteridx]
+                self._cframe = self._rawdata_window[self.__iteridx]
                 self.__iteridx += 1
                 self._set_attrs_from_cframe()
                 return self
@@ -159,10 +160,10 @@ class OAGraphRootNode(object):
 
     @property
     def size(self):
-        if self._rawdata is None:
+        if self._rawdata_window is None:
             return 0
         else:
-            return len(self._rawdata)
+            return len(self._rawdata_window)
 
     def update(self, updparms={}):
 
@@ -196,6 +197,14 @@ class OAGraphRootNode(object):
             print cur.mogrify(query, parms)
         cur.execute(query, parms)
 
+    def __getitem__(self, index):
+        if self.is_unique:
+            raise OAError("Cannot index OAG that is marked unique")
+        self._oagcache = {}
+        self._cframe = self._rawdata_window[index]
+        self._set_attrs_from_cframe()
+        return self
+
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, debug)
         self.init_state_dbschema()
@@ -226,15 +235,16 @@ class OAGraphRootNode(object):
         elif type(self.SQL).__name__ == "dict":
             self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
         self._rawdata = cur.fetchall()
+        self._rawdata_window = self._rawdata
 
     def _set_attrs_from_cframe(self):
         for k, v in self._cframe.items():
             setattr(self, k, v)
 
     def _set_attrs_from_cframe_uniq(self):
-        if len(self._rawdata) != 1:
+        if len(self._rawdata_window) != 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        self._cframe = self._rawdata[0]
+        self._cframe = self._rawdata_window[0]
         self._set_attrs_from_cframe()
 
     def _set_attrs_from_userprms(self, userprms):
@@ -262,8 +272,6 @@ class OAGraphRootNode(object):
 
         # And actually set oagprop
         setattr(self.__class__, stream, payload)
-
-
 
 class OAG_RootNode(OAGraphRootNode):
 
@@ -474,9 +482,9 @@ class OAG_RootNode(OAGraphRootNode):
 
     def _set_attrs_from_cframe_uniq(self):
 
-        if len(self._rawdata) != 1:
+        if len(self._rawdata_window) != 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        self._cframe = self._rawdata[0]
+        self._cframe = self._rawdata_window[0]
         self._set_attrs_from_cframe()
 
     def _set_attrs_from_userprms(self, userprms):
