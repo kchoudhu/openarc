@@ -551,7 +551,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         node_multi = node_multi[2:8]
         self.assertEqual(node_multi.size, 6)
 
-        # Stepped slciing works
+        # Stepped slicing works
         node_multi = node_multi[2:8:2]
         self.assertEqual(node_multi.size, 3)
 
