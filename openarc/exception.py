@@ -6,6 +6,11 @@ class OAError(Exception):
         super(OAError, self).__init__(message)
         self.message = message
 
+class OAGoddammit(OAError):
+    """Subset of OAError, reserved for that class of errors which future
+    maintainers will find to be most boneheaded."""
+    pass
+
 class OAGraphRetrieveError(Exception):
     """Raised when data retrieval fails"""
     def __init__(self, message):
