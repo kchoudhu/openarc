@@ -269,17 +269,6 @@ class OAGraphRootNode(object):
         for stream in dbstreams:
             self._cframe[stream] = getattr(self, stream, "")
 
-    def _set_oagprop(self, stream, payload):
-        # Maintain list of oagprops that have been set
-        oagproplist = getattr(self.__class__, "oagproplist", None)
-        if oagproplist is None:
-            oagproplist = []
-        oagproplist.append(stream)
-        setattr(self.__class__, 'oagproplist', oagproplist)
-
-        # And actually set oagprop
-        setattr(self.__class__, stream, payload)
-
 class OAG_RootNode(OAGraphRootNode):
 
     @staticproperty
@@ -487,13 +476,6 @@ class OAG_RootNode(OAGraphRootNode):
                     fget.__name__ = stream
                     self._set_oagprop(stream, oagprop(fget))
 
-    def _set_attrs_from_cframe_uniq(self):
-
-        if len(self._rawdata_window) != 1:
-            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        self._cframe = self._rawdata_window[0]
-        self._set_attrs_from_cframe()
-
     def _set_attrs_from_userprms(self, userprms):
         missing_streams = []
         invalid_streams = []
@@ -553,3 +535,14 @@ class OAG_RootNode(OAGraphRootNode):
                 raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
 
         self._cframe = cframe_tmp
+
+    def _set_oagprop(self, stream, payload):
+        # Maintain list of oagprops that have been set
+        oagproplist = getattr(self.__class__, "oagproplist", None)
+        if oagproplist is None:
+            oagproplist = []
+        oagproplist.append(stream)
+        setattr(self.__class__, 'oagproplist', oagproplist)
+
+        # And actually set oagprop
+        setattr(self.__class__, stream, payload)
