@@ -541,8 +541,9 @@ class OAG_RootNode(OAGraphRootNode):
         oagproplist = getattr(self.__class__, "oagproplist", None)
         if oagproplist is None:
             oagproplist = []
-        oagproplist.append(stream)
-        setattr(self.__class__, 'oagproplist', oagproplist)
+        if stream not in oagproplist:
+            oagproplist.append(stream)
+            setattr(self.__class__, 'oagproplist', oagproplist)
 
         # And actually set oagprop
         setattr(self.__class__, stream, payload)
