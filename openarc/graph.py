@@ -349,6 +349,14 @@ class OAG_RootNode(OAGraphRootNode):
 
             dao.commit()
 
+    def init_state_pub(self):
+        import zmq
+        ctx = zmq.Context()
+        self._pub_status = ctx.socket(zmq.PUB)
+        self._pub_status.bind('tcp://*:0')
+        if self._debug:
+            print "Listening %s" % self
+
     @classmethod
     def is_oagnode(cls, stream):
         streaminfo = cls.dbstreams[stream][0]
@@ -440,6 +448,41 @@ class OAG_RootNode(OAGraphRootNode):
     @property
     def sql_local(self): return {}
 
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):
+        super(OAG_RootNode, self).__init__(clauseprms, indexprm, initprms, extcur, debug)
+        self.init_state_pub()
+
+    def __setattr__(self, stream, payload):
+
+        # There has got to be a better way to do this...
+        if stream[0] != '_':
+            tell_upstream     = False
+            current_value     = getattr(self, stream, None)
+
+            # Handle oagprops
+            if self.is_oagnode(stream):
+                if payload:
+                    if self._debug:
+                        print stream, self.__class__.oagproplist
+                    if stream not in self.__class__.oagproplist:
+                        if self._debug:
+                            print "[%s] Connecting to new stream [%s]" % (stream, payload)
+                    else:
+                        if current_value != payload:
+                            if self._debug:
+                                print "[%s] Connecting to changed stream [%s]->[%s]" % (stream, current_value, payload)
+                            tell_upstream = True
+            else:
+                if current_value and current_value != payload:
+                    tell_upstream = True
+
+
+            if tell_upstream:
+                if self._debug:
+                    print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
+
+        super(OAG_RootNode, self).__setattr__(stream, payload)
+
     def _refresh_from_cursor(self, cur):
         self.SQLexec(cur, self.SQL['admin']['fkeys'])
         self._fkframe = cur.fetchall()
@@ -494,12 +537,12 @@ class OAG_RootNode(OAGraphRootNode):
 
         processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
         for stream, streaminfo in processed_streams.items():
+            setattr(self, stream, streaminfo)
             if self.is_oagnode(stream):
                 def fget(obj):
                     return streaminfo
                 fget.__name__ = stream
                 self._set_oagprop(stream, oagprop(fget, extkey=stream))
-            setattr(self, stream, streaminfo)
         return processed_streams.keys()
 
     def _set_cframe_from_attrs(self, attrs, fullhouse=False):
