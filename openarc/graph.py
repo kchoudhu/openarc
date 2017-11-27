@@ -7,6 +7,7 @@ import inspect
 from textwrap          import dedent as td
 
 from openarc.dao       import *
+from openarc.env       import OALog
 from openarc.exception import *
 
 class oagprop(object):
@@ -94,7 +95,7 @@ class OAGraphRootNode(object):
         """Override in deriving classes as necessary"""
         return [k for k, v in self._cframe.items()]
 
-    def init_state_cls(self, clauseprms, indexprm, initprms, extcur, debug):
+    def init_state_cls(self, clauseprms, indexprm, initprms, extcur, logger):
         self._clear_oagprops()
 
         self._cframe         = {}
@@ -105,7 +106,7 @@ class OAGraphRootNode(object):
         self._clauseprms     = clauseprms
         self._indexparm      = indexprm
         self._extcur         = extcur
-        self._debug          = debug
+        self._logger         = logger
 
         attrs = self._set_attrs_from_userprms(initprms)
         self._set_cframe_from_attrs(attrs)
@@ -128,6 +129,9 @@ class OAGraphRootNode(object):
     def is_unique(self):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    @property
+    def logger(self): return self._logger
 
     def next(self):
         if self.is_unique:
@@ -194,7 +198,7 @@ class OAGraphRootNode(object):
         raise NotImplementedError("Must be implemneted in deriving OAGraph class")
 
     def SQLexec(self, cur, query, parms=[]):
-        if self._debug:
+        if self.logger.SQL:
             print cur.mogrify(query, parms)
         cur.execute(query, parms)
 
@@ -212,8 +216,8 @@ class OAGraphRootNode(object):
 
         return self
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):
-        self.init_state_cls(clauseprms, indexprm, initprms, extcur, debug)
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog()):
+        self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
 
@@ -302,7 +306,7 @@ class OAG_RootNode(OAGraphRootNode):
                 self.SQLexec(cur, self.SQL['admin']['schema'], parms=[self.dbcontext])
                 check = cur.fetchall()
                 if len(check)==0:
-                    if self._debug:
+                    if self.logger.SQL:
                         print "Creating missing schema [%s]" % self.dbcontext
                     self.SQLexec(cur, self.SQL['admin']['mkschema'])
 
@@ -312,7 +316,7 @@ class OAG_RootNode(OAGraphRootNode):
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
-                        if self._debug:
+                        if self.logger.SQL:
                             print "Creating missing table [%s]" % self.dbtable
                         self.SQLexec(cur, self.SQL['admin']['mktable'])
                         self.SQLexec(cur, self.SQL['admin']['table'])
@@ -328,13 +332,13 @@ class OAG_RootNode(OAGraphRootNode):
 
                 add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
                 if len(add_cols)>0:
-                    if self._debug:
+                    if self.logger.SQL:
                         print "Adding new columns %s to [%s]" % (add_cols, self.dbtable)
                     add_col_clauses = []
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = self.dbstreams[col][0](debug=self._debug)
+                                subnode = self.dbstreams[col][0](logger=self.logger)
                                 add_clause = "ADD COLUMN %s int NOT NULL references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
                                                 subnode.dbcontext,
@@ -354,7 +358,7 @@ class OAG_RootNode(OAGraphRootNode):
         ctx = zmq.Context()
         self._pub_status = ctx.socket(zmq.PUB)
         self._pub_status.bind('tcp://*:0')
-        if self._debug:
+        if self.logger.Graph:
             print "Listening %s" % self
 
     @classmethod
@@ -448,8 +452,8 @@ class OAG_RootNode(OAGraphRootNode):
     @property
     def sql_local(self): return {}
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, debug=False):
-        super(OAG_RootNode, self).__init__(clauseprms, indexprm, initprms, extcur, debug)
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog()):
+        super(OAG_RootNode, self).__init__(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_pub()
 
     def __setattr__(self, stream, payload):
@@ -462,14 +466,14 @@ class OAG_RootNode(OAGraphRootNode):
             # Handle oagprops
             if self.is_oagnode(stream):
                 if payload:
-                    if self._debug:
+                    if self.logger.Graph:
                         print stream, self.__class__.oagproplist
                     if stream not in self.__class__.oagproplist:
-                        if self._debug:
+                        if self.logger.Graph:
                             print "[%s] Connecting to new stream [%s]" % (stream, payload)
                     else:
                         if current_value != payload:
-                            if self._debug:
+                            if self.logger.Graph:
                                 print "[%s] Connecting to changed stream [%s]->[%s]" % (stream, current_value, payload)
                             tell_upstream = True
             else:
@@ -478,7 +482,7 @@ class OAG_RootNode(OAGraphRootNode):
 
 
             if tell_upstream:
-                if self._debug:
+                if self.logger.Graph:
                     print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
 
         super(OAG_RootNode, self).__setattr__(stream, payload)
@@ -497,7 +501,7 @@ class OAG_RootNode(OAGraphRootNode):
                 stream = oag_db_mapping[stream]
                 if self.is_oagnode(stream):
                     def fget(obj, streaminfo=streaminfo, stream=stream):
-                        return self.dbstreams[stream][0](clauseprms=[streaminfo], debug=self._debug)
+                        return self.dbstreams[stream][0](clauseprms=[streaminfo], logger=self.logger)
                     fget.__name__ = stream
                     self._set_oagprop(stream, oagprop(fget, extkey=stream))
                 else:
@@ -515,7 +519,7 @@ class OAG_RootNode(OAGraphRootNode):
                               cls=cls,
                               clauseprms=[getattr(self, fk['points_to_id'], None)],
                               indexprm='by_'+{cls.db_oag_mapping[k]:k for k in cls.db_oag_mapping}[fk['id']]):
-                        return cls(clauseprms, indexprm, debug=self._debug)
+                        return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
                     self._set_oagprop(stream, oagprop(fget))
 

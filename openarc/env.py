@@ -32,6 +32,18 @@ class OAEnv(object):
         with open( cfg_file ) as f:
             self.envcfg = json.loads( f.read() )[requested_env]
 
+class OALog(object):
+    SQL   = False
+    Graph = False
+
+    def log(loginfo=None, ignore_exceptions=False):
+        # Information about run env: hostname, pid, time
+        if loginfo:
+            print loginfo
+        # redirect to stdout, other logger as necessary
+        logstr = traceback.format_exc()
+        if logstr != "None\n" and ignore_exceptions is False:
+           print logstr
 
 #This is where we hold library state.
 #You will get cut if you don't manipulate the p_* variables
@@ -40,14 +52,6 @@ class OAEnv(object):
 p_refcount_env = 0
 p_env = None
 
-def OALog(loginfo=None, ignore_exceptions=False):
-    # Information about run env: hostname, pid, time
-    if loginfo:
-        print loginfo
-    # redirect to stdout, other logger as necessary
-    logstr = traceback.format_exc()
-    if logstr != "None\n" and ignore_exceptions is False:
-	   print logstr
 
 def initenv(envstr):
     """envstr: one of local, dev, qa, prod.
