@@ -157,9 +157,10 @@ class OAGraphRootNode(object):
                         self._refresh_from_cursor(cur)
             else:
                 self._refresh_from_cursor(self._extcur)
+            self._oagcache = {}
+
         self._rawdata_window = self._rawdata
         self.__iteridx = 0
-        self._oagcache = {}
         self._set_attrs_from_cframe()
         return self
 
@@ -465,6 +466,10 @@ class OAG_RootNode(OAGraphRootNode):
 
             # Handle oagprops
             if self.is_oagnode(stream):
+                # Add to incoming payload to oagcache
+                self._oagcache[stream] = payload
+
+                # Set up communications
                 if payload:
                     if self.logger.Graph:
                         print stream, self.__class__.oagproplist
@@ -543,6 +548,9 @@ class OAG_RootNode(OAGraphRootNode):
         for stream, streaminfo in processed_streams.items():
             setattr(self, stream, streaminfo)
             if self.is_oagnode(stream):
+                # Set object to cache
+                self._oagcache[stream] = streaminfo
+                # Set oagprop for subsequent retrieval
                 def fget(obj):
                     return streaminfo
                 fget.__name__ = stream

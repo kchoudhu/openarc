@@ -401,15 +401,39 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                     #'field8' : 'this is an autonode3'
                 })
 
+        a2 =\
+            OAG_AutoNode2().create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
         a3 =\
             OAG_AutoNode3().create({
                 'field7' : 8,
                 'field8' : 'this is an autonode3'
             })
 
+        a1 =\
+            OAG_AutoNode1a().create({
+                'field2'   : 2,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3
+            })
+
+        # dbstreams are identical
+        self.assertEqual(a2.field4, 1)
+        self.assertEqual(a2.field5, 'this is an autonode2')
         self.assertEqual(a3.field7, 8)
         self.assertEqual(a3.field8, 'this is an autonode3')
+        self.assertEqual(a1.field2, 2)
+        self.assertEqual(a1.field3, 2)
 
+        # sub-oags map to the same object as those in initprms
+        self.assertEqual(a1.subnode1, a2)
+        self.assertEqual(a1.subnode2, a3)
+
+        # reconstituted oag is value-identical (no assertions about memory equality)
         a3_chk = OAG_AutoNode3((a3.id,))
         self.__check_autonode_equivalence(a3, a3_chk)
 
@@ -435,6 +459,10 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a1.subnode2 = a3
         a1.create()
+
+        self.assertEqual(a1.subnode1, a2)
+        self.assertEqual(a1.subnode2, a3)
+
         next(a1)
         a1_chk = next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1, a1_chk)
@@ -453,6 +481,9 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             'subnode1' : a2_b
         })
 
+
+        self.assertEqual(a1.subnode1, a2_b)
+
         a1_chk = next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
 
@@ -467,6 +498,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a1.next().subnode1 = a2_b
         a1.update()
+
+        self.assertEqual(a1.subnode1, a2_b)
 
         a1_chk =next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
