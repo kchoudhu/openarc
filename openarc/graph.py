@@ -1,14 +1,23 @@
 #!/usr/bin/env python2.7
 
 import hashlib
+import gevent
 import inflection
 import inspect
+import msgpack
+import socket
+import zmq.green as zmq
 
+from gevent            import spawn
+from gevent            import monkey
+monkey.patch_all()
+from gevent.lock       import BoundedSemaphore
 from textwrap          import dedent as td
 
 from openarc.dao       import *
 from openarc.env       import OALog
 from openarc.exception import *
+
 
 class oagprop(object):
     """Responsible for maitaining _oagcache on decorated properties"""
@@ -38,6 +47,115 @@ class oagprop(object):
 class staticproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
+
+class _OARpc(object):
+
+    @property
+    def port(self): return self._ctxsoc.LAST_ENDPOINT.split(":")[-1]
+
+    @property
+    def addr(self): return "tcp://%s:%s" % (self.runhost, self.port)
+
+    @property
+    def runhost(self): return socket.gethostname()
+
+    def __init__(self, zmqtype, oag):
+        self.zmqtype  = zmqtype
+        self._ctx     = zmq.Context()
+        self._ctxsoc  = self._ctx.socket(zmqtype)
+        self._oag     = oag
+
+class OAGRPC_RTR_Requests(_OARpc):
+    """Process all RPC calls from other OAGRPC_REQ_Requests"""
+    def __init__(self, oag):
+        super(OAGRPC_RTR_Requests, self).__init__(zmq.ROUTER, oag)
+
+    def start(self):
+        self._ctxsoc.bind("tcp://*:0")
+
+    def _send(self, sender, payload):
+        self._ctxsoc.send(sender, zmq.SNDMORE)
+        self._ctxsoc.send(str(), zmq.SNDMORE)
+        self._ctxsoc.send(msgpack.dumps(payload))
+
+    def _recv(self):
+        sender  = self._ctxsoc.recv()
+        empty   = self._ctxsoc.recv()
+        payload = msgpack.loads(self._ctxsoc.recv())
+
+        if self._oag.logger.RPC:
+            print "[rtr:%s] Received message [%s]" % (self.addr, payload)
+
+        return (sender, payload)
+
+class OAGRPC_REQ_Requests(_OARpc):
+    """Make RPC calls to another node's OAGRPC_RTR_Requests"""
+    def __init__(self, oag):
+        super(OAGRPC_REQ_Requests, self).__init__(zmq.REQ, oag)
+
+    def register(self, stream, oarpc):
+
+        self._ctxsoc.connect(oarpc.addr)
+
+        payload = {
+            'action' : 'register',
+            'args'   : {
+                'stream' : stream,
+                'addr'   : self._oag.rpcrtr.addr
+            }
+        }
+
+        if self._oag.logger.RPC:
+            print "========>"
+            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, oarpc.addr)
+
+        self._ctxsoc.send(msgpack.dumps(payload))
+        reply = self._ctxsoc.recv()
+
+        if self._oag.logger.RPC:
+            print "[req] Received reply [%s]" % (msgpack.loads(reply))
+            print "<========"
+
+    def deregister(self, stream, oarpc):
+
+        self._ctxsoc.connect(oarpc.addr)
+
+        payload = {
+            'action' : 'deregister',
+            'args'   : {
+                'stream' : stream,
+                'addr'   : self._oag.rpcrtr.addr
+            }
+        }
+
+        if self._oag.logger.RPC:
+            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, oarpc.addr)
+
+        self._ctxsoc.send(msgpack.dumps(payload))
+        reply = self._ctxsoc.recv()
+
+        if self._oag.logger.RPC:
+            print "[req] Received reply [%s]" % (msgpack.loads(reply))
+
+    def invalidate(self, addr, stream):
+
+        self._ctxsoc.connect(addr)
+
+        payload = {
+            'action' : 'invalidate',
+            'args'   : {
+                'stream' : stream
+            }
+        }
+
+        if self._oag.logger.RPC:
+            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, addr)
+
+        self._ctxsoc.send(msgpack.dumps(payload))
+        reply = self._ctxsoc.recv()
+
+        if self._oag.logger.RPC:
+            print "[req] Received reply [%s]" % (msgpack.loads(reply))
 
 class OAGraphRootNode(object):
 
@@ -165,6 +283,9 @@ class OAGraphRootNode(object):
         return self
 
     @property
+    def rpcrtr(self): return self._rpcrtr
+
+    @property
     def size(self):
         if self._rawdata_window is None:
             return 0
@@ -217,10 +338,11 @@ class OAGraphRootNode(object):
 
         return self
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog()):
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
+        self._initdone = True
 
     def __iter__(self):
         if self.is_unique:
@@ -339,7 +461,7 @@ class OAG_RootNode(OAGraphRootNode):
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = self.dbstreams[col][0](logger=self.logger)
+                                subnode = self.dbstreams[col][0](logger=self.logger, rpc=False)
                                 add_clause = "ADD COLUMN %s int NOT NULL references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
                                                 subnode.dbcontext,
@@ -354,13 +476,21 @@ class OAG_RootNode(OAGraphRootNode):
 
             dao.commit()
 
-    def init_state_pub(self):
-        import zmq
-        ctx = zmq.Context()
-        self._pub_status = ctx.socket(zmq.PUB)
-        self._pub_status.bind('tcp://*:0')
-        if self.logger.Graph:
-            print "Listening %s" % self
+    def init_state_rpc(self, allowrpc):
+        self._glets = []
+        self._rpc   = allowrpc
+
+        # Intiailize reqs
+        if self._rpc:
+            self._rpcsem = BoundedSemaphore(1)
+            with self._rpcsem:
+                self._rpcrtr = OAGRPC_RTR_Requests(self)
+                self.rpcrtr.start()
+                self._glets.append(spawn(self.__cb_init_state_rpc))
+                gevent.sleep(0)
+
+                # Initialize REQ array
+                self._rpcreqs = {}
 
     @classmethod
     def is_oagnode(cls, stream):
@@ -450,45 +580,90 @@ class OAG_RootNode(OAGraphRootNode):
         key{2} in given SQL string"""
         return td(SQL.format(self.dbcontext, self.dbtable, self.dbpkname))
 
+    def __oarpcreq_log(self):
+        if self.logger.RPC:
+            print '[rtr:%s] addr->[%s] rpcreqs->[%s] oagcache->[%s]' % (self.rpcrtr.addr, self, self._rpcreqs, self._oagcache)
+
+    def oarpc_invalidate(self, args):
+        self._oagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag != args['stream']}
+        if self.logger.RPC:
+            print '[rtr:%s] invalidation signal received' % self.rpcrtr.addr
+        for addr, stream in self._rpcreqs.items():
+            OAGRPC_REQ_Requests(self).invalidate(addr, stream)
+        return "OK"
+
+    def oarpc_deregister(self, args):
+        self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != args['addr']}
+        self.__oarpcreq_log()
+        return "OK"
+
+    def oarpc_register(self, args):
+        self._rpcreqs[args['addr']] = args['stream']
+        self.__oarpcreq_log()
+        return "OK"
+
+    def __cb_init_state_rpc(self):
+
+        rpc_dispatch = {
+            'deregister'   : self.oarpc_deregister,
+            'invalidate'   : self.oarpc_invalidate,
+            'register'     : self.oarpc_register,
+        }
+
+        if self.logger.RPC:
+            print "[rtr:%s] Listening for RPC requests" % (self.rpcrtr.addr)
+
+        while True:
+            (sender, payload) = self.rpcrtr._recv()
+            self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload['args']))
+            self.__oarpcreq_log()
+
+    @property
+    def rpcreqs(self):
+        rpcreq = self._rpcreqs
+
     @property
     def sql_local(self): return {}
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog()):
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
         super(OAG_RootNode, self).__init__(clauseprms, indexprm, initprms, extcur, logger)
-        self.init_state_pub()
+        self.init_state_rpc(rpc)
 
     def __setattr__(self, stream, payload):
 
         # There has got to be a better way to do this...
         if stream[0] != '_':
-            tell_upstream     = False
-            current_value     = getattr(self, stream, None)
+            current_value       = getattr(self, stream, None)
+            invalidate_upstream = False
+
+            reqcls = OAGRPC_REQ_Requests
 
             # Handle oagprops
             if self.is_oagnode(stream):
-                # Add to incoming payload to oagcache
-                self._oagcache[stream] = payload
-
-                # Set up communications
                 if payload:
-                    if self.logger.Graph:
-                        print stream, self.__class__.oagproplist
                     if stream not in self.__class__.oagproplist:
-                        if self.logger.Graph:
-                            print "[%s] Connecting to new stream [%s]" % (stream, payload)
+                        if self.logger.RPC:
+                            print "[%s] Connecting to new stream [%s]" % (stream, payload.rpcrtr.addr)
+                        reqcls(self).register(stream, payload.rpcrtr)
                     else:
                         if current_value != payload:
-                            if self.logger.Graph:
-                                print "[%s] Connecting to changed stream [%s]->[%s]" % (stream, current_value, payload)
-                            tell_upstream = True
+                            if self.logger.RPC:
+                                print "[%s] Detected changed stream [%s]->[%s]" % (stream,
+                                                                                   current_value.rpcrtr.addr,
+                                                                                   payload.rpcrtr.addr)
+                            reqcls(self).deregister(stream, current_value.rpcrtr)
+                            reqcls(self).register(stream, payload.rpcrtr)
+                            invalidate_upstream = True
             else:
                 if current_value and current_value != payload:
-                    tell_upstream = True
+                    invalidate_upstream = True
 
-
-            if tell_upstream:
-                if self.logger.Graph:
-                    print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
+            if invalidate_upstream:
+                if len(self._rpcreqs)>0:
+                    if self.logger.RPC:
+                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
+                    for addr, stream in self._rpcreqs.items():
+                        reqcls(self).invalidate(addr, stream)
 
         super(OAG_RootNode, self).__setattr__(stream, payload)
 
