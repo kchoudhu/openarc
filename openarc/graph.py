@@ -616,7 +616,6 @@ class OAG_RootNode(OAGraphRootNode):
         while True:
             (sender, payload) = self.rpcrtr._recv()
             self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload['args']))
-            self.__oarpcreq_log()
 
     @property
     def rpcreqs(self):
@@ -681,6 +680,9 @@ class OAG_RootNode(OAGraphRootNode):
             try:
                 stream = oag_db_mapping[stream]
                 if self.is_oagnode(stream):
+                    payload = getattr(self, stream, None)
+                    if payload:
+                        self._oagcache[stream] = payload
                     def fget(obj,
                              cls=self.dbstreams[stream][0],
                              clauseprms=[streaminfo],
