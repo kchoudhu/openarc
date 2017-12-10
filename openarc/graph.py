@@ -651,7 +651,8 @@ class OAG_RootNode(OAGraphRootNode):
                                 print "[%s] Detected changed stream [%s]->[%s]" % (stream,
                                                                                    current_value.rpcrtr.addr,
                                                                                    payload.rpcrtr.addr)
-                            reqcls(self).deregister(stream, current_value.rpcrtr)
+                            if current_value:
+                                reqcls(self).deregister(stream, current_value.rpcrtr)
                             reqcls(self).register(stream, payload.rpcrtr)
                             invalidate_upstream = True
             else:
@@ -680,8 +681,12 @@ class OAG_RootNode(OAGraphRootNode):
             try:
                 stream = oag_db_mapping[stream]
                 if self.is_oagnode(stream):
-                    def fget(obj, streaminfo=streaminfo, stream=stream):
-                        return self.dbstreams[stream][0](clauseprms=[streaminfo], logger=self.logger)
+                    def fget(obj,
+                             cls=self.dbstreams[stream][0],
+                             clauseprms=[streaminfo],
+                             indexprm='id',
+                             logger=self.logger):
+                        return cls(clauseprms, indexprm, logger=logger)
                     fget.__name__ = stream
                     self._set_oagprop(stream, oagprop(fget, extkey=stream))
                 else:
@@ -696,9 +701,10 @@ class OAG_RootNode(OAGraphRootNode):
                 if cls.__name__==classname:
                     stream = fk['table']
                     def fget(obj,
-                              cls=cls,
-                              clauseprms=[getattr(self, fk['points_to_id'], None)],
-                              indexprm='by_'+{cls.db_oag_mapping[k]:k for k in cls.db_oag_mapping}[fk['id']]):
+                             cls=cls,
+                             clauseprms=[getattr(self, fk['points_to_id'], None)],
+                             indexprm='by_'+{cls.db_oag_mapping[k]:k for k in cls.db_oag_mapping}[fk['id']],
+                             logger=self.logger):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
                     self._set_oagprop(stream, oagprop(fget))
