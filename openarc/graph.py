@@ -662,8 +662,8 @@ class OAG_RootNode(OAGraphRootNode):
                 if len(self._rpcreqs)>0:
                     if self.logger.RPC:
                         print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
-                    for addr, stream in self._rpcreqs.items():
-                        reqcls(self).invalidate(addr, stream)
+                    for addr, stream_to_invalidate in self._rpcreqs.items():
+                        reqcls(self).invalidate(addr, stream_to_invalidate)
 
         super(OAG_RootNode, self).__setattr__(stream, payload)
 
