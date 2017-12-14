@@ -598,30 +598,10 @@ class OAG_RootNode(OAGraphRootNode):
             print '[%s:rtr] invalidation signal received' % self._rpcrtr.id
 
         # Reset fget
-        oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
         for stream, streaminfo in self._cframe.items():
-            if stream[0] == '_':
-                continue
-            stream = oag_db_mapping[stream]
-            if stream == args['stream']:
+            self._set_oagprop_new(stream, streaminfo)
 
-                payload = getattr(self, stream, None)
-                if payload:
-                    self._oagcache[stream] = payload
-                def fget(obj,
-                         cls=self.dbstreams[stream][0],
-                         clauseprms=[streaminfo],
-                         indexprm='id',
-                         logger=self.logger,
-                         payload=payload):
-                    if payload:
-                        if payload.id == clauseprms[0]:
-                            return payload
-                    return cls(clauseprms, indexprm, logger=logger)
-                fget.__name__ = stream
-                self._set_oagprop(stream, oagprop(fget))
-
-        # Clear cache
+        # Selectively clear cache
         self._oagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag != args['stream']}
 
         # Inform upstream
@@ -718,28 +698,7 @@ class OAG_RootNode(OAGraphRootNode):
 
         # Set dbstream attributes
         for stream, streaminfo in self._cframe.items():
-            try:
-                stream = oag_db_mapping[stream]
-                if self.is_oagnode(stream):
-                    payload = getattr(self, stream, None)
-                    if payload:
-                        self._oagcache[stream] = payload
-                    def fget(obj,
-                             cls=self.dbstreams[stream][0],
-                             clauseprms=[streaminfo],
-                             indexprm='id',
-                             logger=self.logger,
-                             payload=payload):
-                        if payload:
-                            if payload.id == clauseprms[0]:
-                                return payload
-                        return cls(clauseprms, indexprm, logger=logger)
-                    fget.__name__ = stream
-                    self._set_oagprop(stream, oagprop(fget))
-                else:
-                    setattr(self, stream, self._cframe[stream])
-            except KeyError as e:
-                setattr(self, stream, self._cframe[stream])
+            self._set_oagprop_new(stream, streaminfo)
 
         # Set forward lookup attributes
         for fk in self._fkframe:
@@ -754,7 +713,8 @@ class OAG_RootNode(OAGraphRootNode):
                              logger=self.logger):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
-                    self._set_oagprop(stream, oagprop(fget))
+                    self._set_oagproplist(stream)
+                    setattr(self.__class__, stream, oagprop(fget))
 
     def _set_attrs_from_userprms(self, userprms):
         missing_streams = []
@@ -775,14 +735,8 @@ class OAG_RootNode(OAGraphRootNode):
         processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
         for stream, streaminfo in processed_streams.items():
             setattr(self, stream, streaminfo)
-            if self.is_oagnode(stream):
-                # Set object to cache
-                self._oagcache[stream] = streaminfo
-                # Set oagprop for subsequent retrieval
-                def fget(obj):
-                    return streaminfo
-                fget.__name__ = stream
-                self._set_oagprop(stream, oagprop(fget))
+            self._set_oagprop_new(stream, streaminfo, streamform='oag')
+
         return processed_streams.keys()
 
     def _set_cframe_from_attrs(self, attrs, fullhouse=False):
@@ -819,8 +773,8 @@ class OAG_RootNode(OAGraphRootNode):
 
         self._cframe = cframe_tmp
 
-    def _set_oagprop(self, stream, retrfn):
-        # Maintain list of oagprops that have been set
+    def _set_oagproplist(self, stream):
+        """Maintain list of oagprops that have been set"""
         oagproplist = getattr(self.__class__, "oagproplist", None)
         if oagproplist is None:
             oagproplist = []
@@ -828,5 +782,43 @@ class OAG_RootNode(OAGraphRootNode):
             oagproplist.append(stream)
             setattr(self.__class__, 'oagproplist', oagproplist)
 
-        # And actually set oagprop
-        setattr(self.__class__, stream, retrfn)
+    def _set_oagprop_new(self, stream, cfval, indexprm='id', streamform='cframe'):
+
+        # primary key: set directly
+        if stream[0] == '_':
+            setattr(self, stream, self._cframe[stream])
+            return
+
+        # Normalize stream name to OAG form
+        if streamform == 'cframe':
+            db_oag_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
+            stream = db_oag_mapping[stream]
+
+        if self.is_oagnode(stream):
+
+            # oagprop: clean class info
+            self._set_oagproplist(stream)
+
+            # oagprop: update cache if necessary
+            currattr = getattr(self, stream, None)
+            if currattr:
+                self._oagcache[stream] = currattr
+
+            # oagprop: actually set it
+            def oagpropfn(obj,
+                     cls=self.dbstreams[stream][0],
+                     clauseprms=[cfval],
+                     indexprm=indexprm,
+                     logger=self.logger,
+                     currattr=currattr):
+                # Do not instantiate objects unnecessarily
+                if currattr:
+                    if currattr.id == clauseprms[0]:
+                        return currattr
+                # All else has failed, instantiate a new object
+                return cls(clauseprms, indexprm, logger=logger)
+            oagpropfn.__name__ = stream
+
+            setattr(self.__class__, stream, oagprop(oagpropfn))
+        else:
+            setattr(self, stream, cfval)
