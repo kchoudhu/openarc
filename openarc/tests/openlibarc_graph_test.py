@@ -17,6 +17,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def tearDown(self):
         self.tearDown_db()
+        pass
 
     def __check_autonode_equivalence(self, oag1, oag2):
         for oagkey in oag1.dbstreams.keys():
@@ -26,20 +27,25 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 self.assertEqual(getattr(oag1, oagkey, ""), getattr(oag2, oagkey, ""))
 
     def __generate_autonode_system(self):
+        logger = OALog()
+        #logger.RPC = False
+        #logger.Graph = False
+        #logger.SQL = False
+
         a2 =\
-            OAG_AutoNode2().create({
+            OAG_AutoNode2(logger=logger).create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
 
         a3 =\
-            OAG_AutoNode3().create({
+            OAG_AutoNode3(logger=logger).create({
                 'field7' : 8,
                 'field8' : 'this is an autonode3'
             })
 
         a1 =\
-            OAG_AutoNode1a().create({
+            OAG_AutoNode1a(logger=logger).create({
                 'field2'   : 2,
                 'field3'   : 2,
                 'subnode1' : a2,
@@ -439,9 +445,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_autonode_create_nested(self):
         (a1, a2, a3) = self.__generate_autonode_system()
-        next(a1)
-        a1_chk = next(OAG_AutoNode1a((a1.id,)))
-        self.__check_autonode_equivalence(a1, a1_chk)
+        a1_chk = OAG_AutoNode1a((a1[0].id,))
+        self.__check_autonode_equivalence(next(a1), next(a1_chk))
 
     def test_autonode_create_with_properties(self):
         (a1, a2, a3) = self.__generate_autonode_system()
@@ -592,6 +597,95 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         node_multi.refresh()
         self.assertEqual(node_multi.size, 10)
 
+    def test_oag_interconnection_with_dbpersist(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3a =\
+            OAG_AutoNode3(logger=logger).create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        a3b =\
+            OAG_AutoNode3(logger=logger).create({
+                'field7' :  9,
+                'field8' : 'this is an autonode3'
+            })
+
+        a1a =\
+            OAG_AutoNode1a(logger=logger).create({
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            })
+
+        a4 =\
+            OAG_AutoNode4(logger=logger).create({
+                'subnode1' : a1a[0]
+            })
+
+        # Assert initial state
+        # Cache state
+        self.assertEqual(a4._oagcache['subnode1'], a1a)
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3a)
+
+
+        # Change subnode's oag: a4's oagcache should be blown
+        a4.subnode1.subnode2 = a3b
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3b)
+
+
+        # Change sub-subnode's dbstream
+        a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3b)
+
+        # Change subnode back
+        a4.subnode1.subnode2 = a3a
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3a)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
@@ -749,4 +843,16 @@ class OAG_AutoNode3(OAG_RootNode):
     def dbstreams(cls): return {
         'field7'   : [ 'int', 0 ],
         'field8'   : [ 'varchar(50)', 0 ],
+    }
+
+class OAG_AutoNode4(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'subnode1' : [ OAG_AutoNode1a ]
     }

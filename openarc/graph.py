@@ -1,10 +1,12 @@
 #!/usr/bin/env python2.7
 
+import base64
 import hashlib
 import gevent
 import inflection
 import inspect
 import msgpack
+import os
 import socket
 import zmq.green as zmq
 
@@ -21,14 +23,13 @@ from openarc.exception import *
 
 class oagprop(object):
     """Responsible for maitaining _oagcache on decorated properties"""
-    def __init__(self, fget=None, fset=None, fdel=None, doc=None, extkey=None):
+    def __init__(self, fget=None, fset=None, fdel=None, doc=None):
         self.fget = fget
         self.fset = fset
         self.fdel = fdel
         if doc is None and fget is not None:
             doc = fget.__doc__
         self.__doc__ = doc
-        self.extkey=extkey
 
     def __get__(self, obj, objtype=None):
         if obj is None:
@@ -42,7 +43,7 @@ class oagprop(object):
             return obj._oagcache[self.fget.func_name]
 
     def __set__(self, obj, value):
-        obj._oagcache[self.extkey] = value
+        pass
 
 class staticproperty(property):
     def __get__(self, cls, owner):
@@ -51,10 +52,13 @@ class staticproperty(property):
 class _OARpc(object):
 
     @property
-    def port(self): return self._ctxsoc.LAST_ENDPOINT.split(":")[-1]
+    def addr(self): return "tcp://%s:%s" % (self.runhost, self.port)
 
     @property
-    def addr(self): return "tcp://%s:%s" % (self.runhost, self.port)
+    def id(self): return self._hash
+
+    @property
+    def port(self): return self._ctxsoc.LAST_ENDPOINT.split(":")[-1]
 
     @property
     def runhost(self): return socket.gethostname()
@@ -64,6 +68,7 @@ class _OARpc(object):
         self._ctx     = zmq.Context()
         self._ctxsoc  = self._ctx.socket(zmqtype)
         self._oag     = oag
+        self._hash    = base64.b16encode(os.urandom(5))
 
 class OAGRPC_RTR_Requests(_OARpc):
     """Process all RPC calls from other OAGRPC_REQ_Requests"""
@@ -84,7 +89,7 @@ class OAGRPC_RTR_Requests(_OARpc):
         payload = msgpack.loads(self._ctxsoc.recv())
 
         if self._oag.logger.RPC:
-            print "[rtr:%s] Received message [%s]" % (self.addr, payload)
+            print "[%s:rtr] Received message [%s]" % (self.id, payload)
 
         return (sender, payload)
 
@@ -107,13 +112,13 @@ class OAGRPC_REQ_Requests(_OARpc):
 
         if self._oag.logger.RPC:
             print "========>"
-            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, oarpc.addr)
+            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, oarpc.id)
 
         self._ctxsoc.send(msgpack.dumps(payload))
         reply = self._ctxsoc.recv()
 
         if self._oag.logger.RPC:
-            print "[req] Received reply [%s]" % (msgpack.loads(reply))
+            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
             print "<========"
 
     def deregister(self, stream, oarpc):
@@ -129,13 +134,15 @@ class OAGRPC_REQ_Requests(_OARpc):
         }
 
         if self._oag.logger.RPC:
-            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, oarpc.addr)
+            print "========>"
+            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, oarpc.id)
 
         self._ctxsoc.send(msgpack.dumps(payload))
         reply = self._ctxsoc.recv()
 
         if self._oag.logger.RPC:
-            print "[req] Received reply [%s]" % (msgpack.loads(reply))
+            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
+            print "<========"
 
     def invalidate(self, addr, stream):
 
@@ -149,13 +156,15 @@ class OAGRPC_REQ_Requests(_OARpc):
         }
 
         if self._oag.logger.RPC:
-            print "[req] Sending RPC request with payload [%s] to [%s]" % (payload, addr)
+            print "========>"
+            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, addr)
 
         self._ctxsoc.send(msgpack.dumps(payload))
         reply = self._ctxsoc.recv()
 
         if self._oag.logger.RPC:
-            print "[req] Received reply [%s]" % (msgpack.loads(reply))
+            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
+            print "<========"
 
 class OAGraphRootNode(object):
 
@@ -342,7 +351,6 @@ class OAGraphRootNode(object):
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
-        self._initdone = True
 
     def __iter__(self):
         if self.is_unique:
@@ -582,12 +590,41 @@ class OAG_RootNode(OAGraphRootNode):
 
     def __oarpcreq_log(self):
         if self.logger.RPC:
-            print '[rtr:%s] addr->[%s] rpcreqs->[%s] oagcache->[%s]' % (self.rpcrtr.addr, self, self._rpcreqs, self._oagcache)
+            print '[%s:rtr] addr->[%s] rpcreqs->[%s] oagcache->[%s]' % (self.rpcrtr.id, self, self._rpcreqs, self._oagcache)
 
     def oarpc_invalidate(self, args):
-        self._oagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag != args['stream']}
+
         if self.logger.RPC:
-            print '[rtr:%s] invalidation signal received' % self.rpcrtr.addr
+            print '[%s:rtr] invalidation signal received' % self._rpcrtr.id
+
+        # Reset fget
+        oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
+        for stream, streaminfo in self._cframe.items():
+            if stream[0] == '_':
+                continue
+            stream = oag_db_mapping[stream]
+            if stream == args['stream']:
+
+                payload = getattr(self, stream, None)
+                if payload:
+                    self._oagcache[stream] = payload
+                def fget(obj,
+                         cls=self.dbstreams[stream][0],
+                         clauseprms=[streaminfo],
+                         indexprm='id',
+                         logger=self.logger,
+                         payload=payload):
+                    if payload:
+                        if payload.id == clauseprms[0]:
+                            return payload
+                    return cls(clauseprms, indexprm, logger=logger)
+                fget.__name__ = stream
+                self._set_oagprop(stream, oagprop(fget))
+
+        # Clear cache
+        self._oagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag != args['stream']}
+
+        # Inform upstream
         for addr, stream in self._rpcreqs.items():
             OAGRPC_REQ_Requests(self).invalidate(addr, stream)
         return "OK"
@@ -611,7 +648,7 @@ class OAG_RootNode(OAGraphRootNode):
         }
 
         if self.logger.RPC:
-            print "[rtr:%s] Listening for RPC requests" % (self.rpcrtr.addr)
+            print "[%s:rtr] Listening for RPC requests" % (self.rpcrtr.id)
 
         while True:
             (sender, payload) = self.rpcrtr._recv()
@@ -640,6 +677,9 @@ class OAG_RootNode(OAGraphRootNode):
             # Handle oagprops
             if self.is_oagnode(stream):
                 if payload:
+                    # Update oagcache
+                    self._oagcache[stream] = payload
+                    # Regenerate connections to surrounding nodes
                     if stream not in self.__class__.oagproplist:
                         if self.logger.RPC:
                             print "[%s] Connecting to new stream [%s]" % (stream, payload.rpcrtr.addr)
@@ -653,10 +693,11 @@ class OAG_RootNode(OAGraphRootNode):
                             if current_value:
                                 reqcls(self).deregister(stream, current_value.rpcrtr)
                             reqcls(self).register(stream, payload.rpcrtr)
+                            self._cframe[self.db_oag_mapping[stream]]=payload.id
                             invalidate_upstream = True
             else:
                 if current_value and current_value != payload:
-                    invalidate_upstream = True
+                    invalidate_upstream  = True
 
             if invalidate_upstream:
                 if len(self._rpcreqs)>0:
@@ -687,10 +728,14 @@ class OAG_RootNode(OAGraphRootNode):
                              cls=self.dbstreams[stream][0],
                              clauseprms=[streaminfo],
                              indexprm='id',
-                             logger=self.logger):
+                             logger=self.logger,
+                             payload=payload):
+                        if payload:
+                            if payload.id == clauseprms[0]:
+                                return payload
                         return cls(clauseprms, indexprm, logger=logger)
                     fget.__name__ = stream
-                    self._set_oagprop(stream, oagprop(fget, extkey=stream))
+                    self._set_oagprop(stream, oagprop(fget))
                 else:
                     setattr(self, stream, self._cframe[stream])
             except KeyError as e:
@@ -737,7 +782,7 @@ class OAG_RootNode(OAGraphRootNode):
                 def fget(obj):
                     return streaminfo
                 fget.__name__ = stream
-                self._set_oagprop(stream, oagprop(fget, extkey=stream))
+                self._set_oagprop(stream, oagprop(fget))
         return processed_streams.keys()
 
     def _set_cframe_from_attrs(self, attrs, fullhouse=False):
@@ -774,7 +819,7 @@ class OAG_RootNode(OAGraphRootNode):
 
         self._cframe = cframe_tmp
 
-    def _set_oagprop(self, stream, payload):
+    def _set_oagprop(self, stream, retrfn):
         # Maintain list of oagprops that have been set
         oagproplist = getattr(self.__class__, "oagproplist", None)
         if oagproplist is None:
@@ -784,4 +829,4 @@ class OAG_RootNode(OAGraphRootNode):
             setattr(self.__class__, 'oagproplist', oagproplist)
 
         # And actually set oagprop
-        setattr(self.__class__, stream, payload)
+        setattr(self.__class__, stream, retrfn)
