@@ -35,6 +35,7 @@ class OAEnv(object):
 class OALog(object):
     SQL   = False
     Graph = False
+    RPC   = False
 
     def log(loginfo=None, ignore_exceptions=False):
         # Information about run env: hostname, pid, time
