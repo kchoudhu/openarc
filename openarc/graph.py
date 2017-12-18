@@ -49,7 +49,7 @@ class staticproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
-class _OARpc(object):
+class OAGRPC(object):
 
     @property
     def addr(self): return "tcp://%s:%s" % (self.runhost, self.port)
@@ -63,6 +63,35 @@ class _OARpc(object):
     @property
     def runhost(self): return socket.gethostname()
 
+    @staticmethod
+    def rpcfn(fn):
+        def wrapfn(self, target, *args, **kwargs):
+            if isinstance(target, OAGRPC):
+                addr = target.addr
+            else:
+                addr = target
+
+            self._ctxsoc.connect(addr)
+
+            payload = fn(self, args, kwargs)
+
+            if self._oag.logger.RPC:
+                print "========>"
+                if addr==target:
+                    toaddr = addr
+                else:
+                    toaddr = target.id
+                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, toaddr)
+
+            self._ctxsoc.send(msgpack.dumps(payload))
+            reply = self._ctxsoc.recv()
+
+            if self._oag.logger.RPC:
+                print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
+                print "<======== "
+
+        return wrapfn
+
     def __init__(self, zmqtype, oag):
         self.zmqtype  = zmqtype
         self._ctx     = zmq.Context()
@@ -70,7 +99,7 @@ class _OARpc(object):
         self._oag     = oag
         self._hash    = base64.b16encode(os.urandom(5))
 
-class OAGRPC_RTR_Requests(_OARpc):
+class OAGRPC_RTR_Requests(OAGRPC):
     """Process all RPC calls from other OAGRPC_REQ_Requests"""
     def __init__(self, oag):
         super(OAGRPC_RTR_Requests, self).__init__(zmq.ROUTER, oag)
@@ -93,78 +122,39 @@ class OAGRPC_RTR_Requests(_OARpc):
 
         return (sender, payload)
 
-class OAGRPC_REQ_Requests(_OARpc):
+class OAGRPC_REQ_Requests(OAGRPC):
     """Make RPC calls to another node's OAGRPC_RTR_Requests"""
     def __init__(self, oag):
         super(OAGRPC_REQ_Requests, self).__init__(zmq.REQ, oag)
 
-    def register(self, stream, oarpc):
-
-        self._ctxsoc.connect(oarpc.addr)
-
-        payload = {
+    @OAGRPC.rpcfn
+    def register(self, *args, **kwargs):
+        return {
             'action' : 'register',
             'args'   : {
-                'stream' : stream,
+                'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
             }
         }
 
-        if self._oag.logger.RPC:
-            print "========>"
-            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, oarpc.id)
-
-        self._ctxsoc.send(msgpack.dumps(payload))
-        reply = self._ctxsoc.recv()
-
-        if self._oag.logger.RPC:
-            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
-            print "<========"
-
-    def deregister(self, stream, oarpc):
-
-        self._ctxsoc.connect(oarpc.addr)
-
-        payload = {
+    @OAGRPC.rpcfn
+    def deregister(self, *args, **kwargs):
+        return  {
             'action' : 'deregister',
             'args'   : {
-                'stream' : stream,
+                'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
             }
         }
 
-        if self._oag.logger.RPC:
-            print "========>"
-            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, oarpc.id)
-
-        self._ctxsoc.send(msgpack.dumps(payload))
-        reply = self._ctxsoc.recv()
-
-        if self._oag.logger.RPC:
-            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
-            print "<========"
-
-    def invalidate(self, addr, stream):
-
-        self._ctxsoc.connect(addr)
-
-        payload = {
+    @OAGRPC.rpcfn
+    def invalidate(self, *args, **kwargs):
+        return {
             'action' : 'invalidate',
             'args'   : {
-                'stream' : stream
+                'stream' : args[0][0]
             }
         }
-
-        if self._oag.logger.RPC:
-            print "========>"
-            print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, addr)
-
-        self._ctxsoc.send(msgpack.dumps(payload))
-        reply = self._ctxsoc.recv()
-
-        if self._oag.logger.RPC:
-            print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
-            print "<========"
 
 class OAGraphRootNode(object):
 
@@ -663,7 +653,7 @@ class OAG_RootNode(OAGraphRootNode):
                     if stream not in self.__class__.oagproplist:
                         if self.logger.RPC:
                             print "[%s] Connecting to new stream [%s]" % (stream, payload.rpcrtr.addr)
-                        reqcls(self).register(stream, payload.rpcrtr)
+                        reqcls(self).register(payload.rpcrtr, stream)
                     else:
                         if current_value != payload:
                             if self.logger.RPC:
@@ -671,8 +661,8 @@ class OAG_RootNode(OAGraphRootNode):
                                                                                    current_value.rpcrtr.addr,
                                                                                    payload.rpcrtr.addr)
                             if current_value:
-                                reqcls(self).deregister(stream, current_value.rpcrtr)
-                            reqcls(self).register(stream, payload.rpcrtr)
+                                reqcls(self).deregister(current_value.rpcrtr, stream)
+                            reqcls(self).register(payload.rpcrtr, stream)
                             self._cframe[self.db_oag_mapping[stream]]=payload.id
                             invalidate_upstream = True
             else:
