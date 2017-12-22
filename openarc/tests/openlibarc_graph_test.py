@@ -687,6 +687,97 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3a)
 
+    def test_oag_interconnection_in_memory(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.SQL = True
+        #logger.Graph = True
+
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger)
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a3b =\
+            OAG_AutoNode3(initprms={
+                'field7' :  9,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a1a =\
+            OAG_AutoNode1a(initprms={
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            }, logger=logger)
+
+        a4 =\
+            OAG_AutoNode4(initprms={
+                'subnode1' : a1a
+            }, logger=logger)
+
+        # Assert initial state
+        # Cache state
+        self.assertEqual(a4._oagcache['subnode1'], a1a)
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3a)
+
+
+        # Change subnode's oag: a4's oagcache should be blown
+        a4.subnode1.subnode2 = a3b
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3b)
+
+
+        # Change sub-subnode's dbstream
+        a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3b)
+
+        # Change subnode back
+        a4.subnode1.subnode2 = a3a
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
+        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a)
+        self.assertEqual(a4.subnode1.subnode1, a2)
+        self.assertEqual(a4.subnode1.subnode2, a3a)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

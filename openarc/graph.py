@@ -467,22 +467,6 @@ class OAG_RootNode(OAGraphRootNode):
 
             dao.commit()
 
-    def init_state_rpc(self, allowrpc):
-        self._glets = []
-        self._rpc   = allowrpc
-
-        # Intiailize reqs
-        if self._rpc:
-            self._rpcsem = BoundedSemaphore(1)
-            with self._rpcsem:
-                self._rpcrtr = OAGRPC_RTR_Requests(self)
-                self.rpcrtr.start()
-                self._glets.append(spawn(self.__cb_init_state_rpc))
-                gevent.sleep(0)
-
-                # Initialize REQ array
-                self._rpcreqs = {}
-
     @classmethod
     def is_oagnode(cls, stream):
         streaminfo = cls.dbstreams[stream][0]
@@ -611,7 +595,7 @@ class OAG_RootNode(OAGraphRootNode):
         }
 
         if self.logger.RPC:
-            print "[%s:rtr] Listening for RPC requests" % (self.rpcrtr.id)
+            print "[%s:rtr] Listening for RPC requests [%s]" % (self.rpcrtr.id, self.__class__.__name__)
 
         while True:
             (sender, payload) = self.rpcrtr._recv()
@@ -624,55 +608,109 @@ class OAG_RootNode(OAGraphRootNode):
     @property
     def sql_local(self): return {}
 
+    def init_state_rpc(self):
+        # Intiailize reqs
+        self._glets          = []
+        if not self._rpc_init_done:
+            self._rpcsem = BoundedSemaphore(1)
+            with self._rpcsem:
+                self._rpcrtr = OAGRPC_RTR_Requests(self)
+                self.rpcrtr.start()
+                self._glets.append(spawn(self.__cb_init_state_rpc))
+                gevent.sleep(0)
+
+                # Initialize REQ array
+                self._rpcreqs = {}
+
+                # Avoid double RPC initialization
+                self._rpc_init_done = True
+
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
         self._reset_oagprops()
-        self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
+
+        self._rpc_init_done  = False
+
+        self._cframe         = {}
+        self._fkframe        = {}
+        self._rawdata        = None
+        self._rawdata_window = None
+        self._oagcache       = {}
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexprm
+        self._extcur         = extcur
+        self._logger         = logger
+
+        attrs = self._set_attrs_from_userprms(initprms)
+        self._set_cframe_from_attrs(attrs)
+
         self.init_state_dbschema()
         self.init_state_oag()
-        self.init_state_rpc(rpc)
 
-    def __setattr__(self, stream, payload):
+        if rpc:
+            self.init_state_rpc()
+            for stream in self.dbstreams:
+                currval = getattr(self, stream, None)
+                self.signal_surrounding_nodes(stream, currval, initmode=True)
 
-        # There has got to be a better way to do this...
+    def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
+        reqcls = OAGRPC_REQ_Requests
+
+        if initmode and currval:
+            if self.is_oagnode(stream):
+                if self.logger.RPC:
+                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, currval.rpcrtr.id)
+                reqcls(self).register(currval.rpcrtr, stream)
+            return
+
         if stream[0] != '_':
-            current_value       = getattr(self, stream, None)
             invalidate_upstream = False
-
-            reqcls = OAGRPC_REQ_Requests
 
             # Handle oagprops
             if self.is_oagnode(stream):
-                if payload:
+                if newval:
                     # Update oagcache
-                    self._oagcache[stream] = payload
+                    self._oagcache[stream] = newval
                     # Regenerate connections to surrounding nodes
-                    if stream not in self.__class__.oagproplist:
+                    if currval is None:
                         if self.logger.RPC:
-                            print "[%s] Connecting to new stream [%s]" % (stream, payload.rpcrtr.addr)
-                        reqcls(self).register(payload.rpcrtr, stream)
+                            print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpcrtr.id)
+                        reqcls(self).register(newval.rpcrtr, stream)
                     else:
-                        if current_value != payload:
+                        if currval != newval:
                             if self.logger.RPC:
                                 print "[%s] Detected changed stream [%s]->[%s]" % (stream,
-                                                                                   current_value.rpcrtr.addr,
-                                                                                   payload.rpcrtr.addr)
-                            if current_value:
-                                reqcls(self).deregister(current_value.rpcrtr, stream)
-                            reqcls(self).register(payload.rpcrtr, stream)
-                            self._cframe[self.db_oag_mapping[stream]]=payload.id
+                                                                                   currval.rpcrtr.id,
+                                                                                   newval.rpcrtr.id)
+                            if currval:
+                                reqcls(self).deregister(currval.rpcrtr, stream)
+                            reqcls(self).register(newval.rpcrtr, stream)
+                            try:
+                                self._cframe[self.db_oag_mapping[stream]]=newval.id
+                            except KeyError:
+                                pass
                             invalidate_upstream = True
             else:
-                if current_value and current_value != payload:
+                if currval and currval != newval:
                     invalidate_upstream  = True
 
             if invalidate_upstream:
                 if len(self._rpcreqs)>0:
                     if self.logger.RPC:
-                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, current_value, payload)
+                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
                     for addr, stream_to_invalidate in self._rpcreqs.items():
                         reqcls(self).invalidate(addr, stream_to_invalidate)
 
-        super(OAG_RootNode, self).__setattr__(stream, payload)
+    def __setattr__(self, stream, newval):
+
+        # Stash existing value
+        currval = getattr(self, stream, None)
+
+        # Set new value
+        super(OAG_RootNode, self).__setattr__(stream, newval)
+
+        # Tell the world
+        if self._rpc_init_done:
+            self.signal_surrounding_nodes(stream, currval, newval)
 
     def _refresh_from_cursor(self, cur):
         self.SQLexec(cur, self.SQL['admin']['fkeys'])
@@ -750,7 +788,12 @@ class OAG_RootNode(OAGraphRootNode):
             # Ok, actualy set cframe
             if self.is_oagnode(oagkey):
                 cfkey = self.db_oag_mapping[oagkey]
-                cfval = cfval.id
+                # this only works if we're in dbpersist mode
+                # if there's a key error, we're working in-memory
+                try:
+                    cfval = cfval.id
+                except KeyError:
+                    pass
             cframe_tmp[cfkey] = cfval
 
         if fullhouse:
@@ -806,7 +849,11 @@ class OAG_RootNode(OAGraphRootNode):
                      currattr=currattr):
                 # Do not instantiate objects unnecessarily
                 if currattr:
-                    if currattr.id == clauseprms[0]:
+                    try:
+                        if currattr.id == clauseprms[0]:
+                            return currattr
+                    except KeyError:
+                        # We're dealing with in-memory OAGs, just return
                         return currattr
                 # All else has failed, instantiate a new object
                 return cls(clauseprms, indexprm, logger=logger)
