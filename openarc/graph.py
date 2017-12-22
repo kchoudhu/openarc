@@ -166,8 +166,9 @@ class OAGraphRootNode(object):
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
 
-        attrstr    = ', '.join([k for k in self._cframe])
-        vals       = [self._cframe[k] for k in self._cframe]
+        filtered_cframe = {k:self._cframe[k] for k in self._cframe if k[0] != '_'}
+        attrstr    = ', '.join([k for k in filtered_cframe])
+        vals       = [filtered_cframe[k] for k in filtered_cframe]
         formatstrs = ', '.join(['%s' for v in vals])
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
@@ -213,7 +214,6 @@ class OAGraphRootNode(object):
         return [k for k, v in self._cframe.items()]
 
     def init_state_cls(self, clauseprms, indexprm, initprms, extcur, logger):
-        self._clear_oagprops()
 
         self._cframe         = {}
         self._fkframe        = {}
@@ -353,13 +353,6 @@ class OAGraphRootNode(object):
             raise OAError("__next__: Unique OAGraph object is not iterable")
         else:
             return self.next()
-
-    def _clear_oagprops(self):
-        oagproplist = getattr(self.__class__, "oagproplist", [])
-        for op in oagproplist:
-            if getattr(self.__class__, op, None) is not None:
-                delattr(self.__class__, op)
-        setattr(self.__class__, 'oagproplist', [])
 
     def _refresh_from_cursor(self, cur):
         if type(self.SQL).__name__ == "str":
@@ -632,7 +625,10 @@ class OAG_RootNode(OAGraphRootNode):
     def sql_local(self): return {}
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
-        super(OAG_RootNode, self).__init__(clauseprms, indexprm, initprms, extcur, logger)
+        self._reset_oagprops()
+        self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
+        self.init_state_dbschema()
+        self.init_state_oag()
         self.init_state_rpc(rpc)
 
     def __setattr__(self, stream, payload):
@@ -772,6 +768,16 @@ class OAG_RootNode(OAGraphRootNode):
             oagproplist.append(stream)
             setattr(self.__class__, 'oagproplist', oagproplist)
 
+    def _reset_oagprops(self):
+        """Maintain list of oagprops that have been set"""
+        curr_proplist = getattr(self.__class__, "oagproplist", [])
+        for prop in curr_proplist:
+            if getattr(self.__class__, prop, None) is not None:
+                delattr(self.__class__, prop)
+        new_proplist = [stream for stream in self.dbstreams if self.is_oagnode(stream)]
+        for prop in new_proplist:
+            self._set_oagproplist(prop)
+
     def _set_oagprop_new(self, stream, cfval, indexprm='id', streamform='cframe'):
 
         # primary key: set directly
@@ -785,9 +791,6 @@ class OAG_RootNode(OAGraphRootNode):
             stream = db_oag_mapping[stream]
 
         if self.is_oagnode(stream):
-
-            # oagprop: clean class info
-            self._set_oagproplist(stream)
 
             # oagprop: update cache if necessary
             currattr = getattr(self, stream, None)
