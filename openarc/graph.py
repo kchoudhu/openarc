@@ -86,9 +86,12 @@ class OAGRPC(object):
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
+            rpcret = msgpack.loads(reply)
             if self._oag.logger.RPC:
-                print "[%s:req] Received reply [%s]" % (self.id, msgpack.loads(reply))
+                print "[%s:req] Received reply [%s]" % (self.id, rpcret)
                 print "<======== "
+
+            return rpcret
 
         return wrapfn
 
@@ -151,6 +154,15 @@ class OAGRPC_REQ_Requests(OAGRPC):
     def invalidate(self, *args, **kwargs):
         return {
             'action' : 'invalidate',
+            'args'   : {
+                'stream' : args[0][0]
+            }
+        }
+
+    @OAGRPC.rpcfn
+    def getstream(self, *args, **kwargs):
+        return {
+            'action' : 'getstream',
             'args'   : {
                 'stream' : args[0][0]
             }
@@ -586,12 +598,32 @@ class OAG_RootNode(OAGraphRootNode):
         self.__oarpcreq_log()
         return "OK"
 
+    def oarpc_getstream(self, args):
+        attr = getattr(self, args['stream'], None)
+        ret = {
+            'status'  : 'OK',
+            'payload' : {},
+        }
+        if isinstance(attr, OAG_RootNode):
+            ret['payload']['type']  = 'redirect'
+            ret['payload']['value'] = attr.rpcrtr.addr
+            ret['payload']['class'] = attr.__class__.__name__
+        else:
+            ret['payload']['type']  = 'value'
+            ret['payload']['value'] = attr
+
+        return ret
+
+    @property
+    def proxyurl(self): return self.rpcrtr.addr
+
     def __cb_init_state_rpc(self):
 
         rpc_dispatch = {
             'deregister'   : self.oarpc_deregister,
             'invalidate'   : self.oarpc_invalidate,
             'register'     : self.oarpc_register,
+            'getstream'    : self.oarpc_getstream,
         }
 
         if self.logger.RPC:
@@ -625,7 +657,17 @@ class OAG_RootNode(OAGraphRootNode):
                 # Avoid double RPC initialization
                 self._rpc_init_done = True
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
+    def __init__(self,
+                 clauseprms=None,
+                 indexprm='id',
+                 initprms={},
+                 initurl=None,
+                 extcur=None,
+                 logger=OALog(),
+                 rpc=True):
+
+        self._proxy_mode     = False
+
         self._reset_oagprops()
 
         self._rpc_init_done  = False
@@ -640,17 +682,22 @@ class OAG_RootNode(OAGraphRootNode):
         self._extcur         = extcur
         self._logger         = logger
 
-        attrs = self._set_attrs_from_userprms(initprms)
-        self._set_cframe_from_attrs(attrs)
 
-        self.init_state_dbschema()
-        self.init_state_oag()
+        if initurl:
+            self._proxy_mode = True
+            self._proxy_url  = initurl
+        else:
+            attrs = self._set_attrs_from_userprms(initprms)
+            self._set_cframe_from_attrs(attrs)
 
-        if rpc:
-            self.init_state_rpc()
-            for stream in self.dbstreams:
-                currval = getattr(self, stream, None)
-                self.signal_surrounding_nodes(stream, currval, initmode=True)
+            self.init_state_dbschema()
+            self.init_state_oag()
+
+            if rpc:
+                self.init_state_rpc()
+                for stream in self.dbstreams:
+                    currval = getattr(self, stream, None)
+                    self.signal_surrounding_nodes(stream, currval, initmode=True)
 
     def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
         reqcls = OAGRPC_REQ_Requests
@@ -700,17 +747,41 @@ class OAG_RootNode(OAGraphRootNode):
                     for addr, stream_to_invalidate in self._rpcreqs.items():
                         reqcls(self).invalidate(addr, stream_to_invalidate)
 
-    def __setattr__(self, stream, newval):
+    def __getattribute__(self, attr):
+        reqcls = OAGRPC_REQ_Requests
+        def objattr(stream):
+            return object.__getattribute__(self, stream)
+
+        try:
+            if objattr('_proxy_mode') and attr in objattr('dbstreams'):
+                if objattr('_logger').RPC:
+                    print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
+                payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
+                if payload['type'] == 'redirect':
+                    for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                        if cls.__name__==payload['class']:
+                            return cls(initurl=payload['value'])
+                else:
+                    return payload['value']
+        except AttributeError:
+            pass
+        return object.__getattribute__(self, attr)
+
+    def __setattr__(self, attr, newval):
+
+        # Setting values on a proxy OAG is nonsensical
+        if attr != '_proxy_url' and getattr(self, '_proxy_mode', None) == True:
+            raise OAError("Cannot set value on a proxy OAG")
 
         # Stash existing value
-        currval = getattr(self, stream, None)
+        currval = getattr(self, attr, None)
 
         # Set new value
-        super(OAG_RootNode, self).__setattr__(stream, newval)
+        super(OAG_RootNode, self).__setattr__(attr, newval)
 
         # Tell the world
-        if self._rpc_init_done:
-            self.signal_surrounding_nodes(stream, currval, newval)
+        if getattr(self, '_rpc_init_done', None):
+            self.signal_surrounding_nodes(attr, currval, newval)
 
     def _refresh_from_cursor(self, cur):
         self.SQLexec(cur, self.SQL['admin']['fkeys'])
