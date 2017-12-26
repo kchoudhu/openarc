@@ -778,6 +778,22 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3a)
 
+    def test_oag_remote_proxy_simple(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+
+
+        (a1, a2, a3) = self.__generate_autonode_system()
+
+        next(a1)
+
+        a1_prox = OAG_AutoNode1a(initurl=a1.proxyurl, logger=logger)
+        with self.assertRaises(OAError):
+            a1_prox.field2 = 32
+
+        self.__check_autonode_equivalence(a1, a1_prox)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

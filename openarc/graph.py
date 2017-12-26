@@ -124,6 +124,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
             print "[%s:rtr] Received message [%s]" % (self.id, payload)
 
         return (sender, payload)
+rtrcls = OAGRPC_RTR_Requests
 
 class OAGRPC_REQ_Requests(OAGRPC):
     """Make RPC calls to another node's OAGRPC_RTR_Requests"""
@@ -134,6 +135,16 @@ class OAGRPC_REQ_Requests(OAGRPC):
     def register(self, *args, **kwargs):
         return {
             'action' : 'register',
+            'args'   : {
+                'stream' : args[0][0],
+                'addr'   : self._oag.rpcrtr.addr
+            }
+        }
+
+    @OAGRPC.rpcfn
+    def register_proxy(self, *args, **kwargs):
+        return {
+            'action' : 'register_proxy',
             'args'   : {
                 'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
@@ -167,6 +178,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
                 'stream' : args[0][0]
             }
         }
+reqcls = OAGRPC_REQ_Requests
 
 class OAGraphRootNode(object):
 
@@ -598,6 +610,26 @@ class OAG_RootNode(OAGraphRootNode):
         self.__oarpcreq_log()
         return "OK"
 
+    def oarpc_register_proxy(self, args):
+        self._rpcreqs[args['addr']] = args['stream']
+        ret = {
+            'status'  : 'OK',
+            'payload' : {},
+        }
+
+        rawprops = self.dbstreams.keys()\
+                   + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), property)]\
+                   + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), oagprop)]\
+                   + self.__class__.oagproplist
+
+        stoplist = [
+            'logger',
+            'rpcrtr',
+        ]
+        ret['payload'] = [p for p in list(set(rawprops)) if p not in stoplist]
+
+        return ret
+
     def oarpc_getstream(self, args):
         attr = getattr(self, args['stream'], None)
         ret = {
@@ -620,10 +652,12 @@ class OAG_RootNode(OAGraphRootNode):
     def __cb_init_state_rpc(self):
 
         rpc_dispatch = {
-            'deregister'   : self.oarpc_deregister,
-            'invalidate'   : self.oarpc_invalidate,
-            'register'     : self.oarpc_register,
-            'getstream'    : self.oarpc_getstream,
+            'deregister'     : self.oarpc_deregister,
+            'invalidate'     : self.oarpc_invalidate,
+            'register'       : self.oarpc_register,
+            'register_proxy' : self.oarpc_register_proxy,
+            'getstream'      : self.oarpc_getstream,
+
         }
 
         if self.logger.RPC:
@@ -684,6 +718,8 @@ class OAG_RootNode(OAGraphRootNode):
 
 
         if initurl:
+            self.init_state_rpc()
+            self._proxy_oags = reqcls(self).register_proxy(initurl, 'proxy')['payload']
             self._proxy_mode = True
             self._proxy_url  = initurl
         else:
@@ -700,7 +736,6 @@ class OAG_RootNode(OAGraphRootNode):
                     self.signal_surrounding_nodes(stream, currval, initmode=True)
 
     def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
-        reqcls = OAGRPC_REQ_Requests
 
         if initmode and currval:
             if self.is_oagnode(stream):
@@ -748,29 +783,33 @@ class OAG_RootNode(OAGraphRootNode):
                         reqcls(self).invalidate(addr, stream_to_invalidate)
 
     def __getattribute__(self, attr):
-        reqcls = OAGRPC_REQ_Requests
         def objattr(stream):
+            """returns local-accessible attributes"""
             return object.__getattribute__(self, stream)
 
         try:
-            if objattr('_proxy_mode') and attr in objattr('dbstreams'):
-                if objattr('_logger').RPC:
-                    print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
-                payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
-                if payload['type'] == 'redirect':
-                    for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
-                        if cls.__name__==payload['class']:
-                            return cls(initurl=payload['value'])
+            if objattr('_proxy_mode'):
+                if attr in objattr('_proxy_oags'):
+                    if objattr('logger').RPC:
+                        print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
+                    payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
+                    if payload['type'] == 'redirect':
+                        for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                            if cls.__name__==payload['class']:
+                                return cls(initurl=payload['value'])
+                    else:
+                        return payload['value']
                 else:
-                    return payload['value']
+                    raise AttributeError("[%s] is not an allowed proxy attribute" % attr)
         except AttributeError:
             pass
+
         return object.__getattribute__(self, attr)
 
     def __setattr__(self, attr, newval):
 
         # Setting values on a proxy OAG is nonsensical
-        if attr != '_proxy_url' and getattr(self, '_proxy_mode', None) == True:
+        if getattr(self, '_proxy_mode', None) == True and attr in getattr(self, '_proxy_oags', []):
             raise OAError("Cannot set value on a proxy OAG")
 
         # Stash existing value
