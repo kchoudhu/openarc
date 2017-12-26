@@ -435,7 +435,11 @@ class OAG_RootNode(OAGraphRootNode):
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     @property
-    def id(self): return self._cframe[self.dbpkname]
+    def id(self):
+        try:
+            return self._cframe[self.dbpkname]
+        except:
+            return None
 
     def init_state_dbschema(self):
         with OADao(self.dbcontext, cdict=False) as dao:

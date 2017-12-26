@@ -848,9 +848,9 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a3_proxy.auto_node1a.size, 10)
         self.assertEqual(a3_proxy.auto_node1b.size, 10)
 
-    def test_oag_remote_proxy_invalidation(self):
+    def test_oag_remote_proxy_invalidation_with_dbpersist(self):
         logger = OALog()
-        logger.RPC = True
+        #logger.RPC = True
         #logger.Graph = True
 
         a2 =\
@@ -885,6 +885,107 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_AutoNode4(logger=logger).create({
                 'subnode1' : a1a_proxy
             })
+
+        # Assert initial state
+        # Cache state
+        self.assertEqual(a4._oagcache['subnode1'], a1a_proxy)
+        self.assertEqual(a1a_proxy._oagcache, {})
+        self.assertEqual(a1a_proxy.proxyurl, a1a.oagurl)
+        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        self.assertEqual(a1a._oagcache['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1._oagcache, {})
+        self.assertEqual(a1a.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a_proxy)
+        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
+        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+
+
+        # Change subnode's oag: a4's oagcache should be blown
+        with self.assertRaises(OAError):
+            a4.subnode1.subnode2 = a3b
+        a1a.subnode2 = a3b
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a1a_proxy._oagcache, {})
+        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        self.assertEqual(a1a._oagcache['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1._oagcache, {})
+        self.assertEqual(a1a.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a_proxy)
+        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
+        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+
+
+        # Change sub-subnode's dbstream
+        with self.assertRaises(OAError):
+            a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
+        a1a.subnode2.field8 = 'this is pretty hot stuff'
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a1a._oagcache['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1._oagcache, {})
+        self.assertEqual(a1a.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a_proxy)
+        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
+        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+
+        # Change subnode back
+        with self.assertRaises(OAError):
+            a4.subnode1.subnode2 = a3a
+        a1a.subnode2 = a3a
+        # Cache state
+        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        self.assertEqual(a1a._oagcache['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1._oagcache, {})
+        self.assertEqual(a1a.subnode2._oagcache, {})
+        # Actual return
+        self.assertEqual(a4.subnode1, a1a_proxy)
+        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
+        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+
+    def test_oag_remote_proxy_invalidation_in_memory(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger)
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a3b =\
+            OAG_AutoNode3(initprms={
+                'field7' :  9,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a1a =\
+            OAG_AutoNode1a(initprms={
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            }, logger=logger)
+
+        a1a_proxy = OAG_AutoNode1a(initurl=a1a.oagurl, logger=logger)
+
+        a4 =\
+            OAG_AutoNode4(initprms={
+                'subnode1' : a1a_proxy
+            }, logger=logger)
 
         # Assert initial state
         # Cache state
