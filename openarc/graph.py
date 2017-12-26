@@ -620,7 +620,7 @@ class OAG_RootNode(OAGraphRootNode):
         rawprops = self.dbstreams.keys()\
                    + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), property)]\
                    + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), oagprop)]\
-                   + self.__class__.oagproplist
+                   + getattr(self.__class__, 'oagproplist', [])
 
         stoplist = [
             'logger',
@@ -702,7 +702,7 @@ class OAG_RootNode(OAGraphRootNode):
 
         self._proxy_mode     = False
 
-        self._reset_oagprops()
+
 
         self._rpc_init_done  = False
 
@@ -723,6 +723,7 @@ class OAG_RootNode(OAGraphRootNode):
             self._proxy_mode = True
             self._proxy_url  = initurl
         else:
+            self._reset_oagprops()
             attrs = self._set_attrs_from_userprms(initprms)
             self._set_cframe_from_attrs(attrs)
 
@@ -793,12 +794,15 @@ class OAG_RootNode(OAGraphRootNode):
                     if objattr('logger').RPC:
                         print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
                     payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
-                    if payload['type'] == 'redirect':
-                        for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
-                            if cls.__name__==payload['class']:
-                                return cls(initurl=payload['value'])
+                    if payload['value']:
+                        if payload['type'] == 'redirect':
+                            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                                if cls.__name__==payload['class']:
+                                    return cls(initurl=payload['value'], logger=objattr('logger'))
+                        else:
+                            return payload['value']
                     else:
-                        return payload['value']
+                        raise AttributeError("[%s] does not exist" % attr)
                 else:
                     raise AttributeError("[%s] is not an allowed proxy attribute" % attr)
         except AttributeError:

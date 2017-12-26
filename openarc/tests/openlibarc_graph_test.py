@@ -783,7 +783,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         #logger.RPC = True
         #logger.Graph = True
 
-
         (a1, a2, a3) = self.__generate_autonode_system()
 
         next(a1)
@@ -793,6 +792,61 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a1_prox.field2 = 32
 
         self.__check_autonode_equivalence(a1, a1_prox)
+
+    def test_oag_remote_proxy_fwdoag_functionality(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+
+        a2 =\
+            OAG_AutoNode2().create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for x in xrange(0,10):
+            a1a =\
+                OAG_AutoNode1a().create({
+                    'field2'   : x,
+                    'field3'   : 10-x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+            a1b =\
+                OAG_AutoNode1b().create({
+                    'field2'   : 10-x,
+                    'field3'   : x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        a2_proxy = OAG_AutoNode2(initurl=a2.proxyurl, logger=logger)
+        a3_proxy = OAG_AutoNode3(initurl=a3.proxyurl, logger=logger)
+
+        with self.assertRaises(AttributeError):
+            a2_proxy.auto_node1a
+        with self.assertRaises(AttributeError):
+            a2_proxy.auto_node1b
+        with self.assertRaises(AttributeError):
+            a3_proxy.auto_node1a
+        with self.assertRaises(AttributeError):
+            a3_proxy.auto_node1b
+
+        # refresh a2 and a3 to generate fwdoags
+        a2.refresh(gotodb=True)
+        a3.refresh(gotodb=True)
+
+        self.assertEqual(a2_proxy.auto_node1a.size, 10)
+        self.assertEqual(a2_proxy.auto_node1b.size, 10)
+        self.assertEqual(a3_proxy.auto_node1a.size, 10)
+        self.assertEqual(a3_proxy.auto_node1b.size, 10)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
