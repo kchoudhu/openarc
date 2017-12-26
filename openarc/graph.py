@@ -647,7 +647,10 @@ class OAG_RootNode(OAGraphRootNode):
         return ret
 
     @property
-    def proxyurl(self): return self.rpcrtr.addr
+    def oagurl(self): return self.rpcrtr.addr
+
+    @property
+    def proxyurl(self): return self._proxy_url
 
     def __cb_init_state_rpc(self):
 
@@ -701,8 +704,6 @@ class OAG_RootNode(OAGraphRootNode):
                  rpc=True):
 
         self._proxy_mode     = False
-
-
 
         self._rpc_init_done  = False
 
