@@ -1,5 +1,6 @@
 #!/usr/bin/env python2.7
 
+import base64
 import os
 import json
 import traceback
@@ -27,6 +28,7 @@ class OAEnv(object):
         return self.envcfg['extcreds']
 
     def __init__(self, requested_env):
+        self.envid   = base64.b16encode(os.urandom(16))
         self.envname = requested_env
         cfg_file = "%s/envcfg.json" % ( os.environ.get("OPENARC_CFG_DIR") )
         with open( cfg_file ) as f:

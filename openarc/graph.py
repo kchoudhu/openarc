@@ -74,6 +74,11 @@ class OAGRPC(object):
             self._ctxsoc.connect(addr)
 
             payload = fn(self, args, kwargs)
+            payload['action']    = fn.__name__
+
+            # This should eventually derive from the Auth mgmt object
+            # used to initialize the OAGRPC
+            payload['authtoken'] = getenv().envid
 
             if self._oag.logger.RPC:
                 print "========>"
@@ -91,7 +96,33 @@ class OAGRPC(object):
                 print "[%s:req] Received reply [%s]" % (self.id, rpcret)
                 print "<======== "
 
+            if rpcret['status'] != 'OK':
+                raise OAError("[%s:req] Failed with status [%s] and message [%s]" % (self.id,
+                                                                                     rpcret['status'],
+                                                                                     rpcret['message']))
+
             return rpcret
+
+        return wrapfn
+
+    @staticmethod
+    def rpcprocfn(fn):
+        def wrapfn(self, *args, **kwargs):
+            ret = {
+                'status'  : 'OK',
+                'message' : None,
+                'payload' : {},
+            }
+
+            try:
+                if args[0]['authtoken'] != getenv().envid:
+                    raise OAError("Client unauthorized")
+                fn(self, ret, args[0]['args'])
+            except OAError as e:
+                ret['status'] = 'FAIL'
+                ret['message'] = e.message
+
+            return ret
 
         return wrapfn
 
@@ -124,6 +155,56 @@ class OAGRPC_RTR_Requests(OAGRPC):
             print "[%s:rtr] Received message [%s]" % (self.id, payload)
 
         return (sender, payload)
+
+    @OAGRPC.rpcprocfn
+    def proc_invalidate(self, ret, args):
+
+        if self._oag.logger.RPC:
+            print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
+
+        # Reset fget
+        for stream, streaminfo in self._oag._cframe.items():
+            self._oag._set_oagprop_new(stream, streaminfo)
+
+        # Selectively clear cache
+        self._oag._oagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag != args['stream']}
+
+        # Inform upstream
+        for addr, stream in self._oag._rpcreqs.items():
+            OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
+
+    @OAGRPC.rpcprocfn
+    def proc_deregister(self, ret, args):
+        self._oag._rpcreqs = {rpcreq:self._oag._rpcreqs[rpcreq] for rpcreq in self._oag._rpcreqs if rpcreq != args['addr']}
+
+    @OAGRPC.rpcprocfn
+    def proc_register(self, ret, args):
+        self._oag._rpcreqs[args['addr']] = args['stream']
+
+    @OAGRPC.rpcprocfn
+    def proc_register_proxy(self, ret, args):
+        self._oag._rpcreqs[args['addr']] = args['stream']
+
+        rawprops = self._oag.dbstreams.keys()\
+                   + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
+                   + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
+                   + getattr(self._oag.__class__, 'oagproplist', [])
+
+        stoplist = [ 'logger', 'rpcrtr' ]
+
+        ret['payload'] = [p for p in list(set(rawprops)) if p not in stoplist]
+
+    @OAGRPC.rpcprocfn
+    def proc_getstream(self, ret, args):
+        attr = getattr(self._oag, args['stream'], None)
+        if isinstance(attr, OAG_RootNode):
+            ret['payload']['type']  = 'redirect'
+            ret['payload']['value'] = attr.rpcrtr.addr
+            ret['payload']['class'] = attr.__class__.__name__
+        else:
+            ret['payload']['type']  = 'value'
+            ret['payload']['value'] = attr
+
 rtrcls = OAGRPC_RTR_Requests
 
 class OAGRPC_REQ_Requests(OAGRPC):
@@ -134,8 +215,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
     @OAGRPC.rpcfn
     def register(self, *args, **kwargs):
         return {
-            'action' : 'register',
-            'args'   : {
+            'args'      : {
                 'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
             }
@@ -144,8 +224,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
     @OAGRPC.rpcfn
     def register_proxy(self, *args, **kwargs):
         return {
-            'action' : 'register_proxy',
-            'args'   : {
+            'args'      : {
                 'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
             }
@@ -154,8 +233,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
     @OAGRPC.rpcfn
     def deregister(self, *args, **kwargs):
         return  {
-            'action' : 'deregister',
-            'args'   : {
+            'args'      : {
                 'stream' : args[0][0],
                 'addr'   : self._oag.rpcrtr.addr
             }
@@ -164,8 +242,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
     @OAGRPC.rpcfn
     def invalidate(self, *args, **kwargs):
         return {
-            'action' : 'invalidate',
-            'args'   : {
+            'args'      : {
                 'stream' : args[0][0]
             }
         }
@@ -173,8 +250,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
     @OAGRPC.rpcfn
     def getstream(self, *args, **kwargs):
         return {
-            'action' : 'getstream',
-            'args'   : {
+            'args'      : {
                 'stream' : args[0][0]
             }
         }
@@ -583,73 +659,6 @@ class OAG_RootNode(OAGraphRootNode):
         key{2} in given SQL string"""
         return td(SQL.format(self.dbcontext, self.dbtable, self.dbpkname))
 
-    def __oarpcreq_log(self):
-        if self.logger.RPC:
-            print '[%s:rtr] addr->[%s] rpcreqs->[%s] oagcache->[%s]' % (self.rpcrtr.id, self, self._rpcreqs, self._oagcache)
-
-    def oarpc_invalidate(self, args):
-
-        if self.logger.RPC:
-            print '[%s:rtr] invalidation signal received' % self._rpcrtr.id
-
-        # Reset fget
-        for stream, streaminfo in self._cframe.items():
-            self._set_oagprop_new(stream, streaminfo)
-
-        # Selectively clear cache
-        self._oagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag != args['stream']}
-
-        # Inform upstream
-        for addr, stream in self._rpcreqs.items():
-            OAGRPC_REQ_Requests(self).invalidate(addr, stream)
-        return "OK"
-
-    def oarpc_deregister(self, args):
-        self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != args['addr']}
-        self.__oarpcreq_log()
-        return "OK"
-
-    def oarpc_register(self, args):
-        self._rpcreqs[args['addr']] = args['stream']
-        self.__oarpcreq_log()
-        return "OK"
-
-    def oarpc_register_proxy(self, args):
-        self._rpcreqs[args['addr']] = args['stream']
-        ret = {
-            'status'  : 'OK',
-            'payload' : {},
-        }
-
-        rawprops = self.dbstreams.keys()\
-                   + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), property)]\
-                   + [p for p in dir(self.__class__) if isinstance(getattr(self.__class__, p), oagprop)]\
-                   + getattr(self.__class__, 'oagproplist', [])
-
-        stoplist = [
-            'logger',
-            'rpcrtr',
-        ]
-        ret['payload'] = [p for p in list(set(rawprops)) if p not in stoplist]
-
-        return ret
-
-    def oarpc_getstream(self, args):
-        attr = getattr(self, args['stream'], None)
-        ret = {
-            'status'  : 'OK',
-            'payload' : {},
-        }
-        if isinstance(attr, OAG_RootNode):
-            ret['payload']['type']  = 'redirect'
-            ret['payload']['value'] = attr.rpcrtr.addr
-            ret['payload']['class'] = attr.__class__.__name__
-        else:
-            ret['payload']['type']  = 'value'
-            ret['payload']['value'] = attr
-
-        return ret
-
     @property
     def oagurl(self): return self.rpcrtr.addr
 
@@ -659,12 +668,11 @@ class OAG_RootNode(OAGraphRootNode):
     def __cb_init_state_rpc(self):
 
         rpc_dispatch = {
-            'deregister'     : self.oarpc_deregister,
-            'invalidate'     : self.oarpc_invalidate,
-            'register'       : self.oarpc_register,
-            'register_proxy' : self.oarpc_register_proxy,
-            'getstream'      : self.oarpc_getstream,
-
+            'deregister'     : self.rpcrtr.proc_deregister,
+            'invalidate'     : self.rpcrtr.proc_invalidate,
+            'register'       : self.rpcrtr.proc_register,
+            'register_proxy' : self.rpcrtr.proc_register_proxy,
+            'getstream'      : self.rpcrtr.proc_getstream,
         }
 
         if self.logger.RPC:
@@ -672,7 +680,7 @@ class OAG_RootNode(OAGraphRootNode):
 
         while True:
             (sender, payload) = self.rpcrtr._recv()
-            self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload['args']))
+            self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
 
     @property
     def rpcreqs(self):
