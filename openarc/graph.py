@@ -60,9 +60,6 @@ class OAGRPC(object):
     @property
     def port(self): return self._ctxsoc.LAST_ENDPOINT.split(":")[-1]
 
-    @property
-    def runhost(self): return socket.gethostname()
-
     @staticmethod
     def rpcfn(fn):
         def wrapfn(self, target, *args, **kwargs):
@@ -126,6 +123,9 @@ class OAGRPC(object):
 
         return wrapfn
 
+    @property
+    def runhost(self): return socket.gethostname()
+
     def __init__(self, zmqtype, oag):
         self.zmqtype  = zmqtype
         self._ctx     = zmq.Context()
@@ -157,6 +157,21 @@ class OAGRPC_RTR_Requests(OAGRPC):
         return (sender, payload)
 
     @OAGRPC.rpcprocfn
+    def proc_deregister(self, ret, args):
+        self._oag._rpcreqs = {rpcreq:self._oag._rpcreqs[rpcreq] for rpcreq in self._oag._rpcreqs if rpcreq != args['addr']}
+
+    @OAGRPC.rpcprocfn
+    def proc_getstream(self, ret, args):
+        attr = getattr(self._oag, args['stream'], None)
+        if isinstance(attr, OAG_RootNode):
+            ret['payload']['type']  = 'redirect'
+            ret['payload']['value'] = attr.rpcrtr.addr
+            ret['payload']['class'] = attr.__class__.__name__
+        else:
+            ret['payload']['type']  = 'value'
+            ret['payload']['value'] = attr
+
+    @OAGRPC.rpcprocfn
     def proc_invalidate(self, ret, args):
 
         if self._oag.logger.RPC:
@@ -164,7 +179,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         # Reset fget
         for stream, streaminfo in self._oag._cframe.items():
-            self._oag._set_oagprop_new(stream, streaminfo)
+            self._oag._set_oagprop(stream, streaminfo)
 
         # Selectively clear cache
         self._oag._oagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag != args['stream']}
@@ -172,10 +187,6 @@ class OAGRPC_RTR_Requests(OAGRPC):
         # Inform upstream
         for addr, stream in self._oag._rpcreqs.items():
             OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
-
-    @OAGRPC.rpcprocfn
-    def proc_deregister(self, ret, args):
-        self._oag._rpcreqs = {rpcreq:self._oag._rpcreqs[rpcreq] for rpcreq in self._oag._rpcreqs if rpcreq != args['addr']}
 
     @OAGRPC.rpcprocfn
     def proc_register(self, ret, args):
@@ -194,23 +205,37 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         ret['payload'] = [p for p in list(set(rawprops)) if p not in stoplist]
 
-    @OAGRPC.rpcprocfn
-    def proc_getstream(self, ret, args):
-        attr = getattr(self._oag, args['stream'], None)
-        if isinstance(attr, OAG_RootNode):
-            ret['payload']['type']  = 'redirect'
-            ret['payload']['value'] = attr.rpcrtr.addr
-            ret['payload']['class'] = attr.__class__.__name__
-        else:
-            ret['payload']['type']  = 'value'
-            ret['payload']['value'] = attr
-
 rtrcls = OAGRPC_RTR_Requests
 
 class OAGRPC_REQ_Requests(OAGRPC):
     """Make RPC calls to another node's OAGRPC_RTR_Requests"""
     def __init__(self, oag):
         super(OAGRPC_REQ_Requests, self).__init__(zmq.REQ, oag)
+
+    @OAGRPC.rpcfn
+    def deregister(self, *args, **kwargs):
+        return  {
+            'args'      : {
+                'stream' : args[0][0],
+                'addr'   : self._oag.rpcrtr.addr
+            }
+        }
+
+    @OAGRPC.rpcfn
+    def getstream(self, *args, **kwargs):
+        return {
+            'args'      : {
+                'stream' : args[0][0]
+            }
+        }
+
+    @OAGRPC.rpcfn
+    def invalidate(self, *args, **kwargs):
+        return {
+            'args'      : {
+                'stream' : args[0][0]
+            }
+        }
 
     @OAGRPC.rpcfn
     def register(self, *args, **kwargs):
@@ -230,30 +255,6 @@ class OAGRPC_REQ_Requests(OAGRPC):
             }
         }
 
-    @OAGRPC.rpcfn
-    def deregister(self, *args, **kwargs):
-        return  {
-            'args'      : {
-                'stream' : args[0][0],
-                'addr'   : self._oag.rpcrtr.addr
-            }
-        }
-
-    @OAGRPC.rpcfn
-    def invalidate(self, *args, **kwargs):
-        return {
-            'args'      : {
-                'stream' : args[0][0]
-            }
-        }
-
-    @OAGRPC.rpcfn
-    def getstream(self, *args, **kwargs):
-        return {
-            'args'      : {
-                'stream' : args[0][0]
-            }
-        }
 reqcls = OAGRPC_REQ_Requests
 
 class OAGraphRootNode(object):
@@ -571,6 +572,23 @@ class OAG_RootNode(OAGraphRootNode):
 
             dao.commit()
 
+    def init_state_rpc(self):
+        # Intiailize reqs
+        self._glets          = []
+        if not self._rpc_init_done:
+            self._rpcsem = BoundedSemaphore(1)
+            with self._rpcsem:
+                self._rpcrtr = OAGRPC_RTR_Requests(self)
+                self.rpcrtr.start()
+                self._glets.append(spawn(self.__cb_init_state_rpc))
+                gevent.sleep(0)
+
+                # Initialize REQ array
+                self._rpcreqs = {}
+
+                # Avoid double RPC initialization
+                self._rpc_init_done = True
+
     @classmethod
     def is_oagnode(cls, stream):
         streaminfo = cls.dbstreams[stream][0]
@@ -578,6 +596,66 @@ class OAG_RootNode(OAGraphRootNode):
             return 'OAGraphRootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
         else:
             return False
+
+    @property
+    def oagurl(self): return self.rpcrtr.addr
+
+    @property
+    def proxyurl(self): return self._proxy_url
+
+    @property
+    def rpcreqs(self):
+        rpcreq = self._rpcreqs
+
+    def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
+
+        if initmode and currval:
+            if self.is_oagnode(stream):
+                if self.logger.RPC:
+                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, currval.rpcrtr.id)
+                reqcls(self).register(currval.rpcrtr, stream)
+            return
+
+        if stream[0] != '_':
+            invalidate_upstream = False
+
+            # Handle oagprops
+            if self.is_oagnode(stream):
+                if newval:
+                    # Update oagcache
+                    self._oagcache[stream] = newval
+                    # Regenerate connections to surrounding nodes
+                    if currval is None:
+                        if self.logger.RPC:
+                            print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpcrtr.id)
+                        reqcls(self).register(newval.rpcrtr, stream)
+                    else:
+                        if currval != newval:
+                            if self.logger.RPC:
+                                print "[%s] Detected changed stream [%s]->[%s]" % (stream,
+                                                                                   currval.rpcrtr.id,
+                                                                                   newval.rpcrtr.id)
+                            if currval:
+                                reqcls(self).deregister(currval.rpcrtr, stream)
+                            reqcls(self).register(newval.rpcrtr, stream)
+                            try:
+                                self._cframe[self.db_oag_mapping[stream]]=newval.id
+                            except KeyError:
+                                pass
+                            invalidate_upstream = True
+            else:
+                if currval and currval != newval:
+                    invalidate_upstream  = True
+
+            if invalidate_upstream:
+                if len(self._rpcreqs)>0:
+                    if self.logger.RPC:
+                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
+                    for addr, stream_to_invalidate in self._rpcreqs.items():
+                        reqcls(self).invalidate(addr, stream_to_invalidate)
+
+    @property
+    def sql_local(self): return {}
 
     @property
     def SQL(self):
@@ -659,12 +737,6 @@ class OAG_RootNode(OAGraphRootNode):
         key{2} in given SQL string"""
         return td(SQL.format(self.dbcontext, self.dbtable, self.dbpkname))
 
-    @property
-    def oagurl(self): return self.rpcrtr.addr
-
-    @property
-    def proxyurl(self): return self._proxy_url
-
     def __cb_init_state_rpc(self):
 
         rpc_dispatch = {
@@ -682,29 +754,32 @@ class OAG_RootNode(OAGraphRootNode):
             (sender, payload) = self.rpcrtr._recv()
             self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
 
-    @property
-    def rpcreqs(self):
-        rpcreq = self._rpcreqs
+    def __getattribute__(self, attr):
+        def objattr(stream):
+            """returns local-accessible attributes"""
+            return object.__getattribute__(self, stream)
 
-    @property
-    def sql_local(self): return {}
+        try:
+            if objattr('_proxy_mode'):
+                if attr in objattr('_proxy_oags'):
+                    if objattr('logger').RPC:
+                        print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
+                    payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
+                    if payload['value']:
+                        if payload['type'] == 'redirect':
+                            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                                if cls.__name__==payload['class']:
+                                    return cls(initurl=payload['value'], logger=objattr('logger'))
+                        else:
+                            return payload['value']
+                    else:
+                        raise AttributeError("[%s] does not exist" % attr)
+                else:
+                    raise AttributeError("[%s] is not an allowed proxy attribute" % attr)
+        except AttributeError:
+            pass
 
-    def init_state_rpc(self):
-        # Intiailize reqs
-        self._glets          = []
-        if not self._rpc_init_done:
-            self._rpcsem = BoundedSemaphore(1)
-            with self._rpcsem:
-                self._rpcrtr = OAGRPC_RTR_Requests(self)
-                self.rpcrtr.start()
-                self._glets.append(spawn(self.__cb_init_state_rpc))
-                gevent.sleep(0)
-
-                # Initialize REQ array
-                self._rpcreqs = {}
-
-                # Avoid double RPC initialization
-                self._rpc_init_done = True
+        return object.__getattribute__(self, attr)
 
     def __init__(self,
                  clauseprms=None,
@@ -749,80 +824,6 @@ class OAG_RootNode(OAGraphRootNode):
                     currval = getattr(self, stream, None)
                     self.signal_surrounding_nodes(stream, currval, initmode=True)
 
-    def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
-
-        if initmode and currval:
-            if self.is_oagnode(stream):
-                if self.logger.RPC:
-                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, currval.rpcrtr.id)
-                reqcls(self).register(currval.rpcrtr, stream)
-            return
-
-        if stream[0] != '_':
-            invalidate_upstream = False
-
-            # Handle oagprops
-            if self.is_oagnode(stream):
-                if newval:
-                    # Update oagcache
-                    self._oagcache[stream] = newval
-                    # Regenerate connections to surrounding nodes
-                    if currval is None:
-                        if self.logger.RPC:
-                            print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpcrtr.id)
-                        reqcls(self).register(newval.rpcrtr, stream)
-                    else:
-                        if currval != newval:
-                            if self.logger.RPC:
-                                print "[%s] Detected changed stream [%s]->[%s]" % (stream,
-                                                                                   currval.rpcrtr.id,
-                                                                                   newval.rpcrtr.id)
-                            if currval:
-                                reqcls(self).deregister(currval.rpcrtr, stream)
-                            reqcls(self).register(newval.rpcrtr, stream)
-                            try:
-                                self._cframe[self.db_oag_mapping[stream]]=newval.id
-                            except KeyError:
-                                pass
-                            invalidate_upstream = True
-            else:
-                if currval and currval != newval:
-                    invalidate_upstream  = True
-
-            if invalidate_upstream:
-                if len(self._rpcreqs)>0:
-                    if self.logger.RPC:
-                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
-                    for addr, stream_to_invalidate in self._rpcreqs.items():
-                        reqcls(self).invalidate(addr, stream_to_invalidate)
-
-    def __getattribute__(self, attr):
-        def objattr(stream):
-            """returns local-accessible attributes"""
-            return object.__getattribute__(self, stream)
-
-        try:
-            if objattr('_proxy_mode'):
-                if attr in objattr('_proxy_oags'):
-                    if objattr('logger').RPC:
-                        print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
-                    payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
-                    if payload['value']:
-                        if payload['type'] == 'redirect':
-                            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
-                                if cls.__name__==payload['class']:
-                                    return cls(initurl=payload['value'], logger=objattr('logger'))
-                        else:
-                            return payload['value']
-                    else:
-                        raise AttributeError("[%s] does not exist" % attr)
-                else:
-                    raise AttributeError("[%s] is not an allowed proxy attribute" % attr)
-        except AttributeError:
-            pass
-
-        return object.__getattribute__(self, attr)
-
     def __setattr__(self, attr, newval):
 
         # Setting values on a proxy OAG is nonsensical
@@ -844,12 +845,22 @@ class OAG_RootNode(OAGraphRootNode):
         self._fkframe = cur.fetchall()
         super(OAG_RootNode, self)._refresh_from_cursor(cur)
 
+    def _reset_oagprops(self):
+        """Maintain list of oagprops that have been set"""
+        curr_proplist = getattr(self.__class__, "oagproplist", [])
+        for prop in curr_proplist:
+            if getattr(self.__class__, prop, None) is not None:
+                delattr(self.__class__, prop)
+        new_proplist = [stream for stream in self.dbstreams if self.is_oagnode(stream)]
+        for prop in new_proplist:
+            self._set_oagproplist(prop)
+
     def _set_attrs_from_cframe(self):
         oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
 
         # Set dbstream attributes
         for stream, streaminfo in self._cframe.items():
-            self._set_oagprop_new(stream, streaminfo)
+            self._set_oagprop(stream, streaminfo)
 
         # Set forward lookup attributes
         for fk in self._fkframe:
@@ -886,7 +897,7 @@ class OAG_RootNode(OAGraphRootNode):
         processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
         for stream, streaminfo in processed_streams.items():
             setattr(self, stream, streaminfo)
-            self._set_oagprop_new(stream, streaminfo, streamform='oag')
+            self._set_oagprop(stream, streaminfo, streamform='oag')
 
         return processed_streams.keys()
 
@@ -929,26 +940,7 @@ class OAG_RootNode(OAGraphRootNode):
 
         self._cframe = cframe_tmp
 
-    def _set_oagproplist(self, stream):
-        """Maintain list of oagprops that have been set"""
-        oagproplist = getattr(self.__class__, "oagproplist", None)
-        if oagproplist is None:
-            oagproplist = []
-        if stream not in oagproplist:
-            oagproplist.append(stream)
-            setattr(self.__class__, 'oagproplist', oagproplist)
-
-    def _reset_oagprops(self):
-        """Maintain list of oagprops that have been set"""
-        curr_proplist = getattr(self.__class__, "oagproplist", [])
-        for prop in curr_proplist:
-            if getattr(self.__class__, prop, None) is not None:
-                delattr(self.__class__, prop)
-        new_proplist = [stream for stream in self.dbstreams if self.is_oagnode(stream)]
-        for prop in new_proplist:
-            self._set_oagproplist(prop)
-
-    def _set_oagprop_new(self, stream, cfval, indexprm='id', streamform='cframe'):
+    def _set_oagprop(self, stream, cfval, indexprm='id', streamform='cframe'):
 
         # primary key: set directly
         if stream[0] == '_':
@@ -989,3 +981,12 @@ class OAG_RootNode(OAGraphRootNode):
             setattr(self.__class__, stream, oagprop(oagpropfn))
         else:
             setattr(self, stream, cfval)
+
+    def _set_oagproplist(self, stream):
+        """Maintain list of oagprops that have been set"""
+        oagproplist = getattr(self.__class__, "oagproplist", None)
+        if oagproplist is None:
+            oagproplist = []
+        if stream not in oagproplist:
+            oagproplist.append(stream)
+            setattr(self.__class__, 'oagproplist', oagproplist)
