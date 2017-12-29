@@ -201,9 +201,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
                    + getattr(self._oag.__class__, 'oagproplist', [])
 
-        stoplist = [ 'logger', 'rpcrtr' ]
-
-        ret['payload'] = [p for p in list(set(rawprops)) if p not in stoplist]
+        ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag._rpc_stop_list]
 
 rtrcls = OAGRPC_RTR_Requests
 
@@ -589,6 +587,13 @@ class OAG_RootNode(OAGraphRootNode):
                 # Avoid double RPC initialization
                 self._rpc_init_done = True
 
+                # Some things probably shouldn't be sent over rpc
+                self._rpc_stop_list = [
+                    'logger',
+                    'rpcrtr',
+                    'discovery'
+                ] + [attr for attr in dir(self) if attr[0]=='_']
+
     @classmethod
     def is_oagnode(cls, stream):
         streaminfo = cls.dbstreams[stream][0]
@@ -837,7 +842,7 @@ class OAG_RootNode(OAGraphRootNode):
         super(OAG_RootNode, self).__setattr__(attr, newval)
 
         # Tell the world
-        if getattr(self, '_rpc_init_done', None):
+        if getattr(self, '_rpc_init_done', None) and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
 
     def _refresh_from_cursor(self, cur):
