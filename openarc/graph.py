@@ -466,9 +466,14 @@ class OAGraphRootNode(object):
             setattr(self, k, v)
 
     def _set_attrs_from_cframe_uniq(self):
-        if len(self._rawdata_window) != 1:
+        if len(self._rawdata_window) > 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-        self._cframe = self._rawdata_window[0]
+
+        if len(self._rawdata_window) == 1:
+            self._cframe = self._rawdata_window[0]
+        else:
+            self._cframe = []
+
         self._set_attrs_from_cframe()
 
     def _set_attrs_from_userprms(self, userprms):
@@ -508,6 +513,24 @@ class OAG_RootNode(OAGraphRootNode):
     def dbstreams(cls):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    def delete(self):
+        delete_sql    = self.SQL['delete']['id']
+
+        if self._extcur is None:
+            with OADao(self.dbcontext) as dao:
+                with dao.cur as cur:
+                    self.SQLexec(cur, delete_sql, [self.id])
+                    dao.commit()
+        else:
+            self.SQLexec(cur, delete_sql, [self.id])
+
+        self.refresh(gotodb=True)
+
+        if self.is_unique:
+            self._set_attrs_from_cframe_uniq()
+
+        return self
 
     @property
     def id(self):
@@ -687,6 +710,11 @@ class OAG_RootNode(OAGraphRootNode):
                   VALUES (%s)
                RETURNING {2}""")
             },
+            "delete" : {
+              "id"       : self.SQLpp("""
+             DELETE FROM {0}.{1}
+                   WHERE {2}=%s""")
+            },
             "admin"  : {
               "fkeys"    : self.SQLpp("""
                   SELECT tc.constraint_name,
@@ -862,6 +890,12 @@ class OAG_RootNode(OAGraphRootNode):
 
     def _set_attrs_from_cframe(self):
         oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
+
+        # Blank everything if _cframe isn't set
+        if len(self._cframe)==0:
+            for stream in self.dbstreams:
+                setattr(self, stream, None)
+            return
 
         # Set dbstream attributes
         for stream, streaminfo in self._cframe.items():

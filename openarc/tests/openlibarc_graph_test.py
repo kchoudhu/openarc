@@ -559,7 +559,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a3.auto_node1a.size, 10)
         self.assertEqual(a3.auto_node1b.size, 10)
 
-
     def test_multinode_indexing(self):
         with self.dbconn.cursor() as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
@@ -1049,6 +1048,67 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+
+    def test_uniquenode_deletion(self):
+        a2 = OAG_AutoNode2().create({
+                'field4' : 3847,
+                'field5' : 'this is an autonode2'
+             })
+
+        a2_id = a2.id
+
+        a2_chk = OAG_AutoNode2((a2_id,))
+
+        self.__check_autonode_equivalence(a2, a2_chk)
+
+        a2.delete()
+
+        self.assertEqual(a2.id, None)
+        self.assertEqual(a2.field4, None)
+        self.assertEqual(a2.field5, None)
+
+        with self.assertRaises(OAGraphRetrieveError):
+            oa_chk = OAG_AutoNode2((a2_id,))
+
+    def test_multinode_deletion(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for x in xrange(0,10):
+            a1a =\
+                OAG_AutoNode1a().create({
+                    'field2'   : x,
+                    'field3'   : 10-x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        a2.refresh(gotodb=True)
+
+        self.assertEqual(a2.auto_node1a.size, 10)
+
+        a2.auto_node1a[0].delete()
+
+        self.assertEqual(a2.auto_node1a.size, 9)
+
+        for x in a2.auto_node1a:
+            a2.auto_node1a.delete()
+
+        self.assertEqual(a2.auto_node1a.size, 0)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
