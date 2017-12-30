@@ -504,6 +504,28 @@ class OAG_RootNode(OAGraphRootNode):
         return schema
 
     @staticproperty
+    def dbindices(cls):
+        ret = {}
+
+        indices =\
+            list(set(
+            [ item
+              for sublist in [streaminfo[2]
+                              for streaminfo in cls.dbstreams.values()]
+              for item in sublist ]
+            ))
+
+        for index in indices:
+            associated_streams = []
+            for stream, streaminfo in cls.dbstreams.items():
+                if index in streaminfo[2]:
+                    associated_streams.append(cls.db_oag_mapping[stream])
+            associated_streams.sort()
+            ret[index] = associated_streams
+
+        return ret
+
+    @staticproperty
     def dbpkname(cls): return "_%s_id" % cls.dbtable
 
     @staticproperty
@@ -590,6 +612,10 @@ class OAG_RootNode(OAGraphRootNode):
 
                     addcol_sql = self.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
                     self.SQLexec(cur, addcol_sql)
+
+                for index, cols in self.dbindices.items():
+                    index_sql  = self.SQL['admin']['mkindex'] % (index, ','.join(cols))
+                    self.SQLexec(cur, index_sql)
 
             dao.commit()
 
@@ -732,6 +758,8 @@ class OAG_RootNode(OAGraphRootNode):
                    WHERE constraint_type = 'FOREIGN KEY'
                          AND ccu.table_schema='{0}'
                          AND ccu.table_name='{1}'"""),
+              "mkindex"  : self.SQLpp("""
+                 CREATE INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s)"""),
               "mkschema" : self.SQLpp("""
                  CREATE SCHEMA {0}"""),
               "mktable"  : self.SQLpp("""
@@ -757,6 +785,15 @@ class OAG_RootNode(OAGraphRootNode):
                    WHERE {2}=%s
                 ORDER BY {3}""").format(self.dbcontext, self.dbtable, streaminfo[0].dbpkname[1:], self.dbpkname)
                 default_sql['read'][stream_sql_key] = stream_sql
+
+        # Add in other indices
+        for index, fields in self.dbindices.items():
+            index_sql = td("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE %s
+                ORDER BY {2}""").format(self.dbcontext, self.dbtable, self.dbpkname)
+            default_sql['read']['by_'+index] = index_sql % ' AND '.join(["{0}=%s".format(f) for f in fields])
 
         # Add in user defined SQL
         for action, sqlinfo in self.sql_local.items():
@@ -823,6 +860,12 @@ class OAG_RootNode(OAGraphRootNode):
                  logger=OALog(),
                  rpc=True):
 
+        # Alphabetize
+        if type(clauseprms).__name__=='dict':
+            tmpcprms = clauseprms.keys()
+            tmpcprms.sort()
+            clauseprms = [clauseprms[prm] for prm in tmpcprms]
+
         self._proxy_mode     = False
 
         self._rpc_init_done  = False
@@ -836,7 +879,6 @@ class OAG_RootNode(OAGraphRootNode):
         self._indexparm      = indexprm
         self._extcur         = extcur
         self._logger         = logger
-
 
         if initurl:
             self.init_state_rpc()

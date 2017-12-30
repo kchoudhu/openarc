@@ -1110,6 +1110,54 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a2.auto_node1a.size, 0)
 
+    def test_alternative_index_lookup(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2().create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3().create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for x in xrange(0,10):
+            a1a =\
+                OAG_AutoNode1a().create({
+                    'field2'   : x,
+                    'field3'   : 10-x,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        # Lookup by dict - out of order
+        a1a_chk_1 =\
+            OAG_AutoNode1a({
+                'field3' : 9,
+                'field2' : 1,
+            }, 'by_a3_idx', logger=logger)
+        self.assertEqual(a1a_chk_1.size, 1)
+
+        # Lookup by dict - in order
+        a1a_chk_2 =\
+            OAG_AutoNode1a({
+                'field2' : 1,
+                'field3' : 9,
+            }, 'by_a3_idx', logger=logger)
+        self.__check_autonode_equivalence(a1a_chk_1[0], a1a_chk_2[0])
+
+        # Lookup by list
+        a1a_chk_3 =\
+            OAG_AutoNode1a([1, 9], 'by_a3_idx', logger=logger)
+        self.__check_autonode_equivalence(a1a_chk_1[0], a1a_chk_3[0])
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1209,10 +1257,10 @@ class OAG_AutoNode1a(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int', 0 ],
-        'field3'   : [ 'int', 0 ],
-        'subnode1' : [ OAG_AutoNode2 ],
-        'subnode2' : [ OAG_AutoNode3 ]
+        'field2'   : [ 'int', 0, ['a3_idx'] ],
+        'field3'   : [ 'int', 0, ['a3_idx', 'a5_idx'] ],
+        'subnode1' : [ OAG_AutoNode2, None, [] ],
+        'subnode2' : [ OAG_AutoNode3, None, ['a5_idx'] ]
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
@@ -1224,10 +1272,10 @@ class OAG_AutoNode1b(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int', 0 ],
-        'field3'   : [ 'int', 0 ],
-        'subnode1' : [ OAG_AutoNode2 ],
-        'subnode2' : [ OAG_AutoNode3 ]
+        'field2'   : [ 'int', 0, [] ],
+        'field3'   : [ 'int', 0, [] ],
+        'subnode1' : [ OAG_AutoNode2, None, [] ],
+        'subnode2' : [ OAG_AutoNode3, None, [] ]
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -1239,8 +1287,8 @@ class OAG_AutoNode2(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field4'   : [ 'int', 0 ],
-        'field5'   : [ 'varchar(50)', 0 ],
+        'field4'   : [ 'int', 0, [] ],
+        'field5'   : [ 'varchar(50)', 0, [] ],
     }
 
     @property
@@ -1264,8 +1312,8 @@ class OAG_AutoNode3(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field7'   : [ 'int', 0 ],
-        'field8'   : [ 'varchar(50)', 0 ],
+        'field7'   : [ 'int', 0, [] ],
+        'field8'   : [ 'varchar(50)', 0, [] ],
     }
 
 class OAG_AutoNode4(OAG_RootNode):
@@ -1277,5 +1325,5 @@ class OAG_AutoNode4(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'subnode1' : [ OAG_AutoNode1a ]
+        'subnode1' : [ OAG_AutoNode1a, None, [] ]
     }
