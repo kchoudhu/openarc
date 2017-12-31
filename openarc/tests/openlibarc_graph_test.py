@@ -1158,6 +1158,31 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_AutoNode1a([1, 9], 'by_a3_idx', logger=logger)
         self.__check_autonode_equivalence(a1a_chk_1[0], a1a_chk_3[0])
 
+    def test_rpc_discovery(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        self.assertEqual(a2.discoverable, False)
+
+        with a2:
+            a2_remote =\
+                OAG_AutoNode2(initprms={
+                    'field4' :  1,
+                    'field5' : 'this is an autonode2'
+                }, logger=logger).discover()
+
+            self.__check_autonode_equivalence(a2, a2_remote)
+
+        self.assertEqual(a2.discoverable, False)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

@@ -554,6 +554,34 @@ class OAG_RootNode(OAGraphRootNode):
 
         return self
 
+    def discover(self):
+        remote_oag =\
+            OAG_RpcDiscoverable({
+                'rpcinfname' : self.infname
+            }, 'by_rpcinfname_idx', rpc=False)
+        return self.__class__(initurl=remote_oag[0].url)
+
+    @property
+    def discoverable(self): return self._rpc_discovery is not None
+
+    @discoverable.setter
+    def discoverable(self, value):
+        if self._rpc_discovery==value:
+            return
+
+        if value is False:
+            self._rpc_discovery.delete()
+            self._rpc_discovery = None
+        else:
+            self._rpc_discovery =\
+                OAG_RpcDiscoverable(logger=self.logger, rpc=False).create({
+                    'rpcinfname' : self.infname,
+                    'stripe'     : 0,
+                    'url'        : self.oagurl,
+                    'status'     : 1,
+                    'type'       : self.__class__.__name__
+                }).next()
+
     @property
     def id(self):
         try:
@@ -636,11 +664,14 @@ class OAG_RootNode(OAGraphRootNode):
                 # Avoid double RPC initialization
                 self._rpc_init_done = True
 
+                # RPC discovery isn't actually on yet
+                self._rpc_discovery = None
+
                 # Some things probably shouldn't be sent over rpc
                 self._rpc_stop_list = [
                     'logger',
                     'rpcrtr',
-                    'discovery'
+                    'discoverable'
                 ] + [attr for attr in dir(self) if attr[0]=='_']
 
     @classmethod
@@ -823,6 +854,13 @@ class OAG_RootNode(OAGraphRootNode):
         while True:
             (sender, payload) = self.rpcrtr._recv()
             self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
+
+    def __enter__(self):
+        self.discoverable = True
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.discoverable = False
 
     def __getattribute__(self, attr):
         def objattr(stream):
@@ -1071,3 +1109,22 @@ class OAG_RootNode(OAGraphRootNode):
         if stream not in oagproplist:
             oagproplist.append(stream)
             setattr(self.__class__, 'oagproplist', oagproplist)
+
+class OAG_RpcDiscoverable(OAG_RootNode):
+    @property
+    def is_unique(self): return False
+
+    @property
+    def dbcontext(self): return "openarc"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'rpcinfname' : [ 'text', "", ['rpcinfname_idx'] ],
+        'stripe'     : [ 'int',  0,  [] ],
+        'url'        : [ 'text', "", [] ],
+        'status'     : [ 'int',  0,  [] ],
+        'type'       : [ 'text', "", [] ]
+    }
+
+    @property
+    def fanout(self): return False
