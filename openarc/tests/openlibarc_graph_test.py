@@ -1188,6 +1188,48 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'rpcinfname' : a2.infname
             }, 'by_rpcinfname_idx', rpc=False)
 
+    @unittest.skip("long running time")
+    def test_rpc_discovery_cleanup(self):
+        logger = OALog()
+        logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        with a2:
+            a2_dupe =\
+                OAG_AutoNode2(logger=logger).create({
+                    'field4' :  1,
+                    'field5' : 'this is an autonode2'
+                })
+
+            with self.assertRaises(OAError):
+                a2_dupe.discoverable = True
+
+            time.sleep(getenv().rpctimeout)
+
+            a2_dupe.discoverable = True
+
+            rpcdisc =\
+                OAG_RpcDiscoverable({
+                    'rpcinfname' : a2_dupe.infname
+                }, 'by_rpcinfname_idx', rpc=False)
+
+            # Previous rpcdisc has been evicted, new one available
+            self.assertNotEqual(rpcdisc[0].id, a2._rpc_discovery[0].id)
+
+            a2_dupe.discoverable = False
+
+        with self.assertRaises(OAGraphRetrieveError):
+            OAG_RpcDiscoverable({
+                'rpcinfname' : a2.infname
+            }, 'by_rpcinfname_idx', rpc=False)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

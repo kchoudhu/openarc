@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 
 import base64
+import datetime
 import hashlib
 import gevent
 import inflection
@@ -19,7 +20,7 @@ from textwrap          import dedent as td
 from openarc.dao       import *
 from openarc.env       import OALog
 from openarc.exception import *
-
+from openarc.oatime    import *
 
 class oagprop(object):
     """Responsible for maitaining _oagcache on decorated properties"""
@@ -573,14 +574,40 @@ class OAG_RootNode(OAGraphRootNode):
             self._rpc_discovery.delete()
             self._rpc_discovery = None
         else:
+            # Cleanup previous messes
+            try:
+                currtime = OATime().now
+                prevrpcs = OAG_RpcDiscoverable([self.infname], 'by_rpcinfname_idx')
+                for rpc in prevrpcs:
+                    delta = currtime-rpc.heartbeat
+                    if delta < datetime.timedelta(seconds=getenv().rpctimeout):
+                        if not self.fanout:
+                            message = "Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
+                                       % (rpc.rpcinfname, rpc.heartbeat, delta)
+                            if self.logger.RPC:
+                                print message
+                            raise OAError(message)
+                    else:
+                        if self.logger.RPC:
+                            print "Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
+                                   % (rpc.type, rpc.stripe, rpc.heartbeat, delta)
+                        rpc.delete()
+            except OAGraphRetrieveError as e:
+                pass
+
+            # Create new database entry
             self._rpc_discovery =\
                 OAG_RpcDiscoverable(logger=self.logger, rpc=False).create({
                     'rpcinfname' : self.infname,
                     'stripe'     : 0,
                     'url'        : self.oagurl,
-                    'status'     : 1,
-                    'type'       : self.__class__.__name__
+                    'type'       : self.__class__.__name__,
+                    'envid'      : getenv().envid,
+                    'heartbeat'  : currtime
                 }).next()
+
+    @property
+    def fanout(self): return False
 
     @property
     def id(self):
@@ -1122,9 +1149,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
         'rpcinfname' : [ 'text', "", ['rpcinfname_idx'] ],
         'stripe'     : [ 'int',  0,  [] ],
         'url'        : [ 'text', "", [] ],
-        'status'     : [ 'int',  0,  [] ],
-        'type'       : [ 'text', "", [] ]
+        'type'       : [ 'text', "", [] ],
+        'envid'      : [ 'text', "", [] ],
+        'heartbeat'  : [ 'timestamp', "", [] ]
     }
-
-    @property
-    def fanout(self): return False
