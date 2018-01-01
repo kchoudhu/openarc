@@ -612,9 +612,9 @@ class OAG_RootNode(OAGraphRootNode):
                         self.SQLexec(cur, self.SQL['admin']['table'])
 
                 # Check for table schema integrity
-                oag_columns     = self.dbstreams.keys()
+                oag_columns     = sorted(self.dbstreams.keys())
                 db_columns_ext  = [desc[0] for desc in cur.description if desc[0][0] != '_']
-                db_columns_reqd = self.db_oag_mapping.values()
+                db_columns_reqd = [self.db_oag_mapping[k] for k in sorted(self.db_oag_mapping.keys())]
 
                 dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
                 if len(dropped_cols)>0:
