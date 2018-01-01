@@ -1183,6 +1183,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a2.discoverable, False)
 
+        with self.assertRaises(OAGraphRetrieveError):
+            OAG_RpcDiscoverable({
+                'rpcinfname' : a2.infname
+            }, 'by_rpcinfname_idx', rpc=False)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
