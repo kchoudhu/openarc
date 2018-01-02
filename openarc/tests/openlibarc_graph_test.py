@@ -1165,7 +1165,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         #logger.SQL = True
 
         a2 =\
-            OAG_AutoNode2(logger=logger).create({
+            OAG_AutoNode2(logger=logger, heartbeat=False)\
+            .create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
@@ -1191,19 +1192,21 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     @unittest.skip("long running time")
     def test_rpc_discovery_cleanup(self):
         logger = OALog()
-        logger.RPC = True
+        #logger.RPC = True
         #logger.Graph = True
         #logger.SQL = True
 
         a2 =\
-            OAG_AutoNode2(logger=logger).create({
+            OAG_AutoNode2(logger=logger, heartbeat=False)\
+            .create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
 
         with a2:
             a2_dupe =\
-                OAG_AutoNode2(logger=logger).create({
+                OAG_AutoNode2(logger=logger, heartbeat=False)\
+                .create({
                     'field4' :  1,
                     'field5' : 'this is an autonode2'
                 })
@@ -1229,6 +1232,69 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_RpcDiscoverable({
                 'rpcinfname' : a2.infname
             }, 'by_rpcinfname_idx', rpc=False)
+
+    @unittest.skip("long running time")
+    def test_rpc_discovery_underlying_env_change(self):
+        print '\ntest_rpc_discovery_underlying_env_change'
+        def test_func():
+            import gevent
+            logger = OALog()
+            #logger.RPC = True
+            #logger.Graph = True
+            #logger.SQL = True
+
+            a2 =\
+                OAG_AutoNode2(logger=logger).create({
+                    'field4' :  1,
+                    'field5' : 'this is an autonode2'
+                })
+
+            with a2:
+                i = 0;
+                while i < 3:
+                    if i == 2:
+                        with self.dbconn.cursor() as setupcur:
+                            setupcur.execute("update openarc.rpc_discoverable set envid='%s'" % 'this_is_a_fake_id')
+                            self.dbconn.commit()
+                    gevent.sleep(getenv().rpctimeout)
+                    i += 1
+
+        with self.assertRaises(SystemExit):
+            glets = [gevent.spawn(test_func)]
+            gevent.joinall(glets)
+            gevent.sleep(5)
+
+    @unittest.skip("long running time")
+    def test_rpc_discovery_underlying_db_row_removal(self):
+        print '\ntest_rpc_discovery_underlying_db_row_removal'
+        self._envid  = base64.b16encode(os.urandom(16))
+        def test_func():
+            import gevent
+            logger = OALog()
+            #logger.RPC = True
+            #logger.Graph = True
+            #logger.SQL = True
+
+            a2 =\
+                OAG_AutoNode2(logger=logger).create({
+                    'field4' :  1,
+                    'field5' : 'this is an autonode2'
+                })
+
+            with a2:
+                i = 0;
+                while i < 3:
+                    if i == 2:
+                        with self.dbconn.cursor() as setupcur:
+                            setupcur.execute("delete from openarc.rpc_discoverable where 1=1")
+                            self.dbconn.commit()
+                    gevent.sleep(getenv().rpctimeout)
+                    i += 1
+
+        with self.assertRaises(SystemExit):
+            glets = [gevent.spawn(test_func)]
+            gevent.joinall(glets)
+            gevent.sleep(5)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""

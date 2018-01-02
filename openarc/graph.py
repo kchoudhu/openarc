@@ -9,6 +9,7 @@ import inspect
 import msgpack
 import os
 import socket
+import sys
 import zmq.green as zmq
 
 from gevent            import spawn
@@ -437,7 +438,7 @@ class OAGraphRootNode(object):
 
         return self
 
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True):
+    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
@@ -571,6 +572,13 @@ class OAG_RootNode(OAGraphRootNode):
             return
 
         if value is False:
+            if self.logger.RPC:
+                print "[%s] Killing rpcdisc greenlets [%d]" % (self._rpc_discovery.id, len(self._rpc_discovery._glets))
+            [glet.kill() for glet in self._rpc_discovery._glets]
+            if self.logger.RPC:
+                print "[%s] Killing OAG greenlets [%d]" % (self._rpc_discovery.id, len(self._glets))
+            [glet.kill() for glet in self._glets]
+            gevent.joinall(self._glets+self._rpc_discovery._glets)
             self._rpc_discovery.delete()
             self._rpc_discovery = None
         else:
@@ -578,26 +586,34 @@ class OAG_RootNode(OAGraphRootNode):
             try:
                 currtime = OATime().now
                 prevrpcs = OAG_RpcDiscoverable([self.infname], 'by_rpcinfname_idx')
+                number_active = 0
                 for rpc in prevrpcs:
-                    delta = currtime-rpc.heartbeat
+                    delta = currtime - rpc.heartbeat
                     if delta < datetime.timedelta(seconds=getenv().rpctimeout):
-                        if not self.fanout:
-                            message = "Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
-                                       % (rpc.rpcinfname, rpc.heartbeat, delta)
-                            if self.logger.RPC:
-                                print message
-                            raise OAError(message)
+                        number_active += 1
                     else:
                         if self.logger.RPC:
-                            print "Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
-                                   % (rpc.type, rpc.stripe, rpc.heartbeat, delta)
+                            print "[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
+                                   % (rpc.id, rpc.type, rpc.stripe, rpc.heartbeat, delta)
                         rpc.delete()
+
+                # Is there already an active subscription there?
+                if number_active > 0:
+                    if not self.fanout:
+                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
+                                   % (rpc.id, rpc.rpcinfname, rpc.heartbeat, delta)
+                        if self.logger.RPC:
+                            print message
+                        raise OAError(message)
             except OAGraphRetrieveError as e:
                 pass
 
             # Create new database entry
             self._rpc_discovery =\
-                OAG_RpcDiscoverable(logger=self.logger, rpc=False).create({
+                OAG_RpcDiscoverable(logger=self.logger,
+                                    rpc=False,
+                                    heartbeat=self._rpc_heartbeat)\
+                .create({
                     'rpcinfname' : self.infname,
                     'stripe'     : 0,
                     'url'        : self.oagurl,
@@ -605,6 +621,8 @@ class OAG_RootNode(OAGraphRootNode):
                     'envid'      : getenv().envid,
                     'heartbeat'  : currtime
                 }).next()
+
+            self._rpc_discovery.start_heartbeat()
 
     @property
     def fanout(self): return False
@@ -676,7 +694,6 @@ class OAG_RootNode(OAGraphRootNode):
 
     def init_state_rpc(self):
         # Intiailize reqs
-        self._glets          = []
         if not self._rpc_init_done:
             self._rpcsem = BoundedSemaphore(1)
             with self._rpcsem:
@@ -923,7 +940,8 @@ class OAG_RootNode(OAGraphRootNode):
                  initurl=None,
                  extcur=None,
                  logger=OALog(),
-                 rpc=True):
+                 rpc=True,
+                 heartbeat=True):
 
         # Alphabetize
         if type(clauseprms).__name__=='dict':
@@ -934,6 +952,7 @@ class OAG_RootNode(OAGraphRootNode):
         self._proxy_mode     = False
 
         self._rpc_init_done  = False
+        self._rpc_heartbeat  = heartbeat
 
         self._cframe         = {}
         self._fkframe        = {}
@@ -944,6 +963,7 @@ class OAG_RootNode(OAGraphRootNode):
         self._indexparm      = indexprm
         self._extcur         = extcur
         self._logger         = logger
+        self._glets          = []
 
         if initurl:
             self.init_state_rpc()
@@ -1153,3 +1173,31 @@ class OAG_RpcDiscoverable(OAG_RootNode):
         'envid'      : [ 'text', "", [] ],
         'heartbeat'  : [ 'timestamp', "", [] ]
     }
+
+    def __cb_heartbeat(self):
+        while True:
+            # Did our underlying db control row evaporate? If so, holy shit.
+            try:
+                rpcdisc = OAG_RpcDiscoverable([self.id])[0]
+            except OAGraphRetrieveError as e:
+                if self.logger.RPC:
+                    print "[%s] Underlying db controller row is missing for [%s]-[%d], exiting" % (self.id, self.rpcinfname, self.stripe)
+                sys.exit(1)
+
+            # Did environment change?
+            if self.envid != rpcdisc.envid:
+                if self.logger.RPC:
+                    print "[%s] Environment changed from [%s] to [%s], exiting" % (self.id, self.envid, rpcdisc.envid)
+                sys.exit(1)
+
+            self.heartbeat = OATime().now
+            if self.logger.RPC:
+                print "[%s] heartbeat %s" % (self.id, self.heartbeat)
+            self.update()
+            gevent.sleep(getenv().rpctimeout)
+
+    def start_heartbeat(self):
+        if self._rpc_heartbeat:
+            if self.logger.RPC:
+                print "[%s] Starting heartbeat greenlet" % (self.id)
+            self._glets.append(spawn(self.__cb_heartbeat))
