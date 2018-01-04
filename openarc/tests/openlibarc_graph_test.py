@@ -644,7 +644,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3a)
 
-
         # Change subnode's oag: a4's oagcache should be blown
         a4.subnode1.subnode2 = a3b
         # Cache state
@@ -658,17 +657,26 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3b)
 
-
         # Change sub-subnode's dbstream
         a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
-        # Cache state
+        # Assert cache state by level
         self.assertEqual(a4._oagcache, {})
         self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
         with self.assertRaises(KeyError):
             self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+
+        # Change second sub-subnode's dbstream
+        a4.subnode1.subnode1.field4 = 'this is pretty weird'
+        # Assert Cache state
+        self.assertEqual(a4._oagcache, {})
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
         self.assertEqual(a4.subnode1.subnode1._oagcache, {})
         self.assertEqual(a4.subnode1.subnode2._oagcache, {})
-        # Actual return
+
+        # Actual return for system
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3b)
@@ -735,7 +743,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3a)
 
-
         # Change subnode's oag: a4's oagcache should be blown
         a4.subnode1.subnode2 = a3b
         # Cache state
@@ -744,22 +751,30 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
         self.assertEqual(a4.subnode1.subnode1._oagcache, {})
         self.assertEqual(a4.subnode1.subnode2._oagcache, {})
-        # # Actual return
+        # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3b)
 
-
         # Change sub-subnode's dbstream
         a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
-        # Cache state
+        # Assert cache state by level
         self.assertEqual(a4._oagcache, {})
         self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
         with self.assertRaises(KeyError):
             self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+        # Change second sub-subnode's dbstream
+        a4.subnode1.subnode1.field4 = 'this is pretty weird'
+        # Assert Cache state
+        self.assertEqual(a4._oagcache, {})
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
         self.assertEqual(a4.subnode1.subnode1._oagcache, {})
         self.assertEqual(a4.subnode1.subnode2._oagcache, {})
-        # Actual return
+
+        # Actual return for system
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3b)
@@ -899,7 +914,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
 
-
         # Change subnode's oag: a4's oagcache should be blown
         with self.assertRaises(OAError):
             a4.subnode1.subnode2 = a3b
@@ -916,7 +930,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
 
-
         # Change sub-subnode's dbstream
         with self.assertRaises(OAError):
             a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
@@ -926,6 +939,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a._oagcache['subnode1'], a2)
         with self.assertRaises(KeyError):
             self.assertEqual(a1a._oagcache['subnode2'], a3b)
+        with self.assertRaises(OAError):
+            a4.subnode1.subnode1.field4 = 'this is pretty weird'
+        a1a.subnode1.field4 = 'this is pretty weird'
+        # Assert Cache state
+        self.assertEqual(a4._oagcache, {})
+        with self.assertRaises(KeyError):
+            self.assertEqual(a1a.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a1a.subnode1._oagcache['subnode2'], a3b)
         self.assertEqual(a1a.subnode1._oagcache, {})
         self.assertEqual(a1a.subnode2._oagcache, {})
         # Actual return
@@ -1000,7 +1022,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
 
-
         # Change subnode's oag: a4's oagcache should be blown
         with self.assertRaises(OAError):
             a4.subnode1.subnode2 = a3b
@@ -1017,7 +1038,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
 
-
         # Change sub-subnode's dbstream
         with self.assertRaises(OAError):
             a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
@@ -1027,6 +1047,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a._oagcache['subnode1'], a2)
         with self.assertRaises(KeyError):
             self.assertEqual(a1a._oagcache['subnode2'], a3b)
+        with self.assertRaises(OAError):
+            a4.subnode1.subnode1.field4 = 'this is pretty weird'
+        a1a.subnode1.field4 = 'this is pretty weird'
+        # Assert Cache state
+        self.assertEqual(a4._oagcache, {})
+        with self.assertRaises(KeyError):
+            self.assertEqual(a1a.subnode1._oagcache['subnode1'], a2)
+        with self.assertRaises(KeyError):
+            self.assertEqual(a1a.subnode1._oagcache['subnode2'], a3b)
         self.assertEqual(a1a.subnode1._oagcache, {})
         self.assertEqual(a1a.subnode2._oagcache, {})
         # Actual return
@@ -1235,7 +1264,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     @unittest.skip("long running time")
     def test_rpc_discovery_underlying_env_change(self):
-        print '\ntest_rpc_discovery_underlying_env_change'
         def test_func():
             import gevent
             logger = OALog()
@@ -1266,7 +1294,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     @unittest.skip("long running time")
     def test_rpc_discovery_underlying_db_row_removal(self):
-        print '\ntest_rpc_discovery_underlying_db_row_removal'
         self._envid  = base64.b16encode(os.urandom(16))
         def test_func():
             import gevent

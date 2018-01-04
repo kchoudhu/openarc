@@ -179,12 +179,15 @@ class OAGRPC_RTR_Requests(OAGRPC):
         if self._oag.logger.RPC:
             print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
 
+        # Selectively clear cache
+        tmpoagcache =  {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag != args['stream']}
+
         # Reset fget
         for stream, streaminfo in self._oag._cframe.items():
             self._oag._set_oagprop(stream, streaminfo)
 
-        # Selectively clear cache
-        self._oag._oagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag != args['stream']}
+        # Hack: fix oagcache corruption from setting fgets
+        self._oag._oagcache = tmpoagcache
 
         # Inform upstream
         for addr, stream in self._oag._rpcreqs.items():
