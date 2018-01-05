@@ -509,26 +509,7 @@ class OAG_RootNode(OAGraphRootNode):
         return schema
 
     @staticproperty
-    def dbindices(cls):
-        ret = {}
-
-        indices =\
-            list(set(
-            [ item
-              for sublist in [streaminfo[2]
-                              for streaminfo in cls.dbstreams.values()]
-              for item in sublist ]
-            ))
-
-        for index in indices:
-            associated_streams = []
-            for stream, streaminfo in cls.dbstreams.items():
-                if index in streaminfo[2]:
-                    associated_streams.append(cls.db_oag_mapping[stream])
-            associated_streams.sort()
-            ret[index] = associated_streams
-
-        return ret
+    def dbindices(cls): return {}
 
     @staticproperty
     def dbpkname(cls): return "_%s_id" % cls.dbtable
@@ -689,9 +670,12 @@ class OAG_RootNode(OAGraphRootNode):
                     addcol_sql = self.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
                     self.SQLexec(cur, addcol_sql)
 
-                for index, cols in self.dbindices.items():
-                    index_sql  = self.SQL['admin']['mkindex'] % (index, ','.join(cols))
-                    self.SQLexec(cur, index_sql)
+                for idx, idxinfo in self.dbindices.items():
+                    col_sql     = ','.join(map(lambda x: self.db_oag_mapping[x], idxinfo[0]))
+                    unique_sql  = 'UNIQUE' if idxinfo[1] else str()
+                    partial_sql = 'WHERE %s' % idxinfo[2] if idxinfo[2] else str()
+                    exec_sql    = self.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
+                    self.SQLexec(cur, exec_sql)
 
             dao.commit()
 
@@ -837,7 +821,7 @@ class OAG_RootNode(OAGraphRootNode):
                          AND ccu.table_schema='{0}'
                          AND ccu.table_name='{1}'"""),
               "mkindex"  : self.SQLpp("""
-                 CREATE INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s)"""),
+                 CREATE %s INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s) %s"""),
               "mkschema" : self.SQLpp("""
                  CREATE SCHEMA {0}"""),
               "mktable"  : self.SQLpp("""
@@ -865,13 +849,13 @@ class OAG_RootNode(OAGraphRootNode):
                 default_sql['read'][stream_sql_key] = stream_sql
 
         # Add in other indices
-        for index, fields in self.dbindices.items():
+        for index, idxinfo in self.dbindices.items():
             index_sql = td("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE %s
                 ORDER BY {2}""").format(self.dbcontext, self.dbtable, self.dbpkname)
-            default_sql['read']['by_'+index] = index_sql % ' AND '.join(["{0}=%s".format(f) for f in fields])
+            default_sql['read']['by_'+index] = index_sql % ' AND '.join(["{0}=%s".format(f) for f in idxinfo[0]])
 
         # Add in user defined SQL
         for action, sqlinfo in self.sql_local.items():
@@ -1168,13 +1152,20 @@ class OAG_RpcDiscoverable(OAG_RootNode):
     def dbcontext(self): return "openarc"
 
     @staticproperty
+    def dbindices(cls):
+        return {
+        #Index Name------------Elements------Unique-------Partial
+        'rpcinfname_idx' : [ ['rpcinfname'], True  ,      None  ]
+    }
+
+    @staticproperty
     def dbstreams(cls): return {
-        'rpcinfname' : [ 'text', "", ['rpcinfname_idx'] ],
-        'stripe'     : [ 'int',  0,  [] ],
-        'url'        : [ 'text', "", [] ],
-        'type'       : [ 'text', "", [] ],
-        'envid'      : [ 'text', "", [] ],
-        'heartbeat'  : [ 'timestamp', "", [] ]
+        'rpcinfname' : [ 'text',      "" ],
+        'stripe'     : [ 'int',       0  ],
+        'url'        : [ 'text',      "" ],
+        'type'       : [ 'text',      "" ],
+        'envid'      : [ 'text',      "" ],
+        'heartbeat'  : [ 'timestamp', "" ]
     }
 
     def __cb_heartbeat(self):

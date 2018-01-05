@@ -1421,11 +1421,17 @@ class OAG_AutoNode1a(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
+    def dbindices(cls) : return {
+        'a3_idx' : [['field2', 'field3'],   False, None],
+        'a5_idx' : [['field3', 'subnode2'], False, None]
+    }
+
+    @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int', 0, ['a3_idx'] ],
-        'field3'   : [ 'int', 0, ['a3_idx', 'a5_idx'] ],
-        'subnode1' : [ OAG_AutoNode2, None, [] ],
-        'subnode2' : [ OAG_AutoNode3, None, ['a5_idx'] ]
+        'field2'   : [ 'int',         0 ],
+        'field3'   : [ 'int',         0 ],
+        'subnode1' : [ OAG_AutoNode2, None ],
+        'subnode2' : [ OAG_AutoNode3, None ]
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
@@ -1437,10 +1443,10 @@ class OAG_AutoNode1b(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int', 0, [] ],
-        'field3'   : [ 'int', 0, [] ],
-        'subnode1' : [ OAG_AutoNode2, None, [] ],
-        'subnode2' : [ OAG_AutoNode3, None, [] ]
+        'field2'   : [ 'int',         0 ],
+        'field3'   : [ 'int',         0 ],
+        'subnode1' : [ OAG_AutoNode2, None],
+        'subnode2' : [ OAG_AutoNode3, None],
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -1452,8 +1458,8 @@ class OAG_AutoNode2(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field4'   : [ 'int', 0, [] ],
-        'field5'   : [ 'varchar(50)', 0, [] ],
+        'field4'   : [ 'int',         0 ],
+        'field5'   : [ 'varchar(50)', 0 ],
     }
 
     @property
@@ -1477,8 +1483,8 @@ class OAG_AutoNode3(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field7'   : [ 'int', 0, [] ],
-        'field8'   : [ 'varchar(50)', 0, [] ],
+        'field7'   : [ 'int',         0 ],
+        'field8'   : [ 'varchar(50)', 0 ],
     }
 
 class OAG_AutoNode4(OAG_RootNode):
@@ -1490,5 +1496,5 @@ class OAG_AutoNode4(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'subnode1' : [ OAG_AutoNode1a, None, [] ]
+        'subnode1' : [ OAG_AutoNode1a, None ]
     }
