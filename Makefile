@@ -22,13 +22,7 @@ dbcreate:
 	-dropdb ${PROJECT}
 	createdb ${PROJECT}
 
-dbschemacreate:
-	@psql -d${PROJECT} < ./sql/schemacontrol-openarc.sql
-
-dbmigrate:
-	cat ./sql/openarc.*.sql | psql -d${PROJECT}
-
-dbinit: dbcreate dbschemacreate dbmigrate
+dbinit: dbcreate
 
 dbhardinit: dbmsinit dbinit
 
