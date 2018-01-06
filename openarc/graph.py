@@ -558,7 +558,7 @@ class OAG_RootNode(OAGraphRootNode):
         remote_oag =\
             OAG_RpcDiscoverable({
                 'rpcinfname' : self.infname
-            }, 'by_rpcinfname_idx', rpc=False)
+            }, 'by_rpcinfname_idx', rpc=False, logger=self.logger)
         return self.__class__(initurl=remote_oag[0].url)
 
     @property
@@ -583,7 +583,7 @@ class OAG_RootNode(OAGraphRootNode):
             # Cleanup previous messes
             try:
                 currtime = OATime().now
-                prevrpcs = OAG_RpcDiscoverable([self.infname], 'by_rpcinfname_idx')
+                prevrpcs = OAG_RpcDiscoverable([self.infname], 'by_rpcinfname_idx', logger=self.logger)
                 number_active = 0
                 for rpc in prevrpcs:
                     delta = currtime - rpc.heartbeat
@@ -636,12 +636,13 @@ class OAG_RootNode(OAGraphRootNode):
         with OADao(self.dbcontext, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that dbcontext schema exists
-                self.SQLexec(cur, self.SQL['admin']['schema'], parms=[self.dbcontext])
+                self.SQLexec(cur, self.SQL['admin']['schema'])
                 check = cur.fetchall()
                 if len(check)==0:
                     if self.logger.SQL:
                         print "Creating missing schema [%s]" % self.dbcontext
                     self.SQLexec(cur, self.SQL['admin']['mkschema'])
+                    dao.commit()
 
                 # Check for presence of table
                 try:
@@ -843,7 +844,7 @@ class OAG_RootNode(OAGraphRootNode):
               "schema"   : self.SQLpp("""
                   SELECT 1
                     FROM information_schema.schemata
-                   WHERE schema_name=%s"""),
+                   WHERE schema_name='{0}'"""),
               "table"    : self.SQLpp("""
                   SELECT *
                     FROM {0}.{1}
