@@ -180,7 +180,10 @@ class OAGRPC_RTR_Requests(OAGRPC):
             print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
 
         # Selectively clear cache
-        tmpoagcache =  {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag != args['stream']}
+        # - filter out all non-dbstream items
+        tmpoagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag in self._oag.dbstreams.keys()}
+        # - filter out invalidated downstream node
+        tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != args['stream']}
 
         # Reset fget
         for stream, streaminfo in self._oag._cframe.items():

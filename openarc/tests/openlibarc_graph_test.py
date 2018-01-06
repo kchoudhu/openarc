@@ -1323,6 +1323,54 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             gevent.joinall(glets)
             gevent.sleep(5)
 
+    def test_nondb_oagprop_behavior(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger)
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a1a =\
+            OAG_AutoNode1a(initprms={
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            }, logger=logger)
+
+        a4 =\
+            OAG_AutoNode4(initprms={
+                'subnode1' : a1a
+            }, logger=logger)
+
+        # deriv prop is calculated cleanly
+        self.assertEqual(a4.cacheable_deriv_prop, 10)
+        # cache state
+        self.assertEqual(a4._oagcache['subnode1'], a1a)
+        self.assertEqual(a4._oagcache['cacheable_deriv_prop'], 10)
+
+        a3a.field7 = 99
+
+        with self.assertRaises(KeyError):
+            a4._oagcache['subnode1']
+        with self.assertRaises(KeyError):
+            a4._oagcache['scacheable_deriv_propubnode1']
+
+        self.assertEqual(a4.cacheable_deriv_prop, 101)
+        self.assertEqual(a4._oagcache['subnode1'], a1a)
+        self.assertEqual(a4._oagcache['cacheable_deriv_prop'], 101)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1498,3 +1546,7 @@ class OAG_AutoNode4(OAG_RootNode):
     def dbstreams(cls): return {
         'subnode1' : [ OAG_AutoNode1a, None ]
     }
+
+    @oagprop
+    def cacheable_deriv_prop(self):
+        return self.subnode1.field2 + self.subnode1.subnode1.field4 + self.subnode1.subnode2.field7
