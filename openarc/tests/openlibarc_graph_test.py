@@ -1404,8 +1404,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a3a.field7 = 22
 
-        print dir(a4)
-
         self.assertEqual(a4.invcount, 1)
 
         a3a.field8 = 'this is an updated autonode3'
