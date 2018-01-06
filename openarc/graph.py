@@ -176,6 +176,8 @@ class OAGRPC_RTR_Requests(OAGRPC):
     @OAGRPC.rpcprocfn
     def proc_invalidate(self, ret, args):
 
+        invstream = args['stream']
+
         if self._oag.logger.RPC:
             print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
 
@@ -183,7 +185,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         # - filter out all non-dbstream items
         tmpoagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag in self._oag.dbstreams.keys()}
         # - filter out invalidated downstream node
-        tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != args['stream']}
+        tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != invstream}
 
         # Reset fget
         for stream, streaminfo in self._oag._cframe.items():
@@ -195,6 +197,15 @@ class OAGRPC_RTR_Requests(OAGRPC):
         # Inform upstream
         for addr, stream in self._oag._rpcreqs.items():
             OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
+
+        # Execute any event handlers
+        try:
+            if invstream in self._oag.dbstreams.keys():
+                evhdlr = self._oag.dbstreams[invstream][2]
+                if evhdlr:
+                    getattr(self._oag, evhdlr, None)()
+        except KeyError as e:
+            pass
 
     @OAGRPC.rpcprocfn
     def proc_register(self, ret, args):
@@ -1163,12 +1174,12 @@ class OAG_RpcDiscoverable(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'rpcinfname' : [ 'text',      "" ],
-        'stripe'     : [ 'int',       0  ],
-        'url'        : [ 'text',      "" ],
-        'type'       : [ 'text',      "" ],
-        'envid'      : [ 'text',      "" ],
-        'heartbeat'  : [ 'timestamp', "" ]
+        'rpcinfname' : [ 'text',      "", None ],
+        'stripe'     : [ 'int',       0 , None ],
+        'url'        : [ 'text',      "", None ],
+        'type'       : [ 'text',      "", None ],
+        'envid'      : [ 'text',      "", None ],
+        'heartbeat'  : [ 'timestamp', "", None ],
     }
 
     def __cb_heartbeat(self):

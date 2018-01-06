@@ -1371,6 +1371,47 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4._oagcache['subnode1'], a1a)
         self.assertEqual(a4._oagcache['cacheable_deriv_prop'], 101)
 
+    def test_invalidation_oag_handler(self):
+        logger = OALog()
+        #logger.RPC = True
+        #logger.Graph = True
+        #logger.SQL = True
+
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger)
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger)
+
+        a1a =\
+            OAG_AutoNode1a(initprms={
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            }, logger=logger)
+
+        a4 =\
+            OAG_AutoNode4(initprms={
+                'subnode1' : a1a
+            }, logger=logger)
+
+        a3a.field7 = 22
+
+        print dir(a4)
+
+        self.assertEqual(a4.invcount, 1)
+
+        a3a.field8 = 'this is an updated autonode3'
+
+        self.assertEqual(a4.invcount, 2)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1476,10 +1517,10 @@ class OAG_AutoNode1a(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int',         0 ],
-        'field3'   : [ 'int',         0 ],
-        'subnode1' : [ OAG_AutoNode2, None ],
-        'subnode2' : [ OAG_AutoNode3, None ]
+        'field2'   : [ 'int',         0,    None ],
+        'field3'   : [ 'int',         0,    None ],
+        'subnode1' : [ OAG_AutoNode2, None, None ],
+        'subnode2' : [ OAG_AutoNode3, None, None ],
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
@@ -1491,10 +1532,10 @@ class OAG_AutoNode1b(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field2'   : [ 'int',         0 ],
-        'field3'   : [ 'int',         0 ],
-        'subnode1' : [ OAG_AutoNode2, None],
-        'subnode2' : [ OAG_AutoNode3, None],
+        'field2'   : [ 'int',         0,    None ],
+        'field3'   : [ 'int',         0,    None ],
+        'subnode1' : [ OAG_AutoNode2, None, None ],
+        'subnode2' : [ OAG_AutoNode3, None, None ],
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -1506,8 +1547,8 @@ class OAG_AutoNode2(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field4'   : [ 'int',         0 ],
-        'field5'   : [ 'varchar(50)', 0 ],
+        'field4'   : [ 'int',         0, None ],
+        'field5'   : [ 'varchar(50)', 0, None ],
     }
 
     @property
@@ -1531,8 +1572,8 @@ class OAG_AutoNode3(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'field7'   : [ 'int',         0 ],
-        'field8'   : [ 'varchar(50)', 0 ],
+        'field7'   : [ 'int',         0, None ],
+        'field8'   : [ 'varchar(50)', 0, None ],
     }
 
 class OAG_AutoNode4(OAG_RootNode):
@@ -1544,9 +1585,13 @@ class OAG_AutoNode4(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'subnode1' : [ OAG_AutoNode1a, None ]
+        'subnode1' : [ OAG_AutoNode1a, None, 'ev_test_handler' ],
     }
 
     @oagprop
     def cacheable_deriv_prop(self):
         return self.subnode1.field2 + self.subnode1.subnode1.field4 + self.subnode1.subnode2.field7
+
+    invcount = 0
+    def ev_test_handler(self):
+        self.invcount += 1
