@@ -687,8 +687,16 @@ class OAG_RootNode(OAGraphRootNode):
 
                 for idx, idxinfo in self.dbindices.items():
                     col_sql     = ','.join(map(lambda x: self.db_oag_mapping[x], idxinfo[0]))
-                    unique_sql  = 'UNIQUE' if idxinfo[1] else str()
-                    partial_sql = 'WHERE %s' % idxinfo[2] if idxinfo[2] else str()
+
+                    unique_sql  = str()
+                    if idxinfo[1]:
+                        unique_sql = 'UNIQUE'
+
+                    partial_sql = str()
+                    if idxinfo[2]:
+                        partial_sql =\
+                            'WHERE %s' % ' AND '.join('%s=%s' % (self.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
+
                     exec_sql    = self.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
                     self.SQLexec(cur, exec_sql)
 

@@ -1510,7 +1510,7 @@ class OAG_AutoNode1a(OAG_RootNode):
     @staticproperty
     def dbindices(cls) : return {
         'a3_idx' : [['field2', 'field3'],   False, None],
-        'a5_idx' : [['field3', 'subnode2'], False, None]
+        'a5_idx' : [['field3', 'subnode2'], False, {'subnode2' : 1}],
     }
 
     @staticproperty
