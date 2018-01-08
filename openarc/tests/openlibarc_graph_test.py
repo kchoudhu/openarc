@@ -451,26 +451,42 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def test_autonode_create_with_properties(self):
         (a1, a2, a3) = self.__generate_autonode_system()
 
-        a1 = OAG_AutoNode1a()
-        for oagkey in a1.dbstreams.keys():
-            self.assertEqual(getattr(a1, oagkey, ""), None)
+        a1a = OAG_AutoNode1a()
+        for oagkey in a1a.dbstreams.keys():
+            self.assertEqual(getattr(a1a, oagkey, ""), None)
 
-        a1.field2 = 3
-        a1.field3 = 3
-        a1.subnode1 = a2
+        # non-oag instream marked None is missing, should not throw
+        a1a.field2   = 3
+        ### a1a.field3 is marked None, should not throw
+        a1a.subnode1 = a2
+        a1a.subnode2 = a3
+
+        a1a.create().next()
+
+        a1a_chk = OAG_AutoNode1a((a1a.id,))
+        self.__check_autonode_equivalence(a1a, next(a1a_chk))
+
+        # oag dbstream missing, should throw
+        a1b = OAG_AutoNode1a()
+
+        a1b.field2 = 3
+        a1b.field3 = 34
+        ### a1b.subnode1 is missing
+        a1b.subnode2 = a3
 
         with self.assertRaises(OAGraphIntegrityError):
-            a1.create()
+            a1b.create()
 
-        a1.subnode2 = a3
-        a1.create()
+        # non-oag instream with default value is missing, should throw
+        a1c = OAG_AutoNode1a()
 
-        self.assertEqual(a1.subnode1, a2)
-        self.assertEqual(a1.subnode2, a3)
+        ###a1c.field2 = 3
+        a1c.field3 = 34
+        a1c.subnode1 = a2
+        a1c.subnode2 = a3
 
-        next(a1)
-        a1_chk = next(OAG_AutoNode1a((a1.id,)))
-        self.__check_autonode_equivalence(a1, a1_chk)
+        with self.assertRaises(OAGraphIntegrityError):
+            a1c.create()
 
     def test_autonode_update_with_userprms(self):
         (a1,   a2,   a3)   = self.__generate_autonode_system()
@@ -1516,7 +1532,7 @@ class OAG_AutoNode1a(OAG_RootNode):
     @staticproperty
     def dbstreams(cls): return {
         'field2'   : [ 'int',         0,    None ],
-        'field3'   : [ 'int',         0,    None ],
+        'field3'   : [ 'int',         None, None ],
         'subnode1' : [ OAG_AutoNode2, None, None ],
         'subnode2' : [ OAG_AutoNode3, None, None ],
     }

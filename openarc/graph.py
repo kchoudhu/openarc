@@ -679,7 +679,9 @@ class OAG_RootNode(OAGraphRootNode):
                                                 subnode.dbtable,
                                                 subnode.dbpkname)
                             else:
-                                add_clause = "ADD COLUMN %s %s NOT NULL" % (col, self.dbstreams[col][0])
+                                add_clause = "ADD COLUMN %s %s" % (col, self.dbstreams[col][0])
+                                if self.dbstreams[col][1] is not None:
+                                    add_clause = "%s NOT NULL" % add_clause
                             add_col_clauses.append(add_clause)
 
                     addcol_sql = self.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
@@ -1079,7 +1081,7 @@ class OAG_RootNode(OAGraphRootNode):
 
     def _set_cframe_from_attrs(self, attrs, fullhouse=False):
         cframe_tmp = {}
-        missing_streams = []
+        raw_missing_streams = []
 
         all_streams = self.dbstreams.keys()
         if len(self._cframe) > 0:
@@ -1096,7 +1098,7 @@ class OAG_RootNode(OAGraphRootNode):
 
             # Is a value missing for this stream?
             if cfval is None:
-                missing_streams.append(oagkey)
+                raw_missing_streams.append(oagkey)
                 continue
 
             # Ok, actualy set cframe
@@ -1111,6 +1113,13 @@ class OAG_RootNode(OAGraphRootNode):
             cframe_tmp[cfkey] = cfval
 
         if fullhouse:
+            missing_streams = []
+            for rms in raw_missing_streams:
+                if self.is_oagnode(rms):
+                    missing_streams.append(rms)
+                else:
+                    if self.dbstreams[rms][1] is not None:
+                        missing_streams.append(rms)
             if len(missing_streams)>0:
                 raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
 
