@@ -425,9 +425,11 @@ class OAGraphRootNode(object):
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, update_sql, update_values)
+                    self._refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._extcur, update_sql, update_values)
+            self._refresh_from_cursor(self._extcur)
 
         return self
 
