@@ -882,7 +882,10 @@ class OAG_RootNode(OAGraphRootNode):
                     FROM {0}.{1}
                    WHERE %s
                 ORDER BY {2}""").format(self.dbcontext, self.dbtable, self.dbpkname)
-            default_sql['read']['by_'+index] = index_sql % ' AND '.join(["{0}=%s".format(f) for f in idxinfo[0]])
+            where_clauses = []
+            for f in idxinfo[0]:
+                where_clauses.append("{0}=%s".format(self.db_oag_mapping[f] if self.is_oagnode(f) else f))
+            default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
 
         # Add in user defined SQL
         for action, sqlinfo in self.sql_local.items():
