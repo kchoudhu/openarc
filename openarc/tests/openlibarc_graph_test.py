@@ -242,8 +242,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(oa.field2, oa_chk.field2)
         self.assertEqual(oa.field3, oa_chk.field3)
 
-    def test_data_retrieval_with_oag(self, logger=OALog())
-
     def test_mutltiquery_node_retrieval(self):
         """Mutliple queries can be used to retrieve data for graph node"""
         with self.dbconn.cursor() as setupcur:
