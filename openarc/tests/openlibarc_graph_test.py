@@ -227,6 +227,23 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             with self.assertRaises(OAGraphIntegrityError):
                 oa = OAG_UniqNode((2,), extcur=setupcur)
 
+    def test_data_retrieval_no_tuple(self, logger=OALog()):
+        """Graph retrieval succeeds with no tuple"""
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            self.dbconn.commit()
+
+        oa = OAG_UniqNode().create({
+                'field2' : 485,
+                'field3' : 486
+             })
+        oa_chk = OAG_UniqNode(485)
+
+        self.assertEqual(oa.field2, oa_chk.field2)
+        self.assertEqual(oa.field3, oa_chk.field3)
+
+    def test_data_retrieval_with_oag(self, logger=OALog())
+
     def test_mutltiquery_node_retrieval(self):
         """Mutliple queries can be used to retrieve data for graph node"""
         with self.dbconn.cursor() as setupcur:

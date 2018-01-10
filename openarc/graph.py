@@ -458,6 +458,8 @@ class OAGraphRootNode(object):
         return self
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
+        if clauseprms:
+            clauseprms = clauseprms if type(clauseprms).__name__ in ('list', 'tuple') else [clauseprms]
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
