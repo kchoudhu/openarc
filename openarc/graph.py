@@ -294,14 +294,16 @@ class OAGraphRootNode(object):
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, insert_sql, vals)
-                    index_val = cur.fetchall()
-                    self._clauseprms = index_val[0].values()
+                    if self._indexparm == 'id':
+                        index_val = cur.fetchall()
+                        self._clauseprms = index_val[0].values()
                     self._refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._extcur, insert_sql, vals)
-            index_val = self._extcur.fetchall()
-            self._clauseprms = index_val[0].values()
+            if self._indexparm == 'id':
+                index_val = self._extcur.fetchall()
+                self._clauseprms = index_val[0].values()
             self._refresh_from_cursor(self._extcur)
 
         # Refresh to set iteridx
@@ -397,6 +399,15 @@ class OAGraphRootNode(object):
         self._rawdata_window = self._rawdata
         self.__iteridx = 0
         self._set_attrs_from_cframe()
+        return self
+
+    def reset(self):
+        self._rawdata        = None
+        self._rawdata_window = None
+        self._oagcache       = {}
+        self._cframe         = {}
+        self._fkframe        = {}
+
         return self
 
     @property
