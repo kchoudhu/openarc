@@ -227,21 +227,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             with self.assertRaises(OAGraphIntegrityError):
                 oa = OAG_UniqNode((2,), extcur=setupcur)
 
-    def test_data_retrieval_no_tuple(self, logger=OALog()):
-        """Graph retrieval succeeds with no tuple"""
-        with self.dbconn.cursor() as setupcur:
-            setupcur.execute(self.SQL.create_sample_table)
-            self.dbconn.commit()
-
-        oa = OAG_UniqNode().create({
-                'field2' : 485,
-                'field3' : 486
-             })
-        oa_chk = OAG_UniqNode(485)
-
-        self.assertEqual(oa.field2, oa_chk.field2)
-        self.assertEqual(oa.field3, oa_chk.field3)
-
     def test_mutltiquery_node_retrieval(self):
         """Mutliple queries can be used to retrieve data for graph node"""
         with self.dbconn.cursor() as setupcur:
@@ -395,6 +380,22 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         node_cust_multi.field3 = 'i am a very fake value'
         infname2 = node_cust_multi.infname
         self.assertEqual(infname1, infname2)
+
+    def test_autonode_retrieval_styles(self, logger=OALog()):
+        """Graph retrieval succeeds with no tuple"""
+        (a1, a2, a3) = self.__generate_autonode_system()
+
+        # Retrieve with subnode
+        a1_chk_sn = OAG_AutoNode1a(a1[0])
+        self.__check_autonode_equivalence(a1[0], a1_chk_sn[0])
+
+        # Retrieve with list
+        a1_chk_list = OAG_AutoNode1a((a1[0],))
+        self.__check_autonode_equivalence(a1[0], a1_chk_list[0])
+
+        # Retreive with str
+        a1_chk_str = OAG_AutoNode1a(a1[0].id)
+        self.__check_autonode_equivalence(a1[0], a1_chk_str[0])
 
     def test_autonode_create_inmemory_with_userprms(self):
         a2 =\

@@ -458,8 +458,6 @@ class OAGraphRootNode(object):
         return self
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
-        if clauseprms:
-            clauseprms = clauseprms if type(clauseprms).__name__ in ('list', 'tuple') else [clauseprms]
         self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
         self.init_state_dbschema()
         self.init_state_oag()
@@ -960,10 +958,15 @@ class OAG_RootNode(OAGraphRootNode):
                  heartbeat=True):
 
         # Alphabetize
-        if type(clauseprms).__name__=='dict':
-            tmpcprms = clauseprms.keys()
-            tmpcprms.sort()
-            clauseprms = [clauseprms[prm] for prm in tmpcprms]
+        if clauseprms:
+            if type(clauseprms).__name__ in ['dict']:
+                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
+            elif type(clauseprms).__name__ in ['list', 'tuple']:
+                rawprms = clauseprms
+            else:
+                rawprms = [clauseprms]
+
+            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
 
         self._proxy_mode     = False
 
