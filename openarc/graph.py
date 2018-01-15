@@ -85,14 +85,14 @@ class OAGRPC(object):
                     toaddr = addr
                 else:
                     toaddr = target.id
-                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self.id, payload, toaddr)
+                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpcrtr.id, payload, toaddr)
 
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
             rpcret = msgpack.loads(reply)
             if self._oag.logger.RPC:
-                print "[%s:req] Received reply [%s]" % (self.id, rpcret)
+                print "[%s:req] Received reply [%s]" % (self._oag.rpcrtr.id, rpcret)
                 print "<======== "
 
             if rpcret['status'] != 'OK':
@@ -339,6 +339,7 @@ class OAGraphRootNode(object):
         self._fkframe        = {}
         self._rawdata        = None
         self._rawdata_window = None
+        self._rawdata_window_index = 0
         self._oagcache       = {}
         self._clauseprms     = clauseprms
         self._indexparm      = indexprm
@@ -442,6 +443,9 @@ class OAGraphRootNode(object):
             self.SQLexec(self._extcur, update_sql, update_values)
             self._refresh_from_cursor(self._extcur)
 
+        if not self.is_unique:
+            self[self._rawdata_window_index]
+
         return self
 
     @property
@@ -455,13 +459,16 @@ class OAGraphRootNode(object):
         cur.execute(query, parms)
 
     def __getitem__(self, indexinfo):
+        self._rawdata_window_index = indexinfo
+
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
         self._oagcache = {}
-        if type(indexinfo)==int:
-            self._cframe = self._rawdata_window[indexinfo]
-        elif type(indexinfo)==slice:
-            self._rawdata_window = self._rawdata[indexinfo]
+        if type(self._rawdata_window_index)==int:
+            self._rawdata_window = self._rawdata
+            self._cframe = self._rawdata_window[self._rawdata_window_index]
+        elif type(self._rawdata_window_index)==slice:
+            self._rawdata_window = self._rawdata[self._rawdata_window_index]
             self._cframe = self._rawdata_window[0]
 
         self._set_attrs_from_cframe()
@@ -491,7 +498,6 @@ class OAGraphRootNode(object):
         elif type(self.SQL).__name__ == "dict":
             self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
         self._rawdata = cur.fetchall()
-        self._rawdata_window = self._rawdata
 
     def _set_attrs_from_cframe(self):
         for k, v in self._cframe.items():
@@ -778,6 +784,8 @@ class OAG_RootNode(OAGraphRootNode):
                 if newval:
                     # Update oagcache
                     self._oagcache[stream] = newval
+                    # Update the oagprop
+                    self._set_oagprop(stream, newval.id, streamform='oag')
                     # Regenerate connections to surrounding nodes
                     if currval is None:
                         if self.logger.RPC:
@@ -991,6 +999,7 @@ class OAG_RootNode(OAGraphRootNode):
         self._fkframe        = {}
         self._rawdata        = None
         self._rawdata_window = None
+        self._rawdata_window_index = 0
         self._oagcache       = {}
         self._clauseprms     = clauseprms
         self._indexparm      = indexprm
@@ -1167,14 +1176,16 @@ class OAG_RootNode(OAGraphRootNode):
 
             # oagprop: actually set it
             def oagpropfn(obj,
-                     cls=self.dbstreams[stream][0],
-                     clauseprms=[cfval],
-                     indexprm=indexprm,
-                     logger=self.logger,
-                     currattr=currattr):
+                          cls=self.dbstreams[stream][0],
+                          clauseprms=[cfval],
+                          indexprm=indexprm,
+                          logger=self.logger,
+                          currattr=currattr):
                 # Do not instantiate objects unnecessarily
                 if currattr:
                     try:
+                        if currattr == clauseprms[0]:
+                            return currattr
                         if currattr.id == clauseprms[0]:
                             return currattr
                     except KeyError:

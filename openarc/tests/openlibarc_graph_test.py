@@ -1442,6 +1442,64 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a4.invcount, 2)
 
+    def test_multinode_indexing_on_update(self, logger=OALog()):
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger).create()
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger).create()
+
+        a3b =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3 beta'
+            }, logger=logger).create()
+
+
+        for i in xrange(10):
+            a1a =\
+                OAG_AutoNode1a(logger=logger).create({
+                    'field2'   : 1,
+                    'field3'   : i,
+                    'subnode1' : a2,
+                    'subnode2' : a3a
+                })
+
+        a1a_chk = OAG_AutoNode1a(1, 'by_a2_idx')[5]
+
+        self.assertEqual(a1a_chk.field3, 5)
+
+        x = a1a_chk[5]
+        x.field3 = 43
+        x.update()
+
+        self.assertEqual(a1a_chk.field3, 43)
+
+        a1a_chk2 = OAG_AutoNode1a(1, 'by_a2_idx')[5]
+
+        self.assertEqual(a1a_chk2.field3, 43)
+
+        y = a1a_chk2[5]
+
+        y.update({
+            'field3'   : 96,
+            'subnode2' : a3b
+        })
+
+        self.assertEqual(y.field3, 96)
+        self.assertEqual(y.subnode2, a3b)
+
+        a1a_chk3 = OAG_AutoNode1a(1, 'by_a2_idx')[5]
+
+        self.assertEqual(a1a_chk3.field3, 96)
+        self.__check_autonode_equivalence(a3b, a1a_chk3.subnode2)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1541,6 +1599,7 @@ class OAG_AutoNode1a(OAG_RootNode):
 
     @staticproperty
     def dbindices(cls) : return {
+        'a2_idx' : [['field2'],             False, None],
         'a3_idx' : [['field2', 'field3'],   False, None],
         'a5_idx' : [['field3', 'subnode2'], False, {'subnode2' : 1}],
     }
