@@ -1397,7 +1397,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         with self.assertRaises(KeyError):
             a4._oagcache['subnode1']
         with self.assertRaises(KeyError):
-            a4._oagcache['scacheable_deriv_propubnode1']
+            a4._oagcache['cacheable_deriv_prop']
 
         self.assertEqual(a4.cacheable_deriv_prop, 101)
         self.assertEqual(a4._oagcache['subnode1'], a1a)
