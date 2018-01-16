@@ -333,7 +333,7 @@ class OAGraphRootNode(object):
         """Override in deriving classes as necessary"""
         return [k for k, v in self._cframe.items()]
 
-    def init_state_cls(self, clauseprms, indexprm, initprms, extcur, logger):
+    def init_state_cls(self, extcur, logger):
 
         self._cframe         = {}
         self._fkframe        = {}
@@ -341,19 +341,30 @@ class OAGraphRootNode(object):
         self._rawdata_window = None
         self._rawdata_window_index = 0
         self._oagcache       = {}
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexprm
         self._extcur         = extcur
         self._logger         = logger
-
-        attrs = self._set_attrs_from_userprms(initprms)
-        self._set_cframe_from_attrs(attrs)
 
     def init_state_dbschema(self):
 
         return
 
-    def init_state_oag(self):
+    def init_state_oag(self, clauseprms, indexprm, initprms={}):
+        attrs = self._set_attrs_from_userprms(initprms)
+        self._set_cframe_from_attrs(attrs)
+
+        if clauseprms:
+            if type(clauseprms).__name__ in ['dict']:
+                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
+            elif type(clauseprms).__name__ in ['list', 'tuple']:
+                rawprms = clauseprms
+            else:
+                rawprms = [clauseprms]
+
+            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
+
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexprm
+
         if self._clauseprms is not None:
             self.refresh(gotodb=True)
 
@@ -476,9 +487,9 @@ class OAGraphRootNode(object):
         return self
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
-        self.init_state_cls(clauseprms, indexprm, initprms, extcur, logger)
+        self.init_state_cls(extcur, logger)
         self.init_state_dbschema()
-        self.init_state_oag()
+        self.init_state_oag(clauseprms, indexprm, initprms)
 
     def __iter__(self):
         if self.is_unique:
@@ -980,16 +991,6 @@ class OAG_RootNode(OAGraphRootNode):
                  heartbeat=True):
 
         # Alphabetize
-        if clauseprms:
-            if type(clauseprms).__name__ in ['dict']:
-                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
-            elif type(clauseprms).__name__ in ['list', 'tuple']:
-                rawprms = clauseprms
-            else:
-                rawprms = [clauseprms]
-
-            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
-
         self._proxy_mode     = False
 
         self._rpc_init_done  = False
@@ -1001,8 +1002,6 @@ class OAG_RootNode(OAGraphRootNode):
         self._rawdata_window = None
         self._rawdata_window_index = 0
         self._oagcache       = {}
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexprm
         self._extcur         = extcur
         self._logger         = logger
         self._glets          = []
@@ -1014,11 +1013,8 @@ class OAG_RootNode(OAGraphRootNode):
             self._proxy_url  = initurl
         else:
             self._reset_oagprops()
-            attrs = self._set_attrs_from_userprms(initprms)
-            self._set_cframe_from_attrs(attrs)
-
             self.init_state_dbschema()
-            self.init_state_oag()
+            self.init_state_oag(clauseprms, indexprm, initprms)
 
             if rpc:
                 self.init_state_rpc()
