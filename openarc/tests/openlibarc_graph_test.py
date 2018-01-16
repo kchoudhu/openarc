@@ -1500,6 +1500,51 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a_chk3.field3, 96)
         self.__check_autonode_equivalence(a3b, a1a_chk3.subnode2)
 
+    def test_autonode_null_subnode(self, logger=OALog()):
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger).create()
+
+        a3 =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger).create()
+
+        # ok
+        a5a =\
+            OAG_AutoNode5(initprms={
+                'subnode1' : a2,
+                'subnode2' : a3
+            }, logger=logger).create()
+
+        self.__check_autonode_equivalence(a5a.subnode1, a2)
+        self.__check_autonode_equivalence(a5a.subnode2, a3)
+
+        # ok
+        a5b =\
+            OAG_AutoNode5(initprms={
+                'subnode1' : a2,
+            }, logger=logger).create()
+
+        self.__check_autonode_equivalence(a5b.subnode1, a2)
+        self.assertEqual(a5b.subnode2, None)
+        a5b_chk = OAG_AutoNode5(a5b.id)
+        self.assertEqual(a5b_chk.subnode2, None)
+
+        a5c =\
+            OAG_AutoNode5(initprms={
+                'subnode1' : a2,
+                'subnode2' : None
+            }, logger=logger).create()
+
+        self.__check_autonode_equivalence(a5c.subnode1, a2)
+        self.assertEqual(a5c.subnode2, None)
+        a5c_chk = OAG_AutoNode5(a5c.id)
+        self.assertEqual(a5c_chk.subnode2, None)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1608,8 +1653,8 @@ class OAG_AutoNode1a(OAG_RootNode):
     def dbstreams(cls): return {
         'field2'   : [ 'int',         0,    None ],
         'field3'   : [ 'int',         None, None ],
-        'subnode1' : [ OAG_AutoNode2, None, None ],
-        'subnode2' : [ OAG_AutoNode3, None, None ],
+        'subnode1' : [ OAG_AutoNode2, True, None ],
+        'subnode2' : [ OAG_AutoNode3, True, None ],
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
@@ -1623,8 +1668,8 @@ class OAG_AutoNode1b(OAG_RootNode):
     def dbstreams(cls): return {
         'field2'   : [ 'int',         0,    None ],
         'field3'   : [ 'int',         0,    None ],
-        'subnode1' : [ OAG_AutoNode2, None, None ],
-        'subnode2' : [ OAG_AutoNode3, None, None ],
+        'subnode1' : [ OAG_AutoNode2, True, None ],
+        'subnode2' : [ OAG_AutoNode3, True, None ],
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -1674,7 +1719,7 @@ class OAG_AutoNode4(OAG_RootNode):
 
     @staticproperty
     def dbstreams(cls): return {
-        'subnode1' : [ OAG_AutoNode1a, None, 'ev_test_handler' ],
+        'subnode1' : [ OAG_AutoNode1a, True, 'ev_test_handler' ],
     }
 
     @oagprop
@@ -1684,3 +1729,17 @@ class OAG_AutoNode4(OAG_RootNode):
     invcount = 0
     def ev_test_handler(self):
         self.invcount += 1
+
+
+class OAG_AutoNode5(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'subnode1' : [ OAG_AutoNode2, True,  None ],
+        'subnode2' : [ OAG_AutoNode3, False, None ]
+    }

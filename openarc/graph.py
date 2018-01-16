@@ -703,8 +703,9 @@ class OAG_RootNode(OAGraphRootNode):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
                                 subnode = self.dbstreams[col][0](logger=self.logger, rpc=False)
-                                add_clause = "ADD COLUMN %s int NOT NULL references %s.%s(%s)"\
+                                add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
+                                               'NOT NULL' if self.dbstreams[col][1] else str(),
                                                 subnode.dbcontext,
                                                 subnode.dbtable,
                                                 subnode.dbpkname)
@@ -1114,12 +1115,20 @@ class OAG_RootNode(OAGraphRootNode):
             all_streams.append(self.dbpkname)
 
         for oagkey in all_streams:
-            cfkey = oagkey
-            cfval = getattr(self, oagkey, None)
 
             # Special handling for indices
-            if cfkey[0] == '_':
-                cframe_tmp[cfkey] = cfval
+            if oagkey[0] == '_':
+                cframe_tmp[oagkey] = getattr(self, oagkey, None)
+                continue
+
+            cfkey = oagkey
+            if self.is_oagnode(oagkey):
+                cfkey = self.db_oag_mapping[oagkey]
+            cfval = getattr(self, oagkey, None)
+
+            # Special handling for nullable items
+            if self.dbstreams[oagkey][1] is False:
+                cframe_tmp[cfkey] = cfval.id if cfval else None
                 continue
 
             # Is a value missing for this stream?
@@ -1129,7 +1138,6 @@ class OAG_RootNode(OAGraphRootNode):
 
             # Ok, actualy set cframe
             if self.is_oagnode(oagkey):
-                cfkey = self.db_oag_mapping[oagkey]
                 # this only works if we're in dbpersist mode
                 # if there's a key error, we're working in-memory
                 try:
@@ -1166,13 +1174,21 @@ class OAG_RootNode(OAGraphRootNode):
         if self.is_oagnode(stream):
 
             # oagprop: update cache if necessary
-            currattr = getattr(self, stream, None)
+            try:
+                currattr = getattr(self, stream, None)
+            except OAGraphRetrieveError:
+                if self.dbstreams[stream][1] is False:
+                    currattr = None
+                else:
+                    raise OAError("Whoa")
+
             if currattr:
                 self._oagcache[stream] = currattr
 
             # oagprop: actually set it
             def oagpropfn(obj,
-                          cls=self.dbstreams[stream][0],
+                          stream=stream,
+                          streaminfo=self.dbstreams[stream],
                           clauseprms=[cfval],
                           indexprm=indexprm,
                           logger=self.logger,
@@ -1187,8 +1203,10 @@ class OAG_RootNode(OAGraphRootNode):
                     except KeyError:
                         # We're dealing with in-memory OAGs, just return
                         return currattr
-                # All else has failed, instantiate a new object
-                return cls(clauseprms, indexprm, logger=logger)
+                elif streaminfo[1] is False:
+                    return currattr
+                else:
+                    return streaminfo[0](clauseprms, indexprm, logger=logger)
             oagpropfn.__name__ = stream
 
             setattr(self.__class__, stream, oagprop(oagpropfn))
