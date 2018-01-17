@@ -1175,7 +1175,11 @@ class OAG_RootNode(OAGraphRootNode):
 
             # oagprop: update cache if necessary
             try:
+
                 currattr = getattr(self, stream, None)
+                if currattr is None:
+                    if self.dbstreams[stream][1] is False and cfval:
+                        currattr = self.dbstreams[stream][0](cfval, indexprm, logger=self.logger)
             except OAGraphRetrieveError:
                 if self.dbstreams[stream][1] is False:
                     currattr = None

@@ -1500,7 +1500,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a_chk3.field3, 96)
         self.__check_autonode_equivalence(a3b, a1a_chk3.subnode2)
 
-    def test_autonode_null_subnode(self, logger=OALog()):
+    def test_autonode_uniq_null_subnode(self, logger=OALog()):
         a2 =\
             OAG_AutoNode2(initprms={
                 'field4' :  1,
@@ -1544,6 +1544,51 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a5c.subnode2, None)
         a5c_chk = OAG_AutoNode5(a5c.id)
         self.assertEqual(a5c_chk.subnode2, None)
+
+        a5d =\
+            OAG_AutoNode5(initprms={
+                'subnode1' : a2,
+                'subnode2' : None
+            }, logger=logger).create()
+
+        a5d.update({
+            'subnode2' : a3
+        })
+
+        a5d_chk = OAG_AutoNode5(a5d.id)
+
+        self.__check_autonode_equivalence(a5d_chk.subnode2, a3)
+
+    def test_autonode_uniq_null_subnode(self, logger=OALog()):
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger).create()
+
+        a3 =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger).create()
+
+        a6a =\
+            OAG_AutoNode6(initprms={
+                'subnode1' : a2,
+                'subnode2' : None
+            }, logger=logger).create()
+
+        self.assertEqual(a6a[-1].subnode2, None)
+
+        a6a.update({
+            'subnode2' : a3
+        })
+
+        self.assertEqual(a6a[-1].subnode2, a3)
+
+        a6a_chk = OAG_AutoNode6(a6a.id)[-1]
+        self.__check_autonode_equivalence(a6a_chk.subnode1, a2)
+        self.__check_autonode_equivalence(a6a_chk.subnode2, a3)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
@@ -1734,6 +1779,19 @@ class OAG_AutoNode4(OAG_RootNode):
 class OAG_AutoNode5(OAG_RootNode):
     @property
     def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'subnode1' : [ OAG_AutoNode2, True,  None ],
+        'subnode2' : [ OAG_AutoNode3, False, None ]
+    }
+
+class OAG_AutoNode6(OAG_RootNode):
+    @property
+    def is_unique(self): return False
 
     @property
     def dbcontext(self): return "test"
