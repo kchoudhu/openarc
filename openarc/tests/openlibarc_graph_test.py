@@ -1590,6 +1590,28 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.__check_autonode_equivalence(a6a_chk.subnode1, a2)
         self.__check_autonode_equivalence(a6a_chk.subnode2, a3)
 
+    def test_autonode_boolean_handling(self, logger=OALog()):
+        a7 =\
+            OAG_AutoNode7(initprms={
+                'field1' : True
+            }, logger=logger).create()
+
+        self.assertEqual(a7.field1, True)
+
+        a7.update({
+            'field1' : False
+        })
+
+        self.assertEqual(a7.field1, False)
+
+        a7_chk = OAG_AutoNode7(a7.id)
+        self.assertEqual(a7_chk.field1, a7.field1)
+
+        a7_null =\
+            OAG_AutoNode7(initprms={}, logger=logger).create()
+
+        self.assertEqual(a7_null.field1, None)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1801,3 +1823,17 @@ class OAG_AutoNode6(OAG_RootNode):
         'subnode1' : [ OAG_AutoNode2, True,  None ],
         'subnode2' : [ OAG_AutoNode3, False, None ]
     }
+
+class OAG_AutoNode7(OAG_RootNode):
+    @property
+    def is_unique(self): return True
+
+    @property
+    def dbcontext(self): return "test"
+
+    @staticproperty
+    def dbstreams(cls): return {
+        'subnode1' : [  OAG_AutoNode3, False,  None ],
+        'field1'   : [ 'boolean',      None,   None ],
+    }
+

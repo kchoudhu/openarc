@@ -1127,7 +1127,8 @@ class OAG_RootNode(OAGraphRootNode):
             cfval = getattr(self, oagkey, None)
 
             # Special handling for nullable items
-            if self.dbstreams[oagkey][1] is False:
+            if type(self.dbstreams[oagkey][0])!=str\
+               and self.dbstreams[oagkey][1] is False:
                 cframe_tmp[cfkey] = cfval.id if cfval else None
                 continue
 
