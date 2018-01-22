@@ -374,6 +374,8 @@ class OAGraphRootNode(object):
             if self.is_unique:
                 self._set_attrs_from_cframe_uniq()
 
+        return self
+
     @property
     def is_unique(self):
 
