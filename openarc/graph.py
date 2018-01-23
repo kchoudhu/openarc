@@ -320,6 +320,28 @@ class OAGraphRootNode(object):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
+    def filter(self, predicate):
+        if self.is_unique:
+            raise OAError("Cannot filter OAG that is marked unique")
+        self._oagcache = {}
+
+        self._rawdata_window = self._rawdata
+
+        self._rawdata_window = []
+        for i, frame in enumerate(self._rawdata):
+            self._cframe = frame
+            self._set_attrs_from_cframe()
+            if predicate(self):
+                self._rawdata_window.append(self._rawdata[i])
+
+        if len(self._rawdata_window)>0:
+            self._cframe = self._rawdata_window[0]
+        else:
+            self._rawdata_window = []
+            self._cframe = {}
+
+        self._set_attrs_from_cframe()
+
     @property
     def infname(self):
         if len(self.infname_fields)==0:
@@ -513,6 +535,12 @@ class OAGraphRootNode(object):
         self._rawdata = cur.fetchall()
 
     def _set_attrs_from_cframe(self):
+        # Clear attributes out  if _cframe is empty but _rawdata is populated
+        if len(self._cframe)==0 and len(self._rawdata)>0:
+            for k in self._rawdata[0].keys():
+                setattr(self, k, None)
+            return
+
         for k, v in self._cframe.items():
             setattr(self, k, v)
 

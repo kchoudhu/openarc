@@ -215,7 +215,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_data_retrieval_with_external_cursor(self):
         """Graph nodes can do internal queries with external cursors"""
-        with self.dbconn.cursor() as setupcur:
+        with self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
             self.dbconn.commit()
             for i in xrange(2):
@@ -627,6 +627,34 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Slicing can be "reset"
         node_multi.refresh()
         self.assertEqual(node_multi.size, 10)
+
+    def test_mulitnode_filtering(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(10):
+                setupcur.execute(self.SQL.insert_sample_row, [i, 2])
+            self.dbconn.commit()
+
+        # Can't filter unique OAGs
+        node_uniq = OAG_UniqNode((2,))
+        with self.assertRaises(OAError):
+            node_uniq.filter(lambda x: x.field2%2)
+
+        node_multi = OAG_MultiNode(2)
+
+        # Filter works as expected, and doesn't destroy underlying _rawdata
+        self.assertEqual(node_multi.size, 10)
+        node_multi.filter(lambda x: x.field2%2)
+        self.assertEqual(node_multi.size, 5)
+        node_multi.refresh()
+        self.assertEqual(node_multi.size, 10)
+
+        # Empty filter behaves rationally
+        node_multi.filter(lambda x: 1==0)
+        self.assertEqual(node_multi.size, 0)
+        self.assertEqual(node_multi.field2, None)
+        self.assertEqual(node_multi.field3, None)
+
 
     def test_oag_interconnection_with_dbpersist(self):
         logger = OALog()
