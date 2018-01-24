@@ -342,6 +342,8 @@ class OAGraphRootNode(object):
 
         self._set_attrs_from_cframe()
 
+        return self
+
     @property
     def infname(self):
         if len(self.infname_fields)==0:
