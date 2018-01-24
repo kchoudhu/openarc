@@ -591,7 +591,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a3.auto_node1a.size, 10)
         self.assertEqual(a3.auto_node1b.size, 10)
 
-    def test_multinode_indexing(self):
+    def test_multinode_indexing(self, logger=OALog()):
         with self.dbconn.cursor() as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
             for i in xrange(10):
@@ -619,16 +619,18 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Vanilla slicing works as expected
         node_multi = node_multi[2:8]
         self.assertEqual(node_multi.size, 6)
+        node_multi.refresh()
 
         # Stepped slicing works
         node_multi = node_multi[2:8:2]
         self.assertEqual(node_multi.size, 3)
+        node_multi.refresh()
 
         # Slicing can be "reset"
         node_multi.refresh()
         self.assertEqual(node_multi.size, 10)
 
-    def test_mulitnode_filtering(self):
+    def test_mulitnode_filtering(self, logger=OALog()):
         with self.dbconn.cursor() as setupcur:
             setupcur.execute(self.SQL.create_sample_table)
             for i in xrange(10):
@@ -654,7 +656,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(node_multi.size, 0)
         self.assertEqual(node_multi.field2, None)
         self.assertEqual(node_multi.field3, None)
+        node_multi.refresh()
 
+        # Filtered sets can be indexed
+        self.assertEqual(node_multi.filter(lambda x: x.field2%2)[2].field2, 5)
+        self.assertEqual(node_multi.size, 5)
+        node_multi.refresh()
+        self.assertEqual(node_multi.filter(lambda x: x.field2%2)[3:5].size, 2)
+        self.assertEqual(node_multi[0].field2, 7)
+        self.assertEqual(node_multi[1].field2, 9)
 
     def test_oag_interconnection_with_dbpersist(self):
         logger = OALog()
@@ -1199,11 +1209,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a2.auto_node1a.size, 0)
 
-    def test_alternative_index_lookup(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
-        #logger.SQL = True
+    def test_alternative_index_lookup(self, logger=OALog()):
 
         a2 =\
             OAG_AutoNode2().create({

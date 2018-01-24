@@ -501,11 +501,11 @@ class OAGraphRootNode(object):
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
         self._oagcache = {}
+
         if type(self._rawdata_window_index)==int:
-            self._rawdata_window = self._rawdata
             self._cframe = self._rawdata_window[self._rawdata_window_index]
         elif type(self._rawdata_window_index)==slice:
-            self._rawdata_window = self._rawdata[self._rawdata_window_index]
+            self._rawdata_window = self._rawdata_window[self._rawdata_window_index]
             self._cframe = self._rawdata_window[0]
 
         self._set_attrs_from_cframe()
@@ -535,6 +535,7 @@ class OAGraphRootNode(object):
         elif type(self.SQL).__name__ == "dict":
             self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
         self._rawdata = cur.fetchall()
+        self._rawdata_window = self._rawdata
 
     def _set_attrs_from_cframe(self):
         # Clear attributes out  if _cframe is empty but _rawdata is populated
