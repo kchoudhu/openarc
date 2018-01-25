@@ -278,6 +278,9 @@ class OAGraphRootNode(object):
 
     def create(self, initprms={}):
 
+        self.init_state_dbschema()
+
+
         attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
         self._set_cframe_from_attrs(attrs, fullhouse=True)
 
@@ -514,7 +517,6 @@ class OAGraphRootNode(object):
 
     def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
         self.init_state_cls(extcur, logger)
-        self.init_state_dbschema()
         self.init_state_oag(clauseprms, indexprm, initprms)
 
     def __iter__(self):
@@ -530,12 +532,16 @@ class OAGraphRootNode(object):
             return self.next()
 
     def _refresh_from_cursor(self, cur):
-        if type(self.SQL).__name__ == "str":
-            self.SQLexec(cur, self.SQL, self._clauseprms)
-        elif type(self.SQL).__name__ == "dict":
-            self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
-        self._rawdata = cur.fetchall()
-        self._rawdata_window = self._rawdata
+        try:
+            if type(self.SQL).__name__ == "str":
+                self.SQLexec(cur, self.SQL, self._clauseprms)
+            elif type(self.SQL).__name__ == "dict":
+                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
+
+            self._rawdata = cur.fetchall()
+            self._rawdata_window = self._rawdata
+        except psycopg2.ProgrammingError:
+            raise OAGraphRetrieveError("Missing database table")
 
     def _set_attrs_from_cframe(self):
         # Clear attributes out  if _cframe is empty but _rawdata is populated
@@ -735,7 +741,7 @@ class OAG_RootNode(OAGraphRootNode):
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = self.dbstreams[col][0](logger=self.logger, rpc=False)
+                                subnode = self.dbstreams[col][0](logger=self.logger, rpc=False).init_state_dbschema()
                                 add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
                                                'NOT NULL' if self.dbstreams[col][1] else str(),
@@ -767,6 +773,7 @@ class OAG_RootNode(OAGraphRootNode):
                     self.SQLexec(cur, exec_sql)
 
             dao.commit()
+            return self
 
     def init_state_rpc(self):
         # Intiailize reqs
@@ -1047,7 +1054,6 @@ class OAG_RootNode(OAGraphRootNode):
             self._proxy_url  = initurl
         else:
             self._reset_oagprops()
-            self.init_state_dbschema()
             self.init_state_oag(clauseprms, indexprm, initprms)
 
             if rpc:
