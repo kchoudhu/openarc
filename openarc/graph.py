@@ -433,6 +433,7 @@ class OAGraphRootNode(object):
                                   self._rawdata_window_index
         oagcopy._cframe         = dict(self._cframe)
         oagcopy._fkframe        = list(self._fkframe)
+        oagcopy.__iteridx       = 0
 
         return oagcopy
 
