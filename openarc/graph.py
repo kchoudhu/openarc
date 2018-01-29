@@ -1232,6 +1232,8 @@ class OAG_RootNode(OAGraphRootNode):
                 if currattr is None:
                     if self.dbstreams[stream][1] is False and cfval:
                         currattr = self.dbstreams[stream][0](cfval, indexprm, logger=self.logger)
+                        if not currattr.is_unique:
+                            currattr = currattr[-1]
             except OAGraphRetrieveError:
                 currattr = None
 
@@ -1259,7 +1261,10 @@ class OAG_RootNode(OAGraphRootNode):
                 elif streaminfo[1] is False:
                     return currattr
                 else:
-                    return streaminfo[0](clauseprms, indexprm, logger=logger)
+                    newattr = streaminfo[0](clauseprms, indexprm, logger=logger)
+                    if not newattr.is_unique:
+                        newattr = newattr[-1]
+                    return newattr
             oagpropfn.__name__ = stream
 
             setattr(self.__class__, stream, oagprop(oagpropfn))
