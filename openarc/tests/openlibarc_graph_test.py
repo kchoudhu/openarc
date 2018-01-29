@@ -1724,9 +1724,6 @@ class OAG_UniqNode(OAGraphRootNode):
 
 class OAG_MultiNode(OAGraphRootNode):
     @property
-    def is_unique(self): return False
-
-    @property
     def dbcontext(self): return "test"
 
     @oagprop
@@ -1763,9 +1760,6 @@ class OAG_MultiWithCustomInfnameList(OAG_MultiNode):
 
 class OAG_AutoNode1a(OAG_RootNode):
     @property
-    def is_unique(self): return False
-
-    @property
     def dbcontext(self): return "test"
 
     @staticproperty
@@ -1784,9 +1778,6 @@ class OAG_AutoNode1a(OAG_RootNode):
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
-    @property
-    def is_unique(self): return False
-
     @property
     def dbcontext(self): return "test"
 
@@ -1871,9 +1862,6 @@ class OAG_AutoNode5(OAG_RootNode):
     }
 
 class OAG_AutoNode6(OAG_RootNode):
-    @property
-    def is_unique(self): return False
-
     @property
     def dbcontext(self): return "test"
 

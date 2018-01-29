@@ -406,9 +406,7 @@ class OAGraphRootNode(object):
         return self
 
     @property
-    def is_unique(self):
-
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
+    def is_unique(self): return False
 
     @property
     def logger(self): return self._logger
