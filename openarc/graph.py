@@ -1233,10 +1233,7 @@ class OAG_RootNode(OAGraphRootNode):
                     if self.dbstreams[stream][1] is False and cfval:
                         currattr = self.dbstreams[stream][0](cfval, indexprm, logger=self.logger)
             except OAGraphRetrieveError:
-                if self.dbstreams[stream][1] is False:
-                    currattr = None
-                else:
-                    raise OAError("Whoa")
+                currattr = None
 
             if currattr:
                 self._oagcache[stream] = currattr
