@@ -1646,6 +1646,31 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a7_null.field1, None)
 
+    def test_autonode_cloning(self, logger=OALog()):
+        a2 =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }, logger=logger).create()
+
+        a3a =\
+            OAG_AutoNode3(initprms={
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            }, logger=logger).create()
+
+        a1a =\
+            OAG_AutoNode1a(initprms={
+                'field2'   : 1,
+                'field3'   : 2,
+                'subnode1' : a2,
+                'subnode2' : a3a
+            }, logger=logger).create()
+
+        a1a_copy = a1a.rdfcopy()
+
+        self.__check_autonode_equivalence(a1a_copy[0], a1a[0])
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

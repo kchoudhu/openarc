@@ -425,6 +425,17 @@ class OAGraphRootNode(object):
                 self.__iteridx = 0
                 raise StopIteration()
 
+    def rdfcopy(self):
+        oagcopy = self.__class__()
+        oagcopy._rawdata        = list(self._rawdata)
+        oagcopy._rawdata_window = list(self._rawdata_window)
+        oagcopy._rawdata_window_index =\
+                                  self._rawdata_window_index
+        oagcopy._cframe         = dict(self._cframe)
+        oagcopy._fkframe        = list(self._fkframe)
+
+        return oagcopy
+
     def refresh(self, gotodb=False):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
