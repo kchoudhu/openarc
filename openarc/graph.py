@@ -41,8 +41,10 @@ class oagprop(object):
         try:
             return obj._oagcache[self.fget.func_name]
         except:
-            obj._oagcache[self.fget.func_name] = self.fget(obj)
-            return obj._oagcache[self.fget.func_name]
+            oagprop = self.fget(obj)
+            if oagprop is not None:
+                obj._oagcache[self.fget.func_name] = oagprop
+            return oagprop
 
     def __set__(self, obj, value):
         pass
