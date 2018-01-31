@@ -435,7 +435,19 @@ class OAGraphRootNode(object):
         oagcopy._fkframe        = list(self._fkframe)
         oagcopy.__iteridx       = 0
 
+        oagcopy._clauseprms     = list(self._clauseprms)
+        oagcopy._indexparm      = self._indexparm
+
         return oagcopy
+
+    def rdfsort(self, key):
+
+        self._rawdata.sort(key=lambda x: x[key])
+        self._rawdata_window = self._rawdata
+        self._rawdata_window_index = None
+        self._cframe = {}
+
+        return self
 
     def refresh(self, gotodb=False):
         """Generally we want to simply reset the iterator; set gotodb=True to also
@@ -477,6 +489,8 @@ class OAGraphRootNode(object):
 
         attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
         self._set_cframe_from_attrs(attrs)
+
+        self._set_clauseprms()
 
         member_attrs  = [k for k in self._cframe if k[0] != '_']
         index_key     = [k for k in self._cframe if k[0] == '_'][0]
@@ -590,6 +604,9 @@ class OAGraphRootNode(object):
             dbstreams = keys
         for stream in dbstreams:
             self._cframe[stream] = getattr(self, stream, "")
+
+    def _set_clauseprms(self):
+        return
 
 class OAG_RootNode(OAGraphRootNode):
 
@@ -894,7 +911,6 @@ class OAG_RootNode(OAGraphRootNode):
                     FROM {0}.{1}
                    WHERE {2}=%s
                 ORDER BY {2}"""),
-
             },
             "update" : {
               "id"       : self.SQLpp("""
@@ -1210,6 +1226,25 @@ class OAG_RootNode(OAGraphRootNode):
                 raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
 
         self._cframe = cframe_tmp
+
+    def _set_clauseprms(self):
+        # Update clause params as well
+        index = self._indexparm[3:]
+        if index != str():
+            try:
+                keys = self.dbindices[index][0]
+            except KeyError:
+                keys = [index]
+
+            new_clauseprms = []
+            for i, key in enumerate(keys):
+                key = self.db_oag_mapping[key]
+                try:
+                    new_clauseprms.append(self._cframe[key])
+                except KeyError:
+                    new_clauseprms.append(self._clauseprms[i])
+
+            self._clauseprms = new_clauseprms
 
     def _set_oagprop(self, stream, cfval, indexprm='id', streamform='cframe'):
 

@@ -1847,7 +1847,6 @@ class OAG_AutoNode4(OAG_RootNode):
     def ev_test_handler(self):
         self.invcount += 1
 
-
 class OAG_AutoNode5(OAG_RootNode):
     @property
     def is_unique(self): return True
