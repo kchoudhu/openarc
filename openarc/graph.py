@@ -1127,7 +1127,6 @@ class OAG_RootNode(OAGraphRootNode):
             self._set_oagproplist(prop)
 
     def _set_attrs_from_cframe(self):
-        oag_db_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
 
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
