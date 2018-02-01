@@ -612,13 +612,15 @@ class OAG_RootNode(OAGraphRootNode):
 
     @staticproperty
     def db_oag_mapping(cls):
-        schema = {}
-        for stream, streaminfo in cls.dbstreams.items():
-            if cls.is_oagnode(stream):
-                schema[stream] = streaminfo[0].dbpkname[1:]
-            else:
-                schema[stream] = stream
-        return schema
+        if not getattr(cls, '_db_oag_mapping', None):
+            schema = {}
+            for stream, streaminfo in cls.dbstreams.items():
+                if cls.is_oagnode(stream):
+                    schema[stream] = streaminfo[0].dbpkname[1:]
+                else:
+                    schema[stream] = stream
+            setattr(cls, '_db_oag_mapping', schema)
+        return cls._db_oag_mapping
 
     @staticproperty
     def dbindices(cls): return {}
@@ -627,7 +629,10 @@ class OAG_RootNode(OAGraphRootNode):
     def dbpkname(cls): return "_%s_id" % cls.dbtable
 
     @staticproperty
-    def dbtable(cls): return inflection.underscore(cls.__name__)[4:]
+    def dbtable(cls):
+        if not getattr(cls, '_dbtable_name', None):
+            setattr(cls, '_dbtable_name', inflection.underscore(cls.__name__)[4:])
+        return cls._dbtable_name
 
     @staticproperty
     def dbstreams(cls):
