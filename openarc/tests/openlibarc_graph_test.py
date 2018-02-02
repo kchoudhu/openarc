@@ -541,24 +541,23 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a1_chk =next(OAG_AutoNode1a((a1.id,)))
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
 
-    def test_autonode_fwdoag_creation(self):
+    def test_autonode_fwdoag_creation(self, logger=OALog()):
 
         a2 =\
-            OAG_AutoNode2().create({
+            OAG_AutoNode2(logger=logger).create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
 
-
         a3 =\
-            OAG_AutoNode3().create({
+            OAG_AutoNode3(logger=logger).create({
                 'field7' :  8,
                 'field8' : 'this is an autonode3'
             })
 
         for x in xrange(0,10):
             a1a =\
-                OAG_AutoNode1a().create({
+                OAG_AutoNode1a(logger=logger).create({
                     'field2'   : x,
                     'field3'   : 10-x,
                     'subnode1' : a2,
@@ -571,20 +570,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                     'subnode1' : a2,
                     'subnode2' : a3
                 })
-
-        with self.assertRaises(AttributeError):
-            a2.auto_node1a
-        with self.assertRaises(AttributeError):
-            a2.auto_node1b
-        with self.assertRaises(AttributeError):
-            a3.auto_node1a
-        with self.assertRaises(AttributeError):
-            a3.auto_node1b
-
-
-        # refresh a2 and a3 to generate fwdoags
-        a2.refresh(gotodb=True)
-        a3.refresh(gotodb=True)
 
         self.assertEqual(a2.auto_node1a.size, 10)
         self.assertEqual(a2.auto_node1b.size, 10)
@@ -877,34 +862,31 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.__check_autonode_equivalence(a1, a1_prox)
 
-    def test_oag_remote_proxy_fwdoag_functionality(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
+    def test_oag_remote_proxy_fwdoag_functionality(self, logger=OALog()):
 
         a2 =\
-            OAG_AutoNode2().create({
+            OAG_AutoNode2(logger=logger).create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
 
 
         a3 =\
-            OAG_AutoNode3().create({
+            OAG_AutoNode3(logger=logger).create({
                 'field7' :  8,
                 'field8' : 'this is an autonode3'
             })
 
         for x in xrange(0,10):
             a1a =\
-                OAG_AutoNode1a().create({
+                OAG_AutoNode1a(logger=logger).create({
                     'field2'   : x,
                     'field3'   : 10-x,
                     'subnode1' : a2,
                     'subnode2' : a3
                 })
             a1b =\
-                OAG_AutoNode1b().create({
+                OAG_AutoNode1b(logger=logger).create({
                     'field2'   : 10-x,
                     'field3'   : x,
                     'subnode1' : a2,
@@ -914,28 +896,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a2_proxy = OAG_AutoNode2(initurl=a2.oagurl, logger=logger)
         a3_proxy = OAG_AutoNode3(initurl=a3.oagurl, logger=logger)
 
-        with self.assertRaises(AttributeError):
-            a2_proxy.auto_node1a
-        with self.assertRaises(AttributeError):
-            a2_proxy.auto_node1b
-        with self.assertRaises(AttributeError):
-            a3_proxy.auto_node1a
-        with self.assertRaises(AttributeError):
-            a3_proxy.auto_node1b
-
-        # refresh a2 and a3 to generate fwdoags
-        a2.refresh(gotodb=True)
-        a3.refresh(gotodb=True)
-
         self.assertEqual(a2_proxy.auto_node1a.size, 10)
         self.assertEqual(a2_proxy.auto_node1b.size, 10)
         self.assertEqual(a3_proxy.auto_node1a.size, 10)
         self.assertEqual(a3_proxy.auto_node1b.size, 10)
 
-    def test_oag_remote_proxy_invalidation_with_dbpersist(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
+    def test_oag_remote_proxy_invalidation_with_dbpersist(self, logger=OALog()):
 
         a2 =\
             OAG_AutoNode2(logger=logger).create({
@@ -1169,12 +1135,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         with self.assertRaises(OAGraphRetrieveError):
             oa_chk = OAG_AutoNode2((a2_id,))
 
-    def test_multinode_deletion(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
-        #logger.SQL = True
-
+    def test_multinode_deletion(self, logger=OALog()):
         a2 =\
             OAG_AutoNode2(logger=logger).create({
                 'field4' :  1,
@@ -1182,25 +1143,25 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             })
 
         a3 =\
-            OAG_AutoNode3().create({
+            OAG_AutoNode3(logger=logger).create({
                 'field7' :  8,
                 'field8' : 'this is an autonode3'
             })
 
         for x in xrange(0,10):
             a1a =\
-                OAG_AutoNode1a().create({
+                OAG_AutoNode1a(logger=logger).create({
                     'field2'   : x,
                     'field3'   : 10-x,
                     'subnode1' : a2,
                     'subnode2' : a3
                 })
 
-        a2.refresh(gotodb=True)
-
         self.assertEqual(a2.auto_node1a.size, 10)
 
         a2.auto_node1a[0].delete()
+
+        a2.refresh()
 
         self.assertEqual(a2.auto_node1a.size, 9)
 

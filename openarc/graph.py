@@ -282,9 +282,10 @@ class OAGraphRootNode(object):
 
         self.init_state_dbschema()
 
-
         attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
         self._set_cframe_from_attrs(attrs, fullhouse=True)
+
+
 
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
@@ -313,6 +314,8 @@ class OAGraphRootNode(object):
 
         # Refresh to set iteridx
         self.refresh()
+
+        self.init_state_dbfkeys()
 
         # Set attrs if this is a unique oag
         if self.is_unique:
@@ -374,6 +377,10 @@ class OAGraphRootNode(object):
         self._logger         = logger
 
     def init_state_dbschema(self):
+
+        return
+
+    def init_state_dbfkeys(self):
 
         return
 
@@ -640,6 +647,7 @@ class OAG_RootNode(OAGraphRootNode):
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     def delete(self):
+
         delete_sql    = self.SQL['delete']['id']
 
         if self._extcur is None:
@@ -809,6 +817,25 @@ class OAG_RootNode(OAGraphRootNode):
             dao.commit()
             return self
 
+    def init_state_dbfkeys(self):
+
+        # Don't set props for proxied OAGs, they are passthrough entities
+        if self.is_proxied:
+            return
+
+
+        with OADao(self.dbcontext) as dao:
+            with dao.cur as cur:
+                for stream in self.dbstreams:
+                    if self.is_oagnode(stream):
+                        currattr = getattr(self, stream, None)
+                        if currattr:
+                            currattr.init_state_dbfkeys()
+
+                self.SQLexec(cur, self.SQL['admin']['fkeys'])
+                self._fkframe = cur.fetchall()
+                self.refresh()
+
     def init_state_rpc(self):
         # Intiailize reqs
         if not self._rpc_init_done:
@@ -842,6 +869,10 @@ class OAG_RootNode(OAGraphRootNode):
             return 'OAGraphRootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
         else:
             return False
+
+    @property
+    def is_proxied(self):
+        return True if getattr(self, '_proxy_mode', None) else False
 
     @property
     def oagurl(self): return self.rpcrtr.addr
@@ -1111,11 +1142,6 @@ class OAG_RootNode(OAGraphRootNode):
         if getattr(self, '_rpc_init_done', None) and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
 
-    def _refresh_from_cursor(self, cur):
-        self.SQLexec(cur, self.SQL['admin']['fkeys'])
-        self._fkframe = cur.fetchall()
-        super(OAG_RootNode, self)._refresh_from_cursor(cur)
-
     def _reset_oagprops(self):
         """Maintain list of oagprops that have been set"""
         curr_proplist = getattr(self.__class__, "oagproplist", [])
@@ -1266,7 +1292,6 @@ class OAG_RootNode(OAGraphRootNode):
 
             # oagprop: update cache if necessary
             try:
-
                 currattr = getattr(self, stream, None)
                 if currattr is None:
                     if self.dbstreams[stream][1] is False and cfval:
