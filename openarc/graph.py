@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 
 import base64
+import collections
 import datetime
 import hashlib
 import gevent
@@ -615,6 +616,55 @@ class OAGraphRootNode(object):
     def _set_clauseprms(self):
         return
 
+class OAG_PropProxy():
+    def __init__(self, obj):
+        self.cls            = obj.__class__
+        self.cls.current_id = getattr(self.cls, 'current_id', str())
+        self.oagid          = obj.oagid
+
+        oagprofiles = getattr(self.cls, 'oagprofiles', collections.OrderedDict())
+        try:
+            profile = oagprofiles[self.oagid]
+        except KeyError:
+            oagprofiles[self.oagid] = collections.OrderedDict()
+
+        setattr(self.cls, 'oagprofiles', oagprofiles)
+        self.setprofile(self.oagid)
+
+    def addprop(self, stream, oagprop):
+        self.setprofile(self.oagid)
+        setattr(self.cls, stream, oagprop)
+        self.cls.oagprofiles[self.oagid][stream] = oagprop
+
+    def deregister(self, obj):
+        del(self.cls.oagprofiles[obj.oagid])
+        self.cls.current_id = str()
+
+    def setprofile(self, obj_id):
+        if obj_id == self.cls.current_id:
+            # redundant call, don't do anything
+            return
+        else:
+            # change detected, store and blank old oagprops, hydrate set new current_id
+            try:
+                current_profile = self.cls.oagprofiles[self.cls.current_id]
+                for stream, streaminfo in current_profile.items():
+                    current_profile[stream] = getattr(self.cls, stream, None)
+                    delattr(self.cls, stream)
+            except KeyError as e:
+                pass
+
+            try:
+                new_profile = self.cls.oagprofiles[obj_id]
+                for stream, streaminfo in new_profile.items():
+                    setattr(self.cls, stream, streaminfo)
+            except KeyError as e:
+                print e.message
+                print "This should never, ever happen"
+
+            # Set up next invocation
+            setattr(self.cls, 'current_id', obj_id)
+
 class OAG_RootNode(OAGraphRootNode):
 
     @staticproperty
@@ -743,6 +793,12 @@ class OAG_RootNode(OAGraphRootNode):
         except:
             return None
 
+    @property
+    def oagid(self):
+        if getattr(self, '_oagid', None) is None:
+            self._oagid = hashlib.sha256(str(self)).hexdigest()
+        return self._oagid
+
     def init_state_dbschema(self):
         with OADao(self.dbcontext, cdict=False) as dao:
             with dao.cur as cur:
@@ -822,7 +878,6 @@ class OAG_RootNode(OAGraphRootNode):
         # Don't set props for proxied OAGs, they are passthrough entities
         if self.is_proxied:
             return
-
 
         with OADao(self.dbcontext) as dao:
             with dao.cur as cur:
@@ -1083,7 +1138,21 @@ class OAG_RootNode(OAGraphRootNode):
         except AttributeError:
             pass
 
+        try:
+            objattr('_oagprop_proxy').setprofile(objattr('_oagid'))
+        except AttributeError:
+            pass
+
         return object.__getattribute__(self, attr)
+
+    def __del__(self):
+        try:
+            self._oagprop_proxy.deregister(self)
+        except Exception as e:
+            print e.message
+            print "This should never happen"
+            import traceback
+            traceback.print_exc()
 
     def __init__(self,
                  clauseprms=None,
@@ -1110,6 +1179,7 @@ class OAG_RootNode(OAGraphRootNode):
         self._extcur         = extcur
         self._logger         = logger
         self._glets          = []
+        self._oagprop_proxy  = OAG_PropProxy(self)
 
         if initurl:
             self.init_state_rpc()
@@ -1117,7 +1187,7 @@ class OAG_RootNode(OAGraphRootNode):
             self._proxy_mode = True
             self._proxy_url  = initurl
         else:
-            self._reset_oagprops()
+            self._oagprop_proxy.setprofile(self.oagid)
             self.init_state_oag(clauseprms, indexprm, initprms)
 
             if rpc:
@@ -1141,16 +1211,6 @@ class OAG_RootNode(OAGraphRootNode):
         # Tell the world
         if getattr(self, '_rpc_init_done', None) and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
-
-    def _reset_oagprops(self):
-        """Maintain list of oagprops that have been set"""
-        curr_proplist = getattr(self.__class__, "oagproplist", [])
-        for prop in curr_proplist:
-            if getattr(self.__class__, prop, None) is not None:
-                delattr(self.__class__, prop)
-        new_proplist = [stream for stream in self.dbstreams if self.is_oagnode(stream)]
-        for prop in new_proplist:
-            self._set_oagproplist(prop)
 
     def _set_attrs_from_cframe(self):
 
@@ -1177,8 +1237,7 @@ class OAG_RootNode(OAGraphRootNode):
                              logger=self.logger):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
-                    self._set_oagproplist(stream)
-                    setattr(self.__class__, stream, oagprop(fget))
+                    self._oagprop_proxy.addprop(stream, oagprop(fget))
 
     def _set_attrs_from_userprms(self, userprms):
         missing_streams = []
@@ -1331,18 +1390,9 @@ class OAG_RootNode(OAGraphRootNode):
                     return newattr
             oagpropfn.__name__ = stream
 
-            setattr(self.__class__, stream, oagprop(oagpropfn))
+            self._oagprop_proxy.addprop(stream, oagprop(oagpropfn))
         else:
             setattr(self, stream, cfval)
-
-    def _set_oagproplist(self, stream):
-        """Maintain list of oagprops that have been set"""
-        oagproplist = getattr(self.__class__, "oagproplist", None)
-        if oagproplist is None:
-            oagproplist = []
-        if stream not in oagproplist:
-            oagproplist.append(stream)
-            setattr(self.__class__, 'oagproplist', oagproplist)
 
 class OAG_RpcDiscoverable(OAG_RootNode):
     @property
