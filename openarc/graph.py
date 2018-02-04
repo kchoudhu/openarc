@@ -369,7 +369,6 @@ class OAGraphRootNode(object):
     def init_state_cls(self, extcur, logger):
 
         self._cframe         = {}
-        self._fkframe        = {}
         self._rawdata        = None
         self._rawdata_window = None
         self._rawdata_window_index = 0
@@ -440,7 +439,6 @@ class OAGraphRootNode(object):
         oagcopy._rawdata_window_index =\
                                   self._rawdata_window_index
         oagcopy._cframe         = dict(self._cframe)
-        oagcopy._fkframe        = list(self._fkframe)
         oagcopy.__iteridx       = 0
 
         oagcopy._clauseprms     = list(self._clauseprms)
@@ -479,7 +477,6 @@ class OAGraphRootNode(object):
         self._rawdata_window = None
         self._oagcache       = {}
         self._cframe         = {}
-        self._fkframe        = {}
 
         return self
 
@@ -666,6 +663,10 @@ class OAG_PropProxy():
             setattr(self.cls, 'current_id', obj_id)
 
 class OAG_RootNode(OAGraphRootNode):
+
+    ##### Class variables
+    _fkframe = []
+
 
     @staticproperty
     def db_oag_mapping(cls):
@@ -888,7 +889,7 @@ class OAG_RootNode(OAGraphRootNode):
                             currattr.init_state_dbfkeys()
 
                 self.SQLexec(cur, self.SQL['admin']['fkeys'])
-                self._fkframe = cur.fetchall()
+                setattr(self.__class__, '_fkframe', cur.fetchall())
                 self.refresh()
 
     def init_state_rpc(self):
@@ -1171,7 +1172,6 @@ class OAG_RootNode(OAGraphRootNode):
         self._rpc_heartbeat  = heartbeat
 
         self._cframe         = {}
-        self._fkframe        = {}
         self._rawdata        = None
         self._rawdata_window = None
         self._rawdata_window_index = 0
@@ -1225,7 +1225,7 @@ class OAG_RootNode(OAGraphRootNode):
             self._set_oagprop(stream, streaminfo)
 
         # Set forward lookup attributes
-        for fk in self._fkframe:
+        for fk in self.__class__._fkframe:
             classname = "OAG_"+inflection.camelize(fk['table'])
             for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
                 if cls.__name__==classname:
