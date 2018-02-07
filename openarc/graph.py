@@ -329,12 +329,15 @@ class OAGraphRootNode(object):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
-    def filter(self, predicate):
+    def filter(self, predicate, rerun=False):
         if self.is_unique:
             raise OAError("Cannot filter OAG that is marked unique")
         self._oagcache = {}
 
         self._rawdata_window = self._rawdata
+
+        if rerun is False:
+            self._rawdata_filter_cache.append(predicate)
 
         self._rawdata_window = []
         for i, frame in enumerate(self._rawdata):
@@ -372,6 +375,7 @@ class OAGraphRootNode(object):
         self._rawdata        = None
         self._rawdata_window = None
         self._rawdata_window_index = 0
+        self._rawdata_filter_cache = []
         self._oagcache       = {}
         self._extcur         = extcur
         self._logger         = logger
@@ -438,6 +442,8 @@ class OAGraphRootNode(object):
         oagcopy._rawdata_window = list(self._rawdata_window)
         oagcopy._rawdata_window_index =\
                                   self._rawdata_window_index
+        oagcopy._rawdata_filter_cache =\
+                                  self._rawdata_filter_cache
         oagcopy._cframe         = dict(self._cframe)
         oagcopy.__iteridx       = 0
 
@@ -490,7 +496,7 @@ class OAGraphRootNode(object):
         else:
             return len(self._rawdata_window)
 
-    def update(self, updparms={}):
+    def update(self, updparms={}, norefresh=False):
 
         attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
         self._set_cframe_from_attrs(attrs)
@@ -508,13 +514,15 @@ class OAGraphRootNode(object):
             with OADao(self.dbcontext) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, update_sql, update_values)
-                    self._refresh_from_cursor(cur)
+                    if not norefresh:
+                        self._refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._extcur, update_sql, update_values)
-            self._refresh_from_cursor(self._extcur)
+            if not norefresh:
+                self._refresh_from_cursor(self._extcur)
 
-        if not self.is_unique:
+        if not self.is_unique and len(self._rawdata_window)>0:
             self[self._rawdata_window_index]
 
         return self
@@ -571,6 +579,9 @@ class OAGraphRootNode(object):
 
             self._rawdata = cur.fetchall()
             self._rawdata_window = self._rawdata
+
+            for predicate in self._rawdata_filter_cache:
+                self.filter(predicate, rerun=True)
         except psycopg2.ProgrammingError:
             raise OAGraphRetrieveError("Missing database table")
 
@@ -1175,6 +1186,7 @@ class OAG_RootNode(OAGraphRootNode):
         self._rawdata        = None
         self._rawdata_window = None
         self._rawdata_window_index = 0
+        self._rawdata_filter_cache = []
         self._oagcache       = {}
         self._extcur         = extcur
         self._logger         = logger
