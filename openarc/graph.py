@@ -442,8 +442,6 @@ class OAGraphRootNode(object):
         oagcopy._rawdata_window = list(self._rawdata_window)
         oagcopy._rawdata_window_index =\
                                   self._rawdata_window_index
-        oagcopy._rawdata_filter_cache =\
-                                  self._rawdata_filter_cache
         oagcopy._cframe         = dict(self._cframe)
         oagcopy.__iteridx       = 0
 
