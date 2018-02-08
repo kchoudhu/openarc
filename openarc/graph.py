@@ -11,12 +11,9 @@ import msgpack
 import os
 import socket
 import sys
+
 import zmq.green as zmq
 
-from gevent            import spawn
-from gevent            import monkey
-monkey.patch_all()
-from gevent.lock       import BoundedSemaphore
 from textwrap          import dedent as td
 
 from openarc.dao       import *
@@ -141,6 +138,7 @@ class OAGRPC(object):
 class OAGRPC_RTR_Requests(OAGRPC):
     """Process all RPC calls from other OAGRPC_REQ_Requests"""
     def __init__(self, oag):
+
         super(OAGRPC_RTR_Requests, self).__init__(zmq.ROUTER, oag)
 
     def start(self):
@@ -904,6 +902,12 @@ class OAG_RootNode(OAGraphRootNode):
     def init_state_rpc(self):
         # Intiailize reqs
         if not self._rpc_init_done:
+
+            from gevent            import spawn
+            from gevent            import monkey
+            from gevent.lock       import BoundedSemaphore
+            monkey.patch_all()
+
             self._rpcsem = BoundedSemaphore(1)
             with self._rpcsem:
                 self._rpcrtr = OAGRPC_RTR_Requests(self)
