@@ -620,7 +620,7 @@ class OAGraphRootNode(object):
     def _set_clauseprms(self):
         return
 
-class OAG_PropProxy():
+class OAG_PropProxy(object):
     def __init__(self, obj):
         self.cls            = obj.__class__
         self.cls.current_id = getattr(self.cls, 'current_id', str())
