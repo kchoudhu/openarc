@@ -284,8 +284,6 @@ class OAGraphRootNode(object):
         attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
         self._set_cframe_from_attrs(attrs, fullhouse=True)
 
-
-
         if self._rawdata is not None:
             raise OAError("Cannot create item that has already been initiated")
 
