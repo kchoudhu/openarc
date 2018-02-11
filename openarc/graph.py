@@ -422,14 +422,14 @@ class OAGraphRootNode(object):
         if self.is_unique:
             raise OAError("next: Unique OAGraph object is not iterable")
         else:
-            if self.__iteridx < self.size:
+            if self._iteridx < self.size:
                 self._oagcache = {}
-                self._cframe = self._rawdata_window[self.__iteridx]
-                self.__iteridx += 1
+                self._cframe = self._rawdata_window[self._iteridx]
+                self._iteridx += 1
                 self._set_attrs_from_cframe()
                 return self
             else:
-                self.__iteridx = 0
+                self._iteridx = 0
                 raise StopIteration()
 
     def rdfcopy(self):
@@ -439,7 +439,7 @@ class OAGraphRootNode(object):
         oagcopy._rawdata_window_index =\
                                   self._rawdata_window_index
         oagcopy._cframe         = dict(self._cframe)
-        oagcopy.__iteridx       = 0
+        oagcopy._iteridx       = 0
 
         oagcopy._clauseprms     = list(self._clauseprms)
         oagcopy._indexparm      = self._indexparm
@@ -468,7 +468,7 @@ class OAGraphRootNode(object):
             self._oagcache = {}
 
         self._rawdata_window = self._rawdata
-        self.__iteridx = 0
+        self._iteridx = 0
         self._set_attrs_from_cframe()
         return self
 
