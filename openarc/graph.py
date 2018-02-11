@@ -455,7 +455,7 @@ class OAGraphRootNode(object):
 
         return self
 
-    def refresh(self, gotodb=False):
+    def refresh(self, gotodb=False, idxreset=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
         if gotodb is True:
@@ -468,7 +468,8 @@ class OAGraphRootNode(object):
             self._oagcache = {}
 
         self._rawdata_window = self._rawdata
-        self._iteridx = 0
+        if idxreset:
+            self._iteridx = 0
         self._set_attrs_from_cframe()
         return self
 
@@ -895,7 +896,7 @@ class OAG_RootNode(OAGraphRootNode):
 
                 self.SQLexec(cur, self.SQL['admin']['fkeys'])
                 setattr(self.__class__, '_fkframe', cur.fetchall())
-                self.refresh()
+                self.refresh(idxreset=False)
 
     def init_state_rpc(self):
         # Intiailize reqs
@@ -957,6 +958,7 @@ class OAG_RootNode(OAGraphRootNode):
             if self.is_oagnode(stream):
                 if self.logger.RPC:
                     print "[%s] Connecting to new stream [%s] in initmode" % (stream, currval.rpcrtr.id)
+
                 reqcls(self).register(currval.rpcrtr, stream)
             return
 
@@ -1221,7 +1223,8 @@ class OAG_RootNode(OAGraphRootNode):
         super(OAG_RootNode, self).__setattr__(attr, newval)
 
         # Tell the world
-        if getattr(self, '_rpc_init_done', None) and attr not in getattr(self, '_rpc_stop_list', []):
+        if getattr(self, '_rpc_init_done', None) is True \
+            and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
 
     def _set_attrs_from_cframe(self):
