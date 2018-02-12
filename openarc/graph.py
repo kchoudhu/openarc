@@ -13,6 +13,10 @@ import socket
 import sys
 
 import zmq.green as zmq
+from zmq.utils.garbage import gc
+_zmqctx = zmq.Context()
+_zmqctx.max_sockets = 32768
+gc.context = _zmqctx
 
 from textwrap          import dedent as td
 
@@ -130,8 +134,7 @@ class OAGRPC(object):
 
     def __init__(self, zmqtype, oag):
         self.zmqtype  = zmqtype
-        self._ctx     = zmq.Context()
-        self._ctxsoc  = self._ctx.socket(zmqtype)
+        self._ctxsoc  = _zmqctx.socket(zmqtype)
         self._oag     = oag
         self._hash    = base64.b16encode(os.urandom(5))
 
@@ -672,7 +675,6 @@ class OAG_RootNode(OAGraphRootNode):
 
     ##### Class variables
     _fkframe = []
-
 
     @staticproperty
     def db_oag_mapping(cls):
