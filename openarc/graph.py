@@ -278,350 +278,6 @@ class OAGRPC_REQ_Requests(OAGRPC):
 
 reqcls = OAGRPC_REQ_Requests
 
-class OAGraphRootNode(object):
-
-    def create(self, initprms={}):
-
-        self.init_state_dbschema()
-
-        attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
-        self._set_cframe_from_attrs(attrs, fullhouse=True)
-
-        if self._rawdata is not None:
-            raise OAError("Cannot create item that has already been initiated")
-
-        filtered_cframe = {k:self._cframe[k] for k in self._cframe if k[0] != '_'}
-        attrstr    = ', '.join([k for k in filtered_cframe])
-        vals       = [filtered_cframe[k] for k in filtered_cframe]
-        formatstrs = ', '.join(['%s' for v in vals])
-        insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
-
-        if self._extcur is None:
-            with OADao(self.dbcontext) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, insert_sql, vals)
-                    if self._indexparm == 'id':
-                        index_val = cur.fetchall()
-                        self._clauseprms = index_val[0].values()
-                    self._refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._extcur, insert_sql, vals)
-            if self._indexparm == 'id':
-                index_val = self._extcur.fetchall()
-                self._clauseprms = index_val[0].values()
-            self._refresh_from_cursor(self._extcur)
-
-        # Refresh to set iteridx
-        self.refresh()
-
-        self.init_state_dbfkeys()
-
-        # Set attrs if this is a unique oag
-        if self.is_unique:
-            self._set_attrs_from_cframe_uniq()
-
-        return self
-
-    @property
-    def dbcontext(self):
-
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
-
-    def filter(self, predicate, rerun=False):
-        if self.is_unique:
-            raise OAError("Cannot filter OAG that is marked unique")
-        self._oagcache = {}
-
-        self._rawdata_window = self._rawdata
-
-        if rerun is False:
-            self._rawdata_filter_cache.append(predicate)
-
-        self._rawdata_window = []
-        for i, frame in enumerate(self._rawdata):
-            self._cframe = frame
-            self._set_attrs_from_cframe()
-            if predicate(self):
-                self._rawdata_window.append(self._rawdata[i])
-
-        if len(self._rawdata_window)>0:
-            self._cframe = self._rawdata_window[0]
-        else:
-            self._rawdata_window = []
-            self._cframe = {}
-
-        self._set_attrs_from_cframe()
-
-        return self
-
-    @property
-    def infname(self):
-        if len(self.infname_fields)==0:
-            raise OAError("Cannot calculate infname if infname_fields not set")
-        return hashlib.sha256(str().join([str(getattr(self, k, ""))
-                                          for k in self.infname_fields
-                                          if k[0] != '_'])).hexdigest()
-
-    @property
-    def infname_fields(self):
-        """Override in deriving classes as necessary"""
-        return [k for k, v in self._cframe.items()]
-
-    def init_state_cls(self, extcur, logger):
-
-        self._cframe         = {}
-        self._rawdata        = None
-        self._rawdata_window = None
-        self._rawdata_window_index = 0
-        self._rawdata_filter_cache = []
-        self._oagcache       = {}
-        self._extcur         = extcur
-        self._logger         = logger
-
-    def init_state_dbschema(self):
-
-        return
-
-    def init_state_dbfkeys(self):
-
-        return
-
-    def init_state_oag(self, clauseprms, indexprm, initprms={}):
-        attrs = self._set_attrs_from_userprms(initprms)
-        self._set_cframe_from_attrs(attrs)
-
-        if clauseprms:
-            if type(clauseprms).__name__ in ['dict']:
-                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
-            elif type(clauseprms).__name__ in ['list', 'tuple']:
-                rawprms = clauseprms
-            else:
-                rawprms = [clauseprms]
-
-            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
-
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexprm
-
-        if self._clauseprms is not None:
-            self.refresh(gotodb=True)
-
-            if len(self._rawdata_window) == 0:
-                raise OAGraphRetrieveError("No results found in database")
-
-            if self.is_unique:
-                self._set_attrs_from_cframe_uniq()
-
-        return self
-
-    @property
-    def is_unique(self): return False
-
-    @property
-    def logger(self): return self._logger
-
-    def next(self):
-        if self.is_unique:
-            raise OAError("next: Unique OAGraph object is not iterable")
-        else:
-            if self._iteridx < self.size:
-                self._oagcache = {}
-                self._cframe = self._rawdata_window[self._iteridx]
-                self._iteridx += 1
-                self._set_attrs_from_cframe()
-                return self
-            else:
-                self._iteridx = 0
-                raise StopIteration()
-
-    def rdfcopy(self):
-        oagcopy = self.__class__()
-        oagcopy._rawdata        = list(self._rawdata)
-        oagcopy._rawdata_window = list(self._rawdata_window)
-        oagcopy._rawdata_window_index =\
-                                  self._rawdata_window_index
-        oagcopy._cframe         = dict(self._cframe)
-        oagcopy._iteridx       = 0
-
-        oagcopy._clauseprms     = list(self._clauseprms)
-        oagcopy._indexparm      = self._indexparm
-
-        return oagcopy
-
-    def rdfsort(self, key):
-
-        self._rawdata.sort(key=lambda x: x[key])
-        self._rawdata_window = self._rawdata
-        self._rawdata_window_index = None
-        self._cframe = {}
-
-        return self
-
-    def refresh(self, gotodb=False, idxreset=True):
-        """Generally we want to simply reset the iterator; set gotodb=True to also
-        refresh instreams from the database"""
-        if gotodb is True:
-            if self._extcur is None:
-                with OADao(self.dbcontext) as dao:
-                    with dao.cur as cur:
-                        self._refresh_from_cursor(cur)
-            else:
-                self._refresh_from_cursor(self._extcur)
-            self._oagcache = {}
-
-        self._rawdata_window = self._rawdata
-        if idxreset:
-            self._iteridx = 0
-        self._set_attrs_from_cframe()
-        return self
-
-    def reset(self):
-        self._rawdata        = None
-        self._rawdata_window = None
-        self._oagcache       = {}
-        self._cframe         = {}
-
-        return self
-
-    @property
-    def rpcrtr(self): return self._rpcrtr
-
-    @property
-    def size(self):
-        if self._rawdata_window is None:
-            return 0
-        else:
-            return len(self._rawdata_window)
-
-    def update(self, updparms={}, norefresh=False):
-
-        attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
-        self._set_cframe_from_attrs(attrs)
-
-        self._set_clauseprms()
-
-        member_attrs  = [k for k in self._cframe if k[0] != '_']
-        index_key     = [k for k in self._cframe if k[0] == '_'][0]
-        update_clause = ', '.join(["%s=" % attr + "%s"
-                                    for attr in member_attrs])
-        update_sql    = self.SQL['update']['id']\
-                        % (update_clause, getattr(self, index_key, ""))
-        update_values = [self._cframe[attr] for attr in member_attrs]
-        if self._extcur is None:
-            with OADao(self.dbcontext) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, update_sql, update_values)
-                    if not norefresh:
-                        self._refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._extcur, update_sql, update_values)
-            if not norefresh:
-                self._refresh_from_cursor(self._extcur)
-
-        if not self.is_unique and len(self._rawdata_window)>0:
-            self[self._rawdata_window_index]
-
-        return self
-
-    @property
-    def SQL(self):
-
-        raise NotImplementedError("Must be implemneted in deriving OAGraph class")
-
-    def SQLexec(self, cur, query, parms=[]):
-        if self.logger.SQL:
-            print cur.mogrify(query, parms)
-        cur.execute(query, parms)
-
-    def __getitem__(self, indexinfo):
-        self._rawdata_window_index = indexinfo
-
-        if self.is_unique:
-            raise OAError("Cannot index OAG that is marked unique")
-        self._oagcache = {}
-
-        if type(self._rawdata_window_index)==int:
-            self._cframe = self._rawdata_window[self._rawdata_window_index]
-        elif type(self._rawdata_window_index)==slice:
-            self._rawdata_window = self._rawdata_window[self._rawdata_window_index]
-            self._cframe = self._rawdata_window[0]
-
-        self._set_attrs_from_cframe()
-
-        return self
-
-    def __init__(self, clauseprms=None, indexprm='id', initprms={}, extcur=None, logger=OALog(), rpc=True, heartbeat=True):
-        self.init_state_cls(extcur, logger)
-        self.init_state_oag(clauseprms, indexprm, initprms)
-
-    def __iter__(self):
-        if self.is_unique:
-            raise OAError("__iter__: Unique OAGraph object is not iterable")
-        else:
-            return self
-
-    def __next__(self):
-        if self.is_unique:
-            raise OAError("__next__: Unique OAGraph object is not iterable")
-        else:
-            return self.next()
-
-    def _refresh_from_cursor(self, cur):
-        try:
-            if type(self.SQL).__name__ == "str":
-                self.SQLexec(cur, self.SQL, self._clauseprms)
-            elif type(self.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
-
-            self._rawdata = cur.fetchall()
-            self._rawdata_window = self._rawdata
-
-            for predicate in self._rawdata_filter_cache:
-                self.filter(predicate, rerun=True)
-        except psycopg2.ProgrammingError:
-            raise OAGraphRetrieveError("Missing database table")
-
-    def _set_attrs_from_cframe(self):
-        # Clear attributes out  if _cframe is empty but _rawdata is populated
-        if len(self._cframe)==0 and len(self._rawdata)>0:
-            for k in self._rawdata[0].keys():
-                setattr(self, k, None)
-            return
-
-        for k, v in self._cframe.items():
-            setattr(self, k, v)
-
-    def _set_attrs_from_cframe_uniq(self):
-        if len(self._rawdata_window) > 1:
-            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
-
-        if len(self._rawdata_window) == 1:
-            self._cframe = self._rawdata_window[0]
-        else:
-            self._cframe = []
-
-        self._set_attrs_from_cframe()
-
-    def _set_attrs_from_userprms(self, userprms):
-        """Set attributes corresponding to params in userprms, return list of
-        attrs created"""
-        for k, v in userprms.items():
-            setattr(self, k, v)
-        return userprms.keys()
-
-    def _set_cframe_from_attrs(self, keys, fullhouse=False):
-        if len(keys)==0:
-            dbstreams = self._cframe.keys()
-        else:
-            dbstreams = keys
-        for stream in dbstreams:
-            self._cframe[stream] = getattr(self, stream, "")
-
-    def _set_clauseprms(self):
-        return
-
 class OAG_PropProxy(object):
     def __init__(self, obj):
         self.cls            = obj.__class__
@@ -671,10 +327,53 @@ class OAG_PropProxy(object):
             # Set up next invocation
             setattr(self.cls, 'current_id', obj_id)
 
-class OAG_RootNode(OAGraphRootNode):
+class OAG_RootNode(object):
 
     ##### Class variables
     _fkframe = []
+
+    def create(self, initprms={}):
+
+        self.init_state_dbschema()
+
+        attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
+        self._set_cframe_from_attrs(attrs, fullhouse=True)
+
+        if self._rawdata is not None:
+            raise OAError("Cannot create item that has already been initiated")
+
+        filtered_cframe = {k:self._cframe[k] for k in self._cframe if k[0] != '_'}
+        attrstr    = ', '.join([k for k in filtered_cframe])
+        vals       = [filtered_cframe[k] for k in filtered_cframe]
+        formatstrs = ', '.join(['%s' for v in vals])
+        insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
+
+        if self._extcur is None:
+            with OADao(self.dbcontext) as dao:
+                with dao.cur as cur:
+                    self.SQLexec(cur, insert_sql, vals)
+                    if self._indexparm == 'id':
+                        index_val = cur.fetchall()
+                        self._clauseprms = index_val[0].values()
+                    self._refresh_from_cursor(cur)
+                    dao.commit()
+        else:
+            self.SQLexec(self._extcur, insert_sql, vals)
+            if self._indexparm == 'id':
+                index_val = self._extcur.fetchall()
+                self._clauseprms = index_val[0].values()
+            self._refresh_from_cursor(self._extcur)
+
+        # Refresh to set iteridx
+        self.refresh()
+
+        self.init_state_dbfkeys()
+
+        # Set attrs if this is a unique oag
+        if self.is_unique:
+            self._set_attrs_from_cframe_uniq()
+
+        return self
 
     @staticproperty
     def db_oag_mapping(cls):
@@ -687,6 +386,11 @@ class OAG_RootNode(OAGraphRootNode):
                     schema[stream] = stream
             setattr(cls, '_db_oag_mapping', schema)
         return cls._db_oag_mapping
+
+    @property
+    def dbcontext(self):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     @staticproperty
     def dbindices(cls): return {}
@@ -795,6 +499,33 @@ class OAG_RootNode(OAGraphRootNode):
     @property
     def fanout(self): return False
 
+    def filter(self, predicate, rerun=False):
+        if self.is_unique:
+            raise OAError("Cannot filter OAG that is marked unique")
+        self._oagcache = {}
+
+        self._rawdata_window = self._rawdata
+
+        if rerun is False:
+            self._rawdata_filter_cache.append(predicate)
+
+        self._rawdata_window = []
+        for i, frame in enumerate(self._rawdata):
+            self._cframe = frame
+            self._set_attrs_from_cframe()
+            if predicate(self):
+                self._rawdata_window.append(self._rawdata[i])
+
+        if len(self._rawdata_window)>0:
+            self._cframe = self._rawdata_window[0]
+        else:
+            self._rawdata_window = []
+            self._cframe = {}
+
+        self._set_attrs_from_cframe()
+
+        return self
+
     @property
     def id(self):
         try:
@@ -807,6 +538,19 @@ class OAG_RootNode(OAGraphRootNode):
         if getattr(self, '_oagid', None) is None:
             self._oagid = hashlib.sha256(str(self)).hexdigest()
         return self._oagid
+
+    @property
+    def infname(self):
+        if len(self.infname_fields)==0:
+            raise OAError("Cannot calculate infname if infname_fields not set")
+        return hashlib.sha256(str().join([str(getattr(self, k, ""))
+                                          for k in self.infname_fields
+                                          if k[0] != '_'])).hexdigest()
+
+    @property
+    def infname_fields(self):
+        """Override in deriving classes as necessary"""
+        return [k for k, v in self._cframe.items()]
 
     def init_state_dbschema(self):
         with OADao(self.dbcontext, cdict=False) as dao:
@@ -900,6 +644,34 @@ class OAG_RootNode(OAGraphRootNode):
                 setattr(self.__class__, '_fkframe', cur.fetchall())
                 self.refresh(idxreset=False)
 
+    def init_state_oag(self, clauseprms, indexprm, initprms={}):
+        attrs = self._set_attrs_from_userprms(initprms)
+        self._set_cframe_from_attrs(attrs)
+
+        if clauseprms:
+            if type(clauseprms).__name__ in ['dict']:
+                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
+            elif type(clauseprms).__name__ in ['list', 'tuple']:
+                rawprms = clauseprms
+            else:
+                rawprms = [clauseprms]
+
+            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
+
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexprm
+
+        if self._clauseprms is not None:
+            self.refresh(gotodb=True)
+
+            if len(self._rawdata_window) == 0:
+                raise OAGraphRetrieveError("No results found in database")
+
+            if self.is_unique:
+                self._set_attrs_from_cframe_uniq()
+
+        return self
+
     def init_state_rpc(self):
         # Intiailize reqs
         if not self._rpc_init_done:
@@ -936,7 +708,7 @@ class OAG_RootNode(OAGraphRootNode):
     def is_oagnode(cls, stream):
         streaminfo = cls.dbstreams[stream][0]
         if type(streaminfo).__name__=='type':
-            return 'OAGraphRootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
+            return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
         else:
             return False
 
@@ -945,14 +717,86 @@ class OAG_RootNode(OAGraphRootNode):
         return True if getattr(self, '_proxy_mode', None) else False
 
     @property
+    def is_unique(self): return False
+
+    @property
+    def logger(self): return self._logger
+
+    def next(self):
+        if self.is_unique:
+            raise OAError("next: Unique OAGraph object is not iterable")
+        else:
+            if self._iteridx < self.size:
+                self._oagcache = {}
+                self._cframe = self._rawdata_window[self._iteridx]
+                self._iteridx += 1
+                self._set_attrs_from_cframe()
+                return self
+            else:
+                self._iteridx = 0
+                raise StopIteration()
+
+    @property
     def oagurl(self): return self.rpcrtr.addr
 
     @property
     def proxyurl(self): return self._proxy_url
 
+    def rdfcopy(self):
+        oagcopy = self.__class__()
+        oagcopy._rawdata        = list(self._rawdata)
+        oagcopy._rawdata_window = list(self._rawdata_window)
+        oagcopy._rawdata_window_index =\
+                                  self._rawdata_window_index
+        oagcopy._cframe         = dict(self._cframe)
+        oagcopy._iteridx       = 0
+
+        oagcopy._clauseprms     = list(self._clauseprms)
+        oagcopy._indexparm      = self._indexparm
+
+        return oagcopy
+
+    def rdfsort(self, key):
+
+        self._rawdata.sort(key=lambda x: x[key])
+        self._rawdata_window = self._rawdata
+        self._rawdata_window_index = None
+        self._cframe = {}
+
+        return self
+
+    def refresh(self, gotodb=False, idxreset=True):
+        """Generally we want to simply reset the iterator; set gotodb=True to also
+        refresh instreams from the database"""
+        if gotodb is True:
+            if self._extcur is None:
+                with OADao(self.dbcontext) as dao:
+                    with dao.cur as cur:
+                        self._refresh_from_cursor(cur)
+            else:
+                self._refresh_from_cursor(self._extcur)
+            self._oagcache = {}
+
+        self._rawdata_window = self._rawdata
+        if idxreset:
+            self._iteridx = 0
+        self._set_attrs_from_cframe()
+        return self
+
+    def reset(self):
+        self._rawdata        = None
+        self._rawdata_window = None
+        self._oagcache       = {}
+        self._cframe         = {}
+
+        return self
+
     @property
     def rpcreqs(self):
         rpcreq = self._rpcreqs
+
+    @property
+    def rpcrtr(self): return self._rpcrtr
 
     def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
 
@@ -1005,7 +849,45 @@ class OAG_RootNode(OAGraphRootNode):
                         reqcls(self).invalidate(addr, stream_to_invalidate)
 
     @property
+    def size(self):
+        if self._rawdata_window is None:
+            return 0
+        else:
+            return len(self._rawdata_window)
+
+    @property
     def sql_local(self): return {}
+
+    def update(self, updparms={}, norefresh=False):
+
+        attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
+        self._set_cframe_from_attrs(attrs)
+
+        self._set_clauseprms()
+
+        member_attrs  = [k for k in self._cframe if k[0] != '_']
+        index_key     = [k for k in self._cframe if k[0] == '_'][0]
+        update_clause = ', '.join(["%s=" % attr + "%s"
+                                    for attr in member_attrs])
+        update_sql    = self.SQL['update']['id']\
+                        % (update_clause, getattr(self, index_key, ""))
+        update_values = [self._cframe[attr] for attr in member_attrs]
+        if self._extcur is None:
+            with OADao(self.dbcontext) as dao:
+                with dao.cur as cur:
+                    self.SQLexec(cur, update_sql, update_values)
+                    if not norefresh:
+                        self._refresh_from_cursor(cur)
+                    dao.commit()
+        else:
+            self.SQLexec(self._extcur, update_sql, update_values)
+            if not norefresh:
+                self._refresh_from_cursor(self._extcur)
+
+        if not self.is_unique and len(self._rawdata_window)>0:
+            self[self._rawdata_window_index]
+
+        return self
 
     @property
     def SQL(self):
@@ -1100,6 +982,11 @@ class OAG_RootNode(OAGraphRootNode):
 
         return default_sql
 
+    def SQLexec(self, cur, query, parms=[]):
+        if self.logger.SQL:
+            print cur.mogrify(query, parms)
+        cur.execute(query, parms)
+
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
@@ -1122,6 +1009,15 @@ class OAG_RootNode(OAGraphRootNode):
             (sender, payload) = self.rpcrtr._recv()
             self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
 
+    def __del__(self):
+        try:
+            self._oagprop_proxy.deregister(self)
+        except Exception as e:
+            print e.message
+            print "This should never happen"
+            import traceback
+            traceback.print_exc()
+
     def __enter__(self):
         self.discoverable = True
         return self
@@ -1142,7 +1038,7 @@ class OAG_RootNode(OAGraphRootNode):
                     payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
                     if payload['value']:
                         if payload['type'] == 'redirect':
-                            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+                            for cls in OAG_RootNode.__subclasses__():
                                 if cls.__name__==payload['class']:
                                     return cls(initurl=payload['value'], logger=objattr('logger'))
                         else:
@@ -1161,14 +1057,22 @@ class OAG_RootNode(OAGraphRootNode):
 
         return object.__getattribute__(self, attr)
 
-    def __del__(self):
-        try:
-            self._oagprop_proxy.deregister(self)
-        except Exception as e:
-            print e.message
-            print "This should never happen"
-            import traceback
-            traceback.print_exc()
+    def __getitem__(self, indexinfo):
+        self._rawdata_window_index = indexinfo
+
+        if self.is_unique:
+            raise OAError("Cannot index OAG that is marked unique")
+        self._oagcache = {}
+
+        if type(self._rawdata_window_index)==int:
+            self._cframe = self._rawdata_window[self._rawdata_window_index]
+        elif type(self._rawdata_window_index)==slice:
+            self._rawdata_window = self._rawdata_window[self._rawdata_window_index]
+            self._cframe = self._rawdata_window[0]
+
+        self._set_attrs_from_cframe()
+
+        return self
 
     def __init__(self,
                  clauseprms=None,
@@ -1212,6 +1116,18 @@ class OAG_RootNode(OAGraphRootNode):
                     currval = getattr(self, stream, None)
                     self.signal_surrounding_nodes(stream, currval, initmode=True)
 
+    def __iter__(self):
+        if self.is_unique:
+            raise OAError("__iter__: Unique OAGraph object is not iterable")
+        else:
+            return self
+
+    def __next__(self):
+        if self.is_unique:
+            raise OAError("__next__: Unique OAGraph object is not iterable")
+        else:
+            return self.next()
+
     def __setattr__(self, attr, newval):
 
         # Setting values on a proxy OAG is nonsensical
@@ -1229,6 +1145,21 @@ class OAG_RootNode(OAGraphRootNode):
             and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
 
+    def _refresh_from_cursor(self, cur):
+        try:
+            if type(self.SQL).__name__ == "str":
+                self.SQLexec(cur, self.SQL, self._clauseprms)
+            elif type(self.SQL).__name__ == "dict":
+                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
+
+            self._rawdata = cur.fetchall()
+            self._rawdata_window = self._rawdata
+
+            for predicate in self._rawdata_filter_cache:
+                self.filter(predicate, rerun=True)
+        except psycopg2.ProgrammingError:
+            raise OAGraphRetrieveError("Missing database table")
+
     def _set_attrs_from_cframe(self):
 
         # Blank everything if _cframe isn't set
@@ -1244,7 +1175,7 @@ class OAG_RootNode(OAGraphRootNode):
         # Set forward lookup attributes
         for fk in self.__class__._fkframe:
             classname = "OAG_"+inflection.camelize(fk['table'])
-            for cls in OAGraphRootNode.__subclasses__()+OAG_RootNode.__subclasses__():
+            for cls in OAG_RootNode.__subclasses__():
                 if cls.__name__==classname:
                     stream = fk['table']
                     def fget(obj,
@@ -1255,6 +1186,17 @@ class OAG_RootNode(OAGraphRootNode):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
                     self._oagprop_proxy.addprop(stream, oagprop(fget))
+
+    def _set_attrs_from_cframe_uniq(self):
+        if len(self._rawdata_window) > 1:
+            raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
+
+        if len(self._rawdata_window) == 1:
+            self._cframe = self._rawdata_window[0]
+        else:
+            self._cframe = []
+
+        self._set_attrs_from_cframe()
 
     def _set_attrs_from_userprms(self, userprms):
         missing_streams = []
