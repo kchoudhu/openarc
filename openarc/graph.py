@@ -278,15 +278,97 @@ class OAGRPC_REQ_Requests(OAGRPC):
 
 reqcls = OAGRPC_REQ_Requests
 
+class OAG_DbSchemaProxy(object):
+    def __init__(self, dbproxy):
+        self._dbproxy = dbproxy
+
+    def init(self):
+        dbp = self._dbproxy
+        oag = dbp._oag
+
+        with OADao(oag.dbcontext, cdict=False) as dao:
+            with dao.cur as cur:
+                # Check that dbcontext schema exists
+                dbp.SQLexec(cur, dbp.SQL['admin']['schema'])
+                check = cur.fetchall()
+                if len(check)==0:
+                    if oag.logger.SQL:
+                        print "Creating missing schema [%s]" % oag.dbcontext
+                    dbp.SQLexec(cur, dbp.SQL['admin']['mkschema'])
+                    dao.commit()
+
+                # Check for presence of table
+                try:
+                    dbp.SQLexec(cur, dbp.SQL['admin']['table'])
+                except psycopg2.ProgrammingError as e:
+                    dao.commit()
+                    if ('relation "%s.%s" does not exist' % (oag.dbcontext, oag.dbtable)) in str(e):
+                        if oag.logger.SQL:
+                            print "Creating missing table [%s]" % oag.dbtable
+                        dbp.SQLexec(cur, dbp.SQL['admin']['mktable'])
+                        dbp.SQLexec(cur, dbp.SQL['admin']['table'])
+
+                # Check for table schema integrity
+                oag_columns     = sorted(oag.dbstreams.keys())
+                db_columns_ext  = [desc[0] for desc in cur.description if desc[0][0] != '_']
+                db_columns_reqd = [oag.db_oag_mapping[k] for k in sorted(oag.db_oag_mapping.keys())]
+
+                dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
+                if len(dropped_cols)>0:
+                    raise OAGraphIntegrityError("Dropped columns %s detected, cannot initialize" % dropped_cols)
+
+                add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
+                if len(add_cols)>0:
+                    if oag.logger.SQL:
+                        print "Adding new columns %s to [%s]" % (add_cols, oag.dbtable)
+                    add_col_clauses = []
+                    for i, col in enumerate(oag_columns):
+                        if db_columns_reqd[i] in add_cols:
+                            if oag_columns[i] != db_columns_reqd[i]:
+                                subnode = oag.dbstreams[col][0](logger=oag.logger, rpc=False).db.schema.init()
+                                add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
+                                             % (subnode.dbpkname[1:],
+                                               'NOT NULL' if oag.dbstreams[col][1] else str(),
+                                                subnode.dbcontext,
+                                                subnode.dbtable,
+                                                subnode.dbpkname)
+                            else:
+                                add_clause = "ADD COLUMN %s %s" % (col, oag.dbstreams[col][0])
+                                if oag.dbstreams[col][1] is not None:
+                                    add_clause = "%s NOT NULL" % add_clause
+                            add_col_clauses.append(add_clause)
+
+                    addcol_sql = dbp.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
+                    dbp.SQLexec(cur, addcol_sql)
+
+                for idx, idxinfo in oag.dbindices.items():
+                    col_sql     = ','.join(map(lambda x: oag.db_oag_mapping[x], idxinfo[0]))
+
+                    unique_sql  = str()
+                    if idxinfo[1]:
+                        unique_sql = 'UNIQUE'
+
+                    partial_sql = str()
+                    if idxinfo[2]:
+                        partial_sql =\
+                            'WHERE %s' % ' AND '.join('%s=%s' % (oag.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
+
+                    exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
+                    dbp.SQLexec(cur, exec_sql)
+
+            dao.commit()
+            return oag
+
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
     def __init__(self, oag):
         self._oag      = oag
+        self._schema   = None
 
     def create(self, initprms={}):
 
         ### Fix
-        self._oag.init_state_dbschema()
+        self.schema.init()
 
         attrs = self._oag._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
         self._oag._set_cframe_from_attrs(attrs, fullhouse=True)
@@ -376,6 +458,12 @@ class OAG_DbProxy(object):
             self._oag[self._oag._rawdata_window_index]
 
         return self._oag
+
+    @property
+    def schema(self):
+        if not self._schema:
+            self._schema = OAG_DbSchemaProxy(self)
+        return self._schema
 
     @property
     def SQL(self):
@@ -696,80 +784,6 @@ class OAG_RootNode(object):
     def infname_fields(self):
         """Override in deriving classes as necessary"""
         return [k for k, v in self._cframe.items()]
-
-    def init_state_dbschema(self):
-        with OADao(self.dbcontext, cdict=False) as dao:
-            with dao.cur as cur:
-                # Check that dbcontext schema exists
-                self.db.SQLexec(cur, self.db.SQL['admin']['schema'])
-                check = cur.fetchall()
-                if len(check)==0:
-                    if self.logger.SQL:
-                        print "Creating missing schema [%s]" % self.dbcontext
-                    self.db.SQLexec(cur, self.db.SQL['admin']['mkschema'])
-                    dao.commit()
-
-                # Check for presence of table
-                try:
-                    self.db.SQLexec(cur, self.db.SQL['admin']['table'])
-                except psycopg2.ProgrammingError as e:
-                    dao.commit()
-                    if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
-                        if self.logger.SQL:
-                            print "Creating missing table [%s]" % self.dbtable
-                        self.db.SQLexec(cur, self.db.SQL['admin']['mktable'])
-                        self.db.SQLexec(cur, self.db.SQL['admin']['table'])
-
-                # Check for table schema integrity
-                oag_columns     = sorted(self.dbstreams.keys())
-                db_columns_ext  = [desc[0] for desc in cur.description if desc[0][0] != '_']
-                db_columns_reqd = [self.db_oag_mapping[k] for k in sorted(self.db_oag_mapping.keys())]
-
-                dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
-                if len(dropped_cols)>0:
-                    raise OAGraphIntegrityError("Dropped columns %s detected, cannot initialize" % dropped_cols)
-
-                add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
-                if len(add_cols)>0:
-                    if self.logger.SQL:
-                        print "Adding new columns %s to [%s]" % (add_cols, self.dbtable)
-                    add_col_clauses = []
-                    for i, col in enumerate(oag_columns):
-                        if db_columns_reqd[i] in add_cols:
-                            if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = self.dbstreams[col][0](logger=self.logger, rpc=False).init_state_dbschema()
-                                add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
-                                             % (subnode.dbpkname[1:],
-                                               'NOT NULL' if self.dbstreams[col][1] else str(),
-                                                subnode.dbcontext,
-                                                subnode.dbtable,
-                                                subnode.dbpkname)
-                            else:
-                                add_clause = "ADD COLUMN %s %s" % (col, self.dbstreams[col][0])
-                                if self.dbstreams[col][1] is not None:
-                                    add_clause = "%s NOT NULL" % add_clause
-                            add_col_clauses.append(add_clause)
-
-                    addcol_sql = self.db.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
-                    self.db.SQLexec(cur, addcol_sql)
-
-                for idx, idxinfo in self.dbindices.items():
-                    col_sql     = ','.join(map(lambda x: self.db_oag_mapping[x], idxinfo[0]))
-
-                    unique_sql  = str()
-                    if idxinfo[1]:
-                        unique_sql = 'UNIQUE'
-
-                    partial_sql = str()
-                    if idxinfo[2]:
-                        partial_sql =\
-                            'WHERE %s' % ' AND '.join('%s=%s' % (self.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
-
-                    exec_sql    = self.db.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
-                    self.db.SQLexec(cur, exec_sql)
-
-            dao.commit()
-            return self
 
     def init_state_dbfkeys(self):
 
