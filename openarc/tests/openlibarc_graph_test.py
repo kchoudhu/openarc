@@ -175,14 +175,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def test_autonode_update_with_userprms(self):
         (a1,   a2,   a3)   = self.__generate_autonode_system()
         (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
-        a3.update({
+        a3.db.update({
             'field8' : 'this is an updated autonode3'
         })
 
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
-        a1.next().update({
+        a1.next().db.update({
             'subnode1' : a2_b
         })
 
@@ -196,13 +196,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         (a1,   a2,   a3)   = self.__generate_autonode_system()
         (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
         a3.field8 = 'this is an updated autonode3'
-        a3.update()
+        a3.db.update()
 
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
         a1.next().subnode1 = a2_b
-        a1.update()
+        a1.db.update()
 
         self.assertEqual(a1.subnode1, a2_b)
 
@@ -1065,7 +1065,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         x = a1a_chk[5]
         x.field3 = 43
-        x.update()
+        x.db.update()
 
         self.assertEqual(a1a_chk.field3, 43)
 
@@ -1075,7 +1075,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         y = a1a_chk2[5]
 
-        y.update({
+        y.db.update({
             'field3'   : 96,
             'subnode2' : a3b
         })
@@ -1139,7 +1139,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : None
             }, logger=logger).db.create()
 
-        a5d.update({
+        a5d.db.update({
             'subnode2' : a3
         })
 
@@ -1168,7 +1168,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a6a[-1].subnode2, None)
 
-        a6a.update({
+        a6a.db.update({
             'subnode2' : a3
         })
 
@@ -1186,7 +1186,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a7.field1, True)
 
-        a7.update({
+        a7.db.update({
             'field1' : False
         })
 

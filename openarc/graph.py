@@ -327,6 +327,37 @@ class OAG_DbProxy(object):
 
         return self._oag
 
+    def update(self, updparms={}, norefresh=False):
+
+        attrs = self._oag._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
+        self._oag._set_cframe_from_attrs(attrs)
+
+        self._oag._set_clauseprms()
+
+        member_attrs  = [k for k in self._oag._cframe if k[0] != '_']
+        index_key     = [k for k in self._oag._cframe if k[0] == '_'][0]
+        update_clause = ', '.join(["%s=" % attr + "%s"
+                                    for attr in member_attrs])
+        update_sql    = self._oag.SQL['update']['id']\
+                        % (update_clause, getattr(self._oag, index_key, ""))
+        update_values = [self._oag._cframe[attr] for attr in member_attrs]
+        if self._oag._extcur is None:
+            with OADao(self._oag.dbcontext) as dao:
+                with dao.cur as cur:
+                    self._oag.SQLexec(cur, update_sql, update_values)
+                    if not norefresh:
+                        self._oag._refresh_from_cursor(cur)
+                    dao.commit()
+        else:
+            self._oag.SQLexec(self._oag._extcur, update_sql, update_values)
+            if not norefresh:
+                self._oag._refresh_from_cursor(self._oag._extcur)
+
+        if not self._oag.is_unique and len(self._oag._rawdata_window)>0:
+            self._oag[self._oag._rawdata_window_index]
+
+        return self._oag
+
 class OAG_PropProxy(object):
     """Manipulates properties"""
     def __init__(self, obj):
@@ -869,37 +900,6 @@ class OAG_RootNode(object):
 
     @property
     def sql_local(self): return {}
-
-    def update(self, updparms={}, norefresh=False):
-
-        attrs = self._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
-        self._set_cframe_from_attrs(attrs)
-
-        self._set_clauseprms()
-
-        member_attrs  = [k for k in self._cframe if k[0] != '_']
-        index_key     = [k for k in self._cframe if k[0] == '_'][0]
-        update_clause = ', '.join(["%s=" % attr + "%s"
-                                    for attr in member_attrs])
-        update_sql    = self.SQL['update']['id']\
-                        % (update_clause, getattr(self, index_key, ""))
-        update_values = [self._cframe[attr] for attr in member_attrs]
-        if self._extcur is None:
-            with OADao(self.dbcontext) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, update_sql, update_values)
-                    if not norefresh:
-                        self._refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._extcur, update_sql, update_values)
-            if not norefresh:
-                self._refresh_from_cursor(self._extcur)
-
-        if not self.is_unique and len(self._rawdata_window)>0:
-            self[self._rawdata_window_index]
-
-        return self
 
     @property
     def SQL(self):
