@@ -359,6 +359,26 @@ class OAG_DbSchemaProxy(object):
             dao.commit()
             return oag
 
+    def init_fkeys(self):
+        dbp = self._dbproxy
+        oag = dbp._oag
+
+        # Don't set props for proxied OAGs, they are passthrough entities
+        if oag.is_proxied:
+            return
+
+        with OADao(oag.dbcontext) as dao:
+            with dao.cur as cur:
+                for stream in oag.dbstreams:
+                    if oag.is_oagnode(stream):
+                        currattr = getattr(oag, stream, None)
+                        if currattr:
+                            currattr.db.schema.init_fkeys()
+
+                dbp.SQLexec(cur, dbp.SQL['admin']['fkeys'])
+                setattr(oag.__class__, '_fkframe', cur.fetchall())
+                oag.refresh(idxreset=False)
+
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
     def __init__(self, oag):
@@ -401,7 +421,7 @@ class OAG_DbProxy(object):
         # Refresh to set iteridx
         self._oag.refresh()
 
-        self._oag.init_state_dbfkeys()
+        self.schema.init_fkeys()
 
         # Set attrs if this is a unique oag
         if self._oag.is_unique:
@@ -785,24 +805,6 @@ class OAG_RootNode(object):
         """Override in deriving classes as necessary"""
         return [k for k, v in self._cframe.items()]
 
-    def init_state_dbfkeys(self):
-
-        # Don't set props for proxied OAGs, they are passthrough entities
-        if self.is_proxied:
-            return
-
-        with OADao(self.dbcontext) as dao:
-            with dao.cur as cur:
-                for stream in self.dbstreams:
-                    if self.is_oagnode(stream):
-                        currattr = getattr(self, stream, None)
-                        if currattr:
-                            currattr.init_state_dbfkeys()
-
-                self.db.SQLexec(cur, self.db.SQL['admin']['fkeys'])
-                setattr(self.__class__, '_fkframe', cur.fetchall())
-                self.refresh(idxreset=False)
-
     def init_state_oag(self, clauseprms, indexprm, initprms={}):
         attrs = self._set_attrs_from_userprms(initprms)
         self._set_cframe_from_attrs(attrs)
@@ -858,6 +860,7 @@ class OAG_RootNode(object):
 
                 # Some things probably shouldn't be sent over rpc
                 self._rpc_stop_list = [
+                    'db',
                     'logger',
                     'rpcrtr',
                     'discoverable'
