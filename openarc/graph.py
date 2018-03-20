@@ -298,7 +298,7 @@ class OAG_DbProxy(object):
         attrstr    = ', '.join([k for k in filtered_cframe])
         vals       = [filtered_cframe[k] for k in filtered_cframe]
         formatstrs = ', '.join(['%s' for v in vals])
-        insert_sql = self._oag.SQL['insert']['id'] % (attrstr, formatstrs)
+        insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
         if self._oag._extcur is None:
             with OADao(self._oag.dbcontext) as dao:
@@ -329,7 +329,7 @@ class OAG_DbProxy(object):
 
     def delete(self):
 
-        delete_sql = self._oag.SQL['delete']['id']
+        delete_sql = self.SQL['delete']['id']
 
         if self._oag._extcur is None:
             with OADao(self._oag.dbcontext) as dao:
@@ -357,7 +357,7 @@ class OAG_DbProxy(object):
         index_key     = [k for k in self._oag._cframe if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
                                     for attr in member_attrs])
-        update_sql    = self._oag.SQL['update']['id']\
+        update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag._cframe[attr] for attr in member_attrs]
         if self._oag._extcur is None:
@@ -376,6 +376,99 @@ class OAG_DbProxy(object):
             self._oag[self._oag._rawdata_window_index]
 
         return self._oag
+
+    @property
+    def SQL(self):
+
+        # Default SQL defined for all tables
+        default_sql = {
+            "read" : {
+              "id"       : self._oag.SQLpp("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE {2}=%s
+                ORDER BY {2}"""),
+            },
+            "update" : {
+              "id"       : self._oag.SQLpp("""
+                  UPDATE {0}.{1}
+                     SET %s
+                   WHERE {2}=%s""")
+            },
+            "insert" : {
+              "id"       : self._oag.SQLpp("""
+             INSERT INTO {0}.{1}(%s)
+                  VALUES (%s)
+               RETURNING {2}""")
+            },
+            "delete" : {
+              "id"       : self._oag.SQLpp("""
+             DELETE FROM {0}.{1}
+                   WHERE {2}=%s""")
+            },
+            "admin"  : {
+              "fkeys"    : self._oag.SQLpp("""
+                  SELECT tc.constraint_name,
+                         kcu.column_name as id,
+                         kcu.constraint_schema as schema,
+                         tc.table_name as table,
+                         ccu.table_schema as points_to_schema,
+                         ccu.table_name as points_to_table_name,
+                         ccu.column_name as points_to_id
+                    FROM information_schema.table_constraints as tc
+                         INNER JOIN information_schema.key_column_usage as kcu
+                             ON tc.constraint_name=kcu.constraint_name
+                         INNER JOIN information_schema.constraint_column_usage as ccu
+                             ON ccu.constraint_name = tc.constraint_name
+                   WHERE constraint_type = 'FOREIGN KEY'
+                         AND ccu.table_schema='{0}'
+                         AND ccu.table_name='{1}'"""),
+              "mkindex"  : self._oag.SQLpp("""
+                 CREATE %s INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s) %s"""),
+              "mkschema" : self._oag.SQLpp("""
+                 CREATE SCHEMA {0}"""),
+              "mktable"  : self._oag.SQLpp("""
+                  CREATE table {0}.{1}({2} serial primary key)"""),
+              "schema"   : self._oag.SQLpp("""
+                  SELECT 1
+                    FROM information_schema.schemata
+                   WHERE schema_name='{0}'"""),
+              "table"    : self._oag.SQLpp("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE 1=0""")
+            }
+        }
+
+        # Add in id retrieval for oagprops
+        for stream, streaminfo in self._oag.dbstreams.items():
+            if self._oag.is_oagnode(stream):
+                stream_sql_key = 'by_'+stream
+                stream_sql     = td("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE {2}=%s
+                ORDER BY {3}""").format(self._oag.dbcontext, self._oag.dbtable, streaminfo[0].dbpkname[1:], self._oag.dbpkname)
+                default_sql['read'][stream_sql_key] = stream_sql
+
+        # Add in other indices
+        for index, idxinfo in self._oag.dbindices.items():
+            index_sql = td("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE %s
+                ORDER BY {2}""").format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname)
+            where_clauses = []
+            for f in idxinfo[0]:
+                where_clauses.append("{0}=%s".format(self._oag.db_oag_mapping[f] if self._oag.is_oagnode(f) else f))
+            default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
+
+        # Add in user defined SQL
+        for action, sqlinfo in self._oag.sql_local.items():
+            for index, sql in sqlinfo.items():
+                default_sql[action][index] = sql
+
+        return default_sql
 
 class OAG_PropProxy(object):
     """Manipulates properties"""
@@ -426,7 +519,6 @@ class OAG_PropProxy(object):
 
             # Set up next invocation
             setattr(self.cls, 'current_id', obj_id)
-
 
 class OAG_RootNode(object):
 
@@ -599,24 +691,24 @@ class OAG_RootNode(object):
         with OADao(self.dbcontext, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that dbcontext schema exists
-                self.SQLexec(cur, self.SQL['admin']['schema'])
+                self.SQLexec(cur, self.db.SQL['admin']['schema'])
                 check = cur.fetchall()
                 if len(check)==0:
                     if self.logger.SQL:
                         print "Creating missing schema [%s]" % self.dbcontext
-                    self.SQLexec(cur, self.SQL['admin']['mkschema'])
+                    self.SQLexec(cur, self.db.SQL['admin']['mkschema'])
                     dao.commit()
 
                 # Check for presence of table
                 try:
-                    self.SQLexec(cur, self.SQL['admin']['table'])
+                    self.SQLexec(cur, self.db.SQL['admin']['table'])
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
                         if self.logger.SQL:
                             print "Creating missing table [%s]" % self.dbtable
-                        self.SQLexec(cur, self.SQL['admin']['mktable'])
-                        self.SQLexec(cur, self.SQL['admin']['table'])
+                        self.SQLexec(cur, self.db.SQL['admin']['mktable'])
+                        self.SQLexec(cur, self.db.SQL['admin']['table'])
 
                 # Check for table schema integrity
                 oag_columns     = sorted(self.dbstreams.keys())
@@ -663,7 +755,7 @@ class OAG_RootNode(object):
                         partial_sql =\
                             'WHERE %s' % ' AND '.join('%s=%s' % (self.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
-                    exec_sql    = self.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
+                    exec_sql    = self.db.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
                     self.SQLexec(cur, exec_sql)
 
             dao.commit()
@@ -683,7 +775,7 @@ class OAG_RootNode(object):
                         if currattr:
                             currattr.init_state_dbfkeys()
 
-                self.SQLexec(cur, self.SQL['admin']['fkeys'])
+                self.SQLexec(cur, self.db.SQL['admin']['fkeys'])
                 setattr(self.__class__, '_fkframe', cur.fetchall())
                 self.refresh(idxreset=False)
 
@@ -901,99 +993,6 @@ class OAG_RootNode(object):
     @property
     def sql_local(self): return {}
 
-    @property
-    def SQL(self):
-
-        # Default SQL defined for all tables
-        default_sql = {
-            "read" : {
-              "id"       : self.SQLpp("""
-                  SELECT *
-                    FROM {0}.{1}
-                   WHERE {2}=%s
-                ORDER BY {2}"""),
-            },
-            "update" : {
-              "id"       : self.SQLpp("""
-                  UPDATE {0}.{1}
-                     SET %s
-                   WHERE {2}=%s""")
-            },
-            "insert" : {
-              "id"       : self.SQLpp("""
-             INSERT INTO {0}.{1}(%s)
-                  VALUES (%s)
-               RETURNING {2}""")
-            },
-            "delete" : {
-              "id"       : self.SQLpp("""
-             DELETE FROM {0}.{1}
-                   WHERE {2}=%s""")
-            },
-            "admin"  : {
-              "fkeys"    : self.SQLpp("""
-                  SELECT tc.constraint_name,
-                         kcu.column_name as id,
-                         kcu.constraint_schema as schema,
-                         tc.table_name as table,
-                         ccu.table_schema as points_to_schema,
-                         ccu.table_name as points_to_table_name,
-                         ccu.column_name as points_to_id
-                    FROM information_schema.table_constraints as tc
-                         INNER JOIN information_schema.key_column_usage as kcu
-                             ON tc.constraint_name=kcu.constraint_name
-                         INNER JOIN information_schema.constraint_column_usage as ccu
-                             ON ccu.constraint_name = tc.constraint_name
-                   WHERE constraint_type = 'FOREIGN KEY'
-                         AND ccu.table_schema='{0}'
-                         AND ccu.table_name='{1}'"""),
-              "mkindex"  : self.SQLpp("""
-                 CREATE %s INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s) %s"""),
-              "mkschema" : self.SQLpp("""
-                 CREATE SCHEMA {0}"""),
-              "mktable"  : self.SQLpp("""
-                  CREATE table {0}.{1}({2} serial primary key)"""),
-              "schema"   : self.SQLpp("""
-                  SELECT 1
-                    FROM information_schema.schemata
-                   WHERE schema_name='{0}'"""),
-              "table"    : self.SQLpp("""
-                  SELECT *
-                    FROM {0}.{1}
-                   WHERE 1=0""")
-            }
-        }
-
-        # Add in id retrieval for oagprops
-        for stream, streaminfo in self.dbstreams.items():
-            if self.is_oagnode(stream):
-                stream_sql_key = 'by_'+stream
-                stream_sql     = td("""
-                  SELECT *
-                    FROM {0}.{1}
-                   WHERE {2}=%s
-                ORDER BY {3}""").format(self.dbcontext, self.dbtable, streaminfo[0].dbpkname[1:], self.dbpkname)
-                default_sql['read'][stream_sql_key] = stream_sql
-
-        # Add in other indices
-        for index, idxinfo in self.dbindices.items():
-            index_sql = td("""
-                  SELECT *
-                    FROM {0}.{1}
-                   WHERE %s
-                ORDER BY {2}""").format(self.dbcontext, self.dbtable, self.dbpkname)
-            where_clauses = []
-            for f in idxinfo[0]:
-                where_clauses.append("{0}=%s".format(self.db_oag_mapping[f] if self.is_oagnode(f) else f))
-            default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
-
-        # Add in user defined SQL
-        for action, sqlinfo in self.sql_local.items():
-            for index, sql in sqlinfo.items():
-                default_sql[action][index] = sql
-
-        return default_sql
-
     def SQLexec(self, cur, query, parms=[]):
         if self.logger.SQL:
             print cur.mogrify(query, parms)
@@ -1161,10 +1160,10 @@ class OAG_RootNode(object):
 
     def _refresh_from_cursor(self, cur):
         try:
-            if type(self.SQL).__name__ == "str":
-                self.SQLexec(cur, self.SQL, self._clauseprms)
-            elif type(self.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
+            if type(self.db.SQL).__name__ == "str":
+                self.SQLexec(cur, self.db.SQL, self._clauseprms)
+            elif type(self.db.SQL).__name__ == "dict":
+                self.SQLexec(cur, self.db.SQL['read'][self._indexparm], self._clauseprms)
 
             self._rawdata = cur.fetchall()
             self._rawdata_window = self._rawdata
