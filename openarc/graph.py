@@ -278,7 +278,57 @@ class OAGRPC_REQ_Requests(OAGRPC):
 
 reqcls = OAGRPC_REQ_Requests
 
+class OAG_DbProxy(object):
+    """Responsible for manipulation of database"""
+    def __init__(self, oag):
+        self._oag      = oag
+
+    def create(self, initprms={}):
+
+        ### Fix
+        self._oag.init_state_dbschema()
+
+        attrs = self._oag._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
+        self._oag._set_cframe_from_attrs(attrs, fullhouse=True)
+
+        if self._oag._rawdata is not None:
+            raise OAError("Cannot create item that has already been initiated")
+
+        filtered_cframe = {k:self._oag._cframe[k] for k in self._oag._cframe if k[0] != '_'}
+        attrstr    = ', '.join([k for k in filtered_cframe])
+        vals       = [filtered_cframe[k] for k in filtered_cframe]
+        formatstrs = ', '.join(['%s' for v in vals])
+        insert_sql = self._oag.SQL['insert']['id'] % (attrstr, formatstrs)
+
+        if self._oag._extcur is None:
+            with OADao(self._oag.dbcontext) as dao:
+                with dao.cur as cur:
+                    self._oag.SQLexec(cur, insert_sql, vals)
+                    if self._oag._indexparm == 'id':
+                        index_val = cur.fetchall()
+                        self._oag._clauseprms = index_val[0].values()
+                    self._oag._refresh_from_cursor(cur)
+                    dao.commit()
+        else:
+            self._oag.SQLexec(self._oag._extcur, insert_sql, vals)
+            if self._oag._indexparm == 'id':
+                index_val = self._oag._extcur.fetchall()
+                self._clauseprms = index_val[0].values()
+            self._oag._refresh_from_cursor(self._oag._extcur)
+
+        # Refresh to set iteridx
+        self._oag.refresh()
+
+        self._oag.init_state_dbfkeys()
+
+        # Set attrs if this is a unique oag
+        if self._oag.is_unique:
+            self._oag._set_attrs_from_cframe_uniq()
+
+        return self._oag
+
 class OAG_PropProxy(object):
+    """Manipulates properties"""
     def __init__(self, obj):
         self.cls            = obj.__class__
         self.cls.current_id = getattr(self.cls, 'current_id', str())
@@ -327,53 +377,15 @@ class OAG_PropProxy(object):
             # Set up next invocation
             setattr(self.cls, 'current_id', obj_id)
 
+
 class OAG_RootNode(object):
 
     ##### Class variables
     _fkframe = []
 
-    def create(self, initprms={}):
-
-        self.init_state_dbschema()
-
-        attrs = self._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
-        self._set_cframe_from_attrs(attrs, fullhouse=True)
-
-        if self._rawdata is not None:
-            raise OAError("Cannot create item that has already been initiated")
-
-        filtered_cframe = {k:self._cframe[k] for k in self._cframe if k[0] != '_'}
-        attrstr    = ', '.join([k for k in filtered_cframe])
-        vals       = [filtered_cframe[k] for k in filtered_cframe]
-        formatstrs = ', '.join(['%s' for v in vals])
-        insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
-
-        if self._extcur is None:
-            with OADao(self.dbcontext) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, insert_sql, vals)
-                    if self._indexparm == 'id':
-                        index_val = cur.fetchall()
-                        self._clauseprms = index_val[0].values()
-                    self._refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._extcur, insert_sql, vals)
-            if self._indexparm == 'id':
-                index_val = self._extcur.fetchall()
-                self._clauseprms = index_val[0].values()
-            self._refresh_from_cursor(self._extcur)
-
-        # Refresh to set iteridx
-        self.refresh()
-
-        self.init_state_dbfkeys()
-
-        # Set attrs if this is a unique oag
-        if self.is_unique:
-            self._set_attrs_from_cframe_uniq()
-
-        return self
+    @property
+    def db(self):
+        return self._db_proxy
 
     @staticproperty
     def db_oag_mapping(cls):
@@ -485,7 +497,7 @@ class OAG_RootNode(object):
                 OAG_RpcDiscoverable(logger=self.logger,
                                     rpc=False,
                                     heartbeat=self._rpc_heartbeat)\
-                .create({
+                .db.create({
                     'rpcinfname' : self.infname,
                     'stripe'     : 0,
                     'url'        : self.oagurl,
@@ -1099,6 +1111,8 @@ class OAG_RootNode(object):
         self._extcur         = extcur
         self._logger         = logger
         self._glets          = []
+
+        self._db_proxy       = OAG_DbProxy(self)
         self._oagprop_proxy  = OAG_PropProxy(self)
 
         if initurl:
