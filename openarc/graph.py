@@ -383,31 +383,31 @@ class OAG_DbProxy(object):
         # Default SQL defined for all tables
         default_sql = {
             "read" : {
-              "id"       : self._oag.SQLpp("""
+              "id"       : self.SQLpp("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE {2}=%s
                 ORDER BY {2}"""),
             },
             "update" : {
-              "id"       : self._oag.SQLpp("""
+              "id"       : self.SQLpp("""
                   UPDATE {0}.{1}
                      SET %s
                    WHERE {2}=%s""")
             },
             "insert" : {
-              "id"       : self._oag.SQLpp("""
+              "id"       : self.SQLpp("""
              INSERT INTO {0}.{1}(%s)
                   VALUES (%s)
                RETURNING {2}""")
             },
             "delete" : {
-              "id"       : self._oag.SQLpp("""
+              "id"       : self.SQLpp("""
              DELETE FROM {0}.{1}
                    WHERE {2}=%s""")
             },
             "admin"  : {
-              "fkeys"    : self._oag.SQLpp("""
+              "fkeys"    : self.SQLpp("""
                   SELECT tc.constraint_name,
                          kcu.column_name as id,
                          kcu.constraint_schema as schema,
@@ -423,17 +423,17 @@ class OAG_DbProxy(object):
                    WHERE constraint_type = 'FOREIGN KEY'
                          AND ccu.table_schema='{0}'
                          AND ccu.table_name='{1}'"""),
-              "mkindex"  : self._oag.SQLpp("""
+              "mkindex"  : self.SQLpp("""
                  CREATE %s INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s) %s"""),
-              "mkschema" : self._oag.SQLpp("""
+              "mkschema" : self.SQLpp("""
                  CREATE SCHEMA {0}"""),
-              "mktable"  : self._oag.SQLpp("""
+              "mktable"  : self.SQLpp("""
                   CREATE table {0}.{1}({2} serial primary key)"""),
-              "schema"   : self._oag.SQLpp("""
+              "schema"   : self.SQLpp("""
                   SELECT 1
                     FROM information_schema.schemata
                    WHERE schema_name='{0}'"""),
-              "table"    : self._oag.SQLpp("""
+              "table"    : self.SQLpp("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE 1=0""")
@@ -469,6 +469,12 @@ class OAG_DbProxy(object):
                 default_sql[action][index] = sql
 
         return default_sql
+
+    def SQLpp(self, SQL):
+        """Pretty prints SQL and populates schema{0}.table{1} and its primary
+        key{2} in given SQL string"""
+        return td(SQL.format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname))
+
 
 class OAG_PropProxy(object):
     """Manipulates properties"""
@@ -740,7 +746,7 @@ class OAG_RootNode(object):
                                     add_clause = "%s NOT NULL" % add_clause
                             add_col_clauses.append(add_clause)
 
-                    addcol_sql = self.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
+                    addcol_sql = self.db.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
                     self.SQLexec(cur, addcol_sql)
 
                 for idx, idxinfo in self.dbindices.items():
@@ -997,11 +1003,6 @@ class OAG_RootNode(object):
         if self.logger.SQL:
             print cur.mogrify(query, parms)
         cur.execute(query, parms)
-
-    def SQLpp(self, SQL):
-        """Pretty prints SQL and populates schema{0}.table{1} and its primary
-        key{2} in given SQL string"""
-        return td(SQL.format(self.dbcontext, self.dbtable, self.dbpkname))
 
     def __cb_init_state_rpc(self):
 

@@ -1360,7 +1360,7 @@ class OAG_AutoNode2(OAG_RootNode):
     def sql_local(self):
         return{
           "read" : {
-            "id_2" : self.SQLpp("""
+            "id_2" : self.db.SQLpp("""
                 SELECT *
                   FROM {0}.{1}
                  WHERE field4=%s
