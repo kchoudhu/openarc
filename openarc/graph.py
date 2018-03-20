@@ -303,14 +303,14 @@ class OAG_DbProxy(object):
         if self._oag._extcur is None:
             with OADao(self._oag.dbcontext) as dao:
                 with dao.cur as cur:
-                    self._oag.SQLexec(cur, insert_sql, vals)
+                    self.SQLexec(cur, insert_sql, vals)
                     if self._oag._indexparm == 'id':
                         index_val = cur.fetchall()
                         self._oag._clauseprms = index_val[0].values()
                     self._oag._refresh_from_cursor(cur)
                     dao.commit()
         else:
-            self._oag.SQLexec(self._oag._extcur, insert_sql, vals)
+            self.SQLexec(self._oag._extcur, insert_sql, vals)
             if self._oag._indexparm == 'id':
                 index_val = self._oag._extcur.fetchall()
                 self._clauseprms = index_val[0].values()
@@ -334,10 +334,10 @@ class OAG_DbProxy(object):
         if self._oag._extcur is None:
             with OADao(self._oag.dbcontext) as dao:
                 with dao.cur as cur:
-                    self._oag.SQLexec(cur, delete_sql, [self._oag.id])
+                    self.SQLexec(cur, delete_sql, [self._oag.id])
                     dao.commit()
         else:
-            self._oag.SQLexec(cur, delete_sql, [self._oag.id])
+            self.SQLexec(cur, delete_sql, [self._oag.id])
 
         self._oag.refresh(gotodb=True)
 
@@ -363,12 +363,12 @@ class OAG_DbProxy(object):
         if self._oag._extcur is None:
             with OADao(self._oag.dbcontext) as dao:
                 with dao.cur as cur:
-                    self._oag.SQLexec(cur, update_sql, update_values)
+                    self.SQLexec(cur, update_sql, update_values)
                     if not norefresh:
                         self._oag._refresh_from_cursor(cur)
                     dao.commit()
         else:
-            self._oag.SQLexec(self._oag._extcur, update_sql, update_values)
+            self.SQLexec(self._oag._extcur, update_sql, update_values)
             if not norefresh:
                 self._oag._refresh_from_cursor(self._oag._extcur)
 
@@ -470,11 +470,15 @@ class OAG_DbProxy(object):
 
         return default_sql
 
+    def SQLexec(self, cur, query, parms=[]):
+        if self._oag.logger.SQL:
+            print cur.mogrify(query, parms)
+        cur.execute(query, parms)
+
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
         return td(SQL.format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname))
-
 
 class OAG_PropProxy(object):
     """Manipulates properties"""
@@ -697,24 +701,24 @@ class OAG_RootNode(object):
         with OADao(self.dbcontext, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that dbcontext schema exists
-                self.SQLexec(cur, self.db.SQL['admin']['schema'])
+                self.db.SQLexec(cur, self.db.SQL['admin']['schema'])
                 check = cur.fetchall()
                 if len(check)==0:
                     if self.logger.SQL:
                         print "Creating missing schema [%s]" % self.dbcontext
-                    self.SQLexec(cur, self.db.SQL['admin']['mkschema'])
+                    self.db.SQLexec(cur, self.db.SQL['admin']['mkschema'])
                     dao.commit()
 
                 # Check for presence of table
                 try:
-                    self.SQLexec(cur, self.db.SQL['admin']['table'])
+                    self.db.SQLexec(cur, self.db.SQL['admin']['table'])
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (self.dbcontext, self.dbtable)) in str(e):
                         if self.logger.SQL:
                             print "Creating missing table [%s]" % self.dbtable
-                        self.SQLexec(cur, self.db.SQL['admin']['mktable'])
-                        self.SQLexec(cur, self.db.SQL['admin']['table'])
+                        self.db.SQLexec(cur, self.db.SQL['admin']['mktable'])
+                        self.db.SQLexec(cur, self.db.SQL['admin']['table'])
 
                 # Check for table schema integrity
                 oag_columns     = sorted(self.dbstreams.keys())
@@ -747,7 +751,7 @@ class OAG_RootNode(object):
                             add_col_clauses.append(add_clause)
 
                     addcol_sql = self.db.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
-                    self.SQLexec(cur, addcol_sql)
+                    self.db.SQLexec(cur, addcol_sql)
 
                 for idx, idxinfo in self.dbindices.items():
                     col_sql     = ','.join(map(lambda x: self.db_oag_mapping[x], idxinfo[0]))
@@ -762,7 +766,7 @@ class OAG_RootNode(object):
                             'WHERE %s' % ' AND '.join('%s=%s' % (self.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
                     exec_sql    = self.db.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
-                    self.SQLexec(cur, exec_sql)
+                    self.db.SQLexec(cur, exec_sql)
 
             dao.commit()
             return self
@@ -781,7 +785,7 @@ class OAG_RootNode(object):
                         if currattr:
                             currattr.init_state_dbfkeys()
 
-                self.SQLexec(cur, self.db.SQL['admin']['fkeys'])
+                self.db.SQLexec(cur, self.db.SQL['admin']['fkeys'])
                 setattr(self.__class__, '_fkframe', cur.fetchall())
                 self.refresh(idxreset=False)
 
@@ -999,11 +1003,6 @@ class OAG_RootNode(object):
     @property
     def sql_local(self): return {}
 
-    def SQLexec(self, cur, query, parms=[]):
-        if self.logger.SQL:
-            print cur.mogrify(query, parms)
-        cur.execute(query, parms)
-
     def __cb_init_state_rpc(self):
 
         rpc_dispatch = {
@@ -1162,9 +1161,9 @@ class OAG_RootNode(object):
     def _refresh_from_cursor(self, cur):
         try:
             if type(self.db.SQL).__name__ == "str":
-                self.SQLexec(cur, self.db.SQL, self._clauseprms)
+                self.db.SQLexec(cur, self.db.SQL, self._clauseprms)
             elif type(self.db.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.db.SQL['read'][self._indexparm], self._clauseprms)
+                self.db.SQLexec(cur, self.db.SQL['read'][self._indexparm], self._clauseprms)
 
             self._rawdata = cur.fetchall()
             self._rawdata_window = self._rawdata
