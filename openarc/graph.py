@@ -327,6 +327,25 @@ class OAG_DbProxy(object):
 
         return self._oag
 
+    def delete(self):
+
+        delete_sql = self._oag.SQL['delete']['id']
+
+        if self._oag._extcur is None:
+            with OADao(self._oag.dbcontext) as dao:
+                with dao.cur as cur:
+                    self._oag.SQLexec(cur, delete_sql, [self._oag.id])
+                    dao.commit()
+        else:
+            self._oag.SQLexec(cur, delete_sql, [self._oag.id])
+
+        self._oag.refresh(gotodb=True)
+
+        if self._oag.is_unique:
+            self._oag._set_attrs_from_cframe_uniq()
+
+        return self
+
     def update(self, updparms={}, norefresh=False):
 
         attrs = self._oag._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
@@ -452,25 +471,6 @@ class OAG_RootNode(object):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
-    def delete(self):
-
-        delete_sql    = self.SQL['delete']['id']
-
-        if self._extcur is None:
-            with OADao(self.dbcontext) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, delete_sql, [self.id])
-                    dao.commit()
-        else:
-            self.SQLexec(cur, delete_sql, [self.id])
-
-        self.refresh(gotodb=True)
-
-        if self.is_unique:
-            self._set_attrs_from_cframe_uniq()
-
-        return self
-
     def discover(self):
         remote_oag =\
             OAG_RpcDiscoverable({
@@ -494,7 +494,7 @@ class OAG_RootNode(object):
                 print "[%s] Killing OAG greenlets [%d]" % (self._rpc_discovery.id, len(self._glets))
             [glet.kill() for glet in self._glets]
             gevent.joinall(self._glets+self._rpc_discovery._glets)
-            self._rpc_discovery.delete()
+            self._rpc_discovery.db.delete()
             self._rpc_discovery = None
         else:
             # Cleanup previous messes
@@ -510,7 +510,7 @@ class OAG_RootNode(object):
                         if self.logger.RPC:
                             print "[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
                                    % (rpc.id, rpc.type, rpc.stripe, rpc.heartbeat, delta)
-                        rpc.delete()
+                        rpc.db.delete()
 
                 # Is there already an active subscription there?
                 if number_active > 0:

@@ -719,7 +719,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.__check_autonode_equivalence(a2, a2_chk)
 
-        a2.delete()
+        a2.db.delete()
 
         self.assertEqual(a2.id, None)
         self.assertEqual(a2.field4, None)
@@ -752,14 +752,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a2.auto_node1a.size, 10)
 
-        a2.auto_node1a[0].delete()
+        a2.auto_node1a[0].db.delete()
 
         a2.refresh()
 
         self.assertEqual(a2.auto_node1a.size, 9)
 
         for x in a2.auto_node1a:
-            a2.auto_node1a.delete()
+            a2.auto_node1a.db.delete()
 
         self.assertEqual(a2.auto_node1a.size, 0)
 
