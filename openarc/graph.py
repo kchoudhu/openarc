@@ -602,18 +602,18 @@ class OAG_PropProxy(object):
             oagprofiles[self.oagid] = collections.OrderedDict()
 
         setattr(self.cls, 'oagprofiles', oagprofiles)
-        self.setprofile(self.oagid)
+        self.profile_set(self.oagid)
 
-    def addprop(self, stream, oagprop):
-        self.setprofile(self.oagid)
+    def add_oagprop(self, stream, oagprop):
+        self.profile_set(self.oagid)
         setattr(self.cls, stream, oagprop)
         self.cls.oagprofiles[self.oagid][stream] = oagprop
 
-    def deregister(self, obj):
+    def profile_deregister(self, obj):
         del(self.cls.oagprofiles[obj.oagid])
         self.cls.current_id = str()
 
-    def setprofile(self, obj_id):
+    def profile_set(self, obj_id):
         if obj_id == self.cls.current_id:
             # redundant call, don't do anything
             return
@@ -1039,7 +1039,7 @@ class OAG_RootNode(object):
 
     def __del__(self):
         try:
-            self._oagprop_proxy.deregister(self)
+            self._oagprop_proxy.profile_deregister(self)
         except Exception as e:
             print e.message
             print "This should never happen"
@@ -1079,7 +1079,7 @@ class OAG_RootNode(object):
             pass
 
         try:
-            objattr('_oagprop_proxy').setprofile(objattr('_oagid'))
+            objattr('_oagprop_proxy').profile_set(objattr('_oagid'))
         except AttributeError:
             pass
 
@@ -1137,7 +1137,7 @@ class OAG_RootNode(object):
             self._proxy_mode = True
             self._proxy_url  = initurl
         else:
-            self._oagprop_proxy.setprofile(self.oagid)
+            self._oagprop_proxy.profile_set(self.oagid)
             self.init_state_oag(clauseprms, indexprm, initprms)
 
             if rpc:
@@ -1215,7 +1215,7 @@ class OAG_RootNode(object):
                              logger=self.logger):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
-                    self._oagprop_proxy.addprop(stream, oagprop(fget))
+                    self._oagprop_proxy.add_oagprop(stream, oagprop(fget))
 
     def _set_attrs_from_cframe_uniq(self):
         if len(self._rawdata_window) > 1:
@@ -1379,7 +1379,7 @@ class OAG_RootNode(object):
                     return newattr
             oagpropfn.__name__ = stream
 
-            self._oagprop_proxy.addprop(stream, oagprop(oagpropfn))
+            self._oagprop_proxy.add_oagprop(stream, oagprop(oagpropfn))
         else:
             setattr(self, stream, cfval)
 
