@@ -381,13 +381,30 @@ class OAG_DbSchemaProxy(object):
 
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag):
-        self._oag      = oag
-        self._schema   = None
+    def __init__(self, oag, clauseprms, indexprm):
+
+        # Store reference to outer object
+        self._oag = oag
+
+        # Schema is unknown right now
+        self._schema = None
+
+        # Intialize search parameters, if any
+        if clauseprms:
+            if type(clauseprms).__name__ in ['dict']:
+                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
+            elif type(clauseprms).__name__ in ['list', 'tuple']:
+                rawprms = clauseprms
+            else:
+                rawprms = [clauseprms]
+
+            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
+
+        self._clauseprms     = clauseprms
+        self._indexparm      = indexprm
 
     def create(self, initprms={}):
 
-        ### Fix
         self.schema.init()
 
         attrs = self._oag._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
@@ -406,16 +423,16 @@ class OAG_DbProxy(object):
             with OADao(self._oag.dbcontext) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, insert_sql, vals)
-                    if self._oag._indexparm == 'id':
+                    if self._indexparm == 'id':
                         index_val = cur.fetchall()
-                        self._oag._clauseprms = index_val[0].values()
+                        self._clauseprms = index_val[0].values()
                     self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._oag._extcur, insert_sql, vals)
-            if self._oag._indexparm == 'id':
+            if self._indexparm == 'id':
                 index_val = self._oag._extcur.fetchall()
-                self._oag._clauseprms = index_val[0].values()
+                self._clauseprms = index_val[0].values()
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
@@ -448,12 +465,20 @@ class OAG_DbProxy(object):
 
         return self
 
+    @property
+    def searchidx(self):
+        return self._indexparm
+
+    @property
+    def searchprms(self):
+        return self._clauseprms
+
     def update(self, updparms={}, norefresh=False):
 
         attrs = self._oag._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
         self._oag._set_cframe_from_attrs(attrs)
 
-        self._oag._set_clauseprms()
+        self.update_clauseprms()
 
         member_attrs  = [k for k in self._oag._cframe if k[0] != '_']
         index_key     = [k for k in self._oag._cframe if k[0] == '_'][0]
@@ -479,6 +504,25 @@ class OAG_DbProxy(object):
 
         return self._oag
 
+    def update_clauseprms(self):
+        # Update search parameteres from prop manager
+        index = self._indexparm[3:]
+        if index != str():
+            try:
+                keys = self._oag.dbindices[index][0]
+            except KeyError:
+                keys = [index]
+
+            new_clauseprms = []
+            for i, key in enumerate(keys):
+                key = self._oag.stream_db_mapping[key]
+                try:
+                    new_clauseprms.append(self._oag._cframe[key])
+                except KeyError:
+                    new_clauseprms.append(self._clauseprms[i])
+
+            self._clauseprms = new_clauseprms
+
     def refresh(self, gotodb=False, idxreset=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
@@ -500,9 +544,9 @@ class OAG_DbProxy(object):
     def __refresh_from_cursor(self, cur):
         try:
             if type(self.SQL).__name__ == "str":
-                self.SQLexec(cur, self.SQL, self._oag._clauseprms)
+                self.SQLexec(cur, self.SQL, self._clauseprms)
             elif type(self.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.SQL['read'][self._oag._indexparm], self._oag._clauseprms)
+                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
 
             self._oag._rawdata = cur.fetchall()
             self._oag._rawdata_window = self._oag._rawdata
@@ -825,20 +869,7 @@ class OAG_RootNode(object):
         attrs = self._set_attrs_from_userprms(initprms)
         self._set_cframe_from_attrs(attrs)
 
-        if clauseprms:
-            if type(clauseprms).__name__ in ['dict']:
-                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
-            elif type(clauseprms).__name__ in ['list', 'tuple']:
-                rawprms = clauseprms
-            else:
-                rawprms = [clauseprms]
-
-            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
-
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexprm
-
-        if self._clauseprms is not None:
+        if self.db.searchprms is not None:
             self.db.refresh(gotodb=True)
 
             if len(self._rawdata_window) == 0:
@@ -929,8 +960,8 @@ class OAG_RootNode(object):
         oagcopy._cframe         = dict(self._cframe)
         oagcopy._iteridx       = 0
 
-        oagcopy._clauseprms     = list(self._clauseprms)
-        oagcopy._indexparm      = self._indexparm
+        oagcopy._db_proxy       = OAG_DbProxy(oagcopy, list(self.db.searchprms), self.db.searchidx)
+        oagcopy._oagprop_proxy  = OAG_PropProxy(oagcopy)
 
         return oagcopy
 
@@ -1143,7 +1174,7 @@ class OAG_RootNode(object):
         self._logger         = logger
         self._glets          = []
 
-        self._db_proxy       = OAG_DbProxy(self)
+        self._db_proxy       = OAG_DbProxy(self, clauseprms, indexprm)
         self._oagprop_proxy  = OAG_PropProxy(self)
 
         if initurl:
@@ -1304,25 +1335,6 @@ class OAG_RootNode(object):
                 raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
 
         self._cframe = cframe_tmp
-
-    def _set_clauseprms(self):
-        # Update clause params as well
-        index = self._indexparm[3:]
-        if index != str():
-            try:
-                keys = self.dbindices[index][0]
-            except KeyError:
-                keys = [index]
-
-            new_clauseprms = []
-            for i, key in enumerate(keys):
-                key = self.stream_db_mapping[key]
-                try:
-                    new_clauseprms.append(self._cframe[key])
-                except KeyError:
-                    new_clauseprms.append(self._clauseprms[i])
-
-            self._clauseprms = new_clauseprms
 
     def _set_oagprop(self, stream, cfval, indexprm='id', streamform='cframe'):
 
