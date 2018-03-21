@@ -1426,10 +1426,11 @@ class OAG_RpcDiscoverable(OAG_RootNode):
             self.heartbeat = OATime().now
             if self.logger.RPC:
                 print "[%s] heartbeat %s" % (self.id, self.heartbeat)
-            self.update()
+            self.db.update()
             gevent.sleep(getenv().rpctimeout)
 
     def start_heartbeat(self):
+        from gevent import spawn
         if self._rpc_heartbeat:
             if self.logger.RPC:
                 print "[%s] Starting heartbeat greenlet" % (self.id)
