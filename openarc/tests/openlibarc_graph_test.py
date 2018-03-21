@@ -754,7 +754,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a2.auto_node1a[0].db.delete()
 
-        a2.refresh()
+        a2.db.refresh()
 
         self.assertEqual(a2.auto_node1a.size, 9)
 

@@ -377,7 +377,7 @@ class OAG_DbSchemaProxy(object):
 
                 dbp.SQLexec(cur, dbp.SQL['admin']['fkeys'])
                 setattr(oag.__class__, '_fkframe', cur.fetchall())
-                oag.refresh(idxreset=False)
+                dbp.refresh(idxreset=False)
 
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
@@ -409,17 +409,17 @@ class OAG_DbProxy(object):
                     if self._oag._indexparm == 'id':
                         index_val = cur.fetchall()
                         self._oag._clauseprms = index_val[0].values()
-                    self._oag._refresh_from_cursor(cur)
+                    self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._oag._extcur, insert_sql, vals)
             if self._oag._indexparm == 'id':
                 index_val = self._oag._extcur.fetchall()
                 self._clauseprms = index_val[0].values()
-            self._oag._refresh_from_cursor(self._oag._extcur)
+            self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
-        self._oag.refresh()
+        self.refresh()
 
         self.schema.init_fkeys()
 
@@ -441,7 +441,7 @@ class OAG_DbProxy(object):
         else:
             self.SQLexec(cur, delete_sql, [self._oag.id])
 
-        self._oag.refresh(gotodb=True)
+        self.refresh(gotodb=True)
 
         if self._oag.is_unique:
             self._oag._set_attrs_from_cframe_uniq()
@@ -467,17 +467,50 @@ class OAG_DbProxy(object):
                 with dao.cur as cur:
                     self.SQLexec(cur, update_sql, update_values)
                     if not norefresh:
-                        self._oag._refresh_from_cursor(cur)
+                        self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._oag._extcur, update_sql, update_values)
             if not norefresh:
-                self._oag._refresh_from_cursor(self._oag._extcur)
+                self.__refresh_from_cursor(self._oag._extcur)
 
         if not self._oag.is_unique and len(self._oag._rawdata_window)>0:
             self._oag[self._oag._rawdata_window_index]
 
         return self._oag
+
+    def refresh(self, gotodb=False, idxreset=True):
+        """Generally we want to simply reset the iterator; set gotodb=True to also
+        refresh instreams from the database"""
+        if gotodb is True:
+            if self._oag._extcur is None:
+                with OADao(self._oag.dbcontext) as dao:
+                    with dao.cur as cur:
+                        self.__refresh_from_cursor(cur)
+            else:
+                self.__refresh_from_cursor(self._oag._extcur)
+            self._oag._oagcache = {}
+
+        self._oag._rawdata_window = self._oag._rawdata
+        if idxreset:
+            self._oag._iteridx = 0
+        self._oag._set_attrs_from_cframe()
+        return self._oag
+
+    def __refresh_from_cursor(self, cur):
+        try:
+            if type(self.SQL).__name__ == "str":
+                self.SQLexec(cur, self.SQL, self._oag._clauseprms)
+            elif type(self.SQL).__name__ == "dict":
+                self.SQLexec(cur, self.SQL['read'][self._oag._indexparm], self._oag._clauseprms)
+
+            self._oag._rawdata = cur.fetchall()
+            self._oag._rawdata_window = self._oag._rawdata
+
+            for predicate in self._oag._rawdata_filter_cache:
+                self._oag.filter(predicate, rerun=True)
+        except psycopg2.ProgrammingError:
+            raise OAGraphRetrieveError("Missing database table")
 
     @property
     def schema(self):
@@ -806,7 +839,7 @@ class OAG_RootNode(object):
         self._indexparm      = indexprm
 
         if self._clauseprms is not None:
-            self.refresh(gotodb=True)
+            self.db.refresh(gotodb=True)
 
             if len(self._rawdata_window) == 0:
                 raise OAGraphRetrieveError("No results found in database")
@@ -908,24 +941,6 @@ class OAG_RootNode(object):
         self._rawdata_window_index = None
         self._cframe = {}
 
-        return self
-
-    def refresh(self, gotodb=False, idxreset=True):
-        """Generally we want to simply reset the iterator; set gotodb=True to also
-        refresh instreams from the database"""
-        if gotodb is True:
-            if self._extcur is None:
-                with OADao(self.dbcontext) as dao:
-                    with dao.cur as cur:
-                        self._refresh_from_cursor(cur)
-            else:
-                self._refresh_from_cursor(self._extcur)
-            self._oagcache = {}
-
-        self._rawdata_window = self._rawdata
-        if idxreset:
-            self._iteridx = 0
-        self._set_attrs_from_cframe()
         return self
 
     def reset(self):
@@ -1174,21 +1189,6 @@ class OAG_RootNode(object):
         if getattr(self, '_rpc_init_done', None) is True \
             and attr not in getattr(self, '_rpc_stop_list', []):
             self.signal_surrounding_nodes(attr, currval, newval)
-
-    def _refresh_from_cursor(self, cur):
-        try:
-            if type(self.db.SQL).__name__ == "str":
-                self.db.SQLexec(cur, self.db.SQL, self._clauseprms)
-            elif type(self.db.SQL).__name__ == "dict":
-                self.db.SQLexec(cur, self.db.SQL['read'][self._indexparm], self._clauseprms)
-
-            self._rawdata = cur.fetchall()
-            self._rawdata_window = self._rawdata
-
-            for predicate in self._rawdata_filter_cache:
-                self.filter(predicate, rerun=True)
-        except psycopg2.ProgrammingError:
-            raise OAGraphRetrieveError("Missing database table")
 
     def _set_attrs_from_cframe(self):
 
