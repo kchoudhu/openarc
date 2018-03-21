@@ -20,7 +20,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         pass
 
     def __check_autonode_equivalence(self, oag1, oag2):
-        for oagkey in oag1.dbstreams.keys():
+        for oagkey in oag1.streams.keys():
             if oag1.is_oagnode(oagkey):
                 self.assertEqual(getattr(oag1, oagkey, "").id, getattr(oag2, oagkey, "").id)
             else:
@@ -80,7 +80,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_autonode_create_with_null_userprms(self):
         a1 = OAG_AutoNode1a()
-        for stream, streaminfo in OAG_AutoNode1a.dbstreams.items():
+        for stream, streaminfo in OAG_AutoNode1a.streams.items():
             self.assertEqual(getattr(a1, stream), None)
 
     def test_autonode_create_via_create_call(self):
@@ -111,7 +111,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : a3
             })
 
-        # dbstreams are identical
+        # streams are identical
         self.assertEqual(a2.field4, 1)
         self.assertEqual(a2.field5, 'this is an autonode2')
         self.assertEqual(a3.field7, 8)
@@ -136,7 +136,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         (a1, a2, a3) = self.__generate_autonode_system()
 
         a1a = OAG_AutoNode1a()
-        for oagkey in a1a.dbstreams.keys():
+        for oagkey in a1a.streams.keys():
             self.assertEqual(getattr(a1a, oagkey, ""), None)
 
         # non-oag instream marked None is missing, should not throw
@@ -1324,7 +1324,7 @@ class OAG_AutoNode1a(OAG_RootNode):
     }
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'field2'   : [ 'int',         0,    None ],
         'field3'   : [ 'int',         None, None ],
         'subnode1' : [ OAG_AutoNode2, True, None ],
@@ -1336,7 +1336,7 @@ class OAG_AutoNode1b(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'field2'   : [ 'int',         0,    None ],
         'field3'   : [ 'int',         0,    None ],
         'subnode1' : [ OAG_AutoNode2, True, None ],
@@ -1351,7 +1351,7 @@ class OAG_AutoNode2(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'field4'   : [ 'int',         0, None ],
         'field5'   : [ 'varchar(50)', 0, None ],
     }
@@ -1376,7 +1376,7 @@ class OAG_AutoNode3(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'field7'   : [ 'int',         0, None ],
         'field8'   : [ 'varchar(50)', 0, None ],
     }
@@ -1389,7 +1389,7 @@ class OAG_AutoNode4(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'subnode1' : [ OAG_AutoNode1a, True, 'ev_test_handler' ],
     }
 
@@ -1409,7 +1409,7 @@ class OAG_AutoNode5(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'subnode1' : [ OAG_AutoNode2, True,  None ],
         'subnode2' : [ OAG_AutoNode3, False, None ]
     }
@@ -1419,7 +1419,7 @@ class OAG_AutoNode6(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'subnode1' : [ OAG_AutoNode2, True,  None ],
         'subnode2' : [ OAG_AutoNode3, False, None ]
     }
@@ -1432,7 +1432,7 @@ class OAG_AutoNode7(OAG_RootNode):
     def dbcontext(self): return "test"
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'subnode1' : [  OAG_AutoNode3, False,  None ],
         'field1'   : [ 'boolean',      None,   None ],
     }

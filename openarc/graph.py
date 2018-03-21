@@ -187,7 +187,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         # Selectively clear cache
         # - filter out all non-dbstream items
-        tmpoagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag in self._oag.dbstreams.keys()}
+        tmpoagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag in self._oag.streams.keys()}
         # - filter out invalidated downstream node
         tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != invstream}
 
@@ -204,8 +204,8 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         # Execute any event handlers
         try:
-            if invstream in self._oag.dbstreams.keys():
-                evhdlr = self._oag.dbstreams[invstream][2]
+            if invstream in self._oag.streams.keys():
+                evhdlr = self._oag.streams[invstream][2]
                 if evhdlr:
                     getattr(self._oag, evhdlr, None)()
         except KeyError as e:
@@ -219,7 +219,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
     def proc_register_proxy(self, ret, args):
         self._oag._rpcreqs[args['addr']] = args['stream']
 
-        rawprops = self._oag.dbstreams.keys()\
+        rawprops = self._oag.streams.keys()\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
                    + getattr(self._oag.__class__, 'oagproplist', [])
@@ -309,9 +309,9 @@ class OAG_DbSchemaProxy(object):
                         dbp.SQLexec(cur, dbp.SQL['admin']['table'])
 
                 # Check for table schema integrity
-                oag_columns     = sorted(oag.dbstreams.keys())
+                oag_columns     = sorted(oag.streams.keys())
                 db_columns_ext  = [desc[0] for desc in cur.description if desc[0][0] != '_']
-                db_columns_reqd = [oag.db_oag_mapping[k] for k in sorted(oag.db_oag_mapping.keys())]
+                db_columns_reqd = [oag.stream_db_mapping[k] for k in sorted(oag.stream_db_mapping.keys())]
 
                 dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
                 if len(dropped_cols)>0:
@@ -325,16 +325,16 @@ class OAG_DbSchemaProxy(object):
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = oag.dbstreams[col][0](logger=oag.logger, rpc=False).db.schema.init()
+                                subnode = oag.streams[col][0](logger=oag.logger, rpc=False).db.schema.init()
                                 add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
-                                               'NOT NULL' if oag.dbstreams[col][1] else str(),
+                                               'NOT NULL' if oag.streams[col][1] else str(),
                                                 subnode.dbcontext,
                                                 subnode.dbtable,
                                                 subnode.dbpkname)
                             else:
-                                add_clause = "ADD COLUMN %s %s" % (col, oag.dbstreams[col][0])
-                                if oag.dbstreams[col][1] is not None:
+                                add_clause = "ADD COLUMN %s %s" % (col, oag.streams[col][0])
+                                if oag.streams[col][1] is not None:
                                     add_clause = "%s NOT NULL" % add_clause
                             add_col_clauses.append(add_clause)
 
@@ -342,7 +342,7 @@ class OAG_DbSchemaProxy(object):
                     dbp.SQLexec(cur, addcol_sql)
 
                 for idx, idxinfo in oag.dbindices.items():
-                    col_sql     = ','.join(map(lambda x: oag.db_oag_mapping[x], idxinfo[0]))
+                    col_sql     = ','.join(map(lambda x: oag.stream_db_mapping[x], idxinfo[0]))
 
                     unique_sql  = str()
                     if idxinfo[1]:
@@ -351,7 +351,7 @@ class OAG_DbSchemaProxy(object):
                     partial_sql = str()
                     if idxinfo[2]:
                         partial_sql =\
-                            'WHERE %s' % ' AND '.join('%s=%s' % (oag.db_oag_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
+                            'WHERE %s' % ' AND '.join('%s=%s' % (oag.stream_db_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
                     exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
                     dbp.SQLexec(cur, exec_sql)
@@ -369,7 +369,7 @@ class OAG_DbSchemaProxy(object):
 
         with OADao(oag.dbcontext) as dao:
             with dao.cur as cur:
-                for stream in oag.dbstreams:
+                for stream in oag.streams:
                     if oag.is_oagnode(stream):
                         currattr = getattr(oag, stream, None)
                         if currattr:
@@ -549,7 +549,7 @@ class OAG_DbProxy(object):
         }
 
         # Add in id retrieval for oagprops
-        for stream, streaminfo in self._oag.dbstreams.items():
+        for stream, streaminfo in self._oag.streams.items():
             if self._oag.is_oagnode(stream):
                 stream_sql_key = 'by_'+stream
                 stream_sql     = td("""
@@ -568,7 +568,7 @@ class OAG_DbProxy(object):
                 ORDER BY {2}""").format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname)
             where_clauses = []
             for f in idxinfo[0]:
-                where_clauses.append("{0}=%s".format(self._oag.db_oag_mapping[f] if self._oag.is_oagnode(f) else f))
+                where_clauses.append("{0}=%s".format(self._oag.stream_db_mapping[f] if self._oag.is_oagnode(f) else f))
             default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
 
         # Add in user defined SQL
@@ -647,18 +647,6 @@ class OAG_RootNode(object):
     def db(self):
         return self._db_proxy
 
-    @staticproperty
-    def db_oag_mapping(cls):
-        if not getattr(cls, '_db_oag_mapping', None):
-            schema = {}
-            for stream, streaminfo in cls.dbstreams.items():
-                if cls.is_oagnode(stream):
-                    schema[stream] = streaminfo[0].dbpkname[1:]
-                else:
-                    schema[stream] = stream
-            setattr(cls, '_db_oag_mapping', schema)
-        return cls._db_oag_mapping
-
     @property
     def dbcontext(self):
 
@@ -675,11 +663,6 @@ class OAG_RootNode(object):
         if not getattr(cls, '_dbtable_name', None):
             setattr(cls, '_dbtable_name', inflection.underscore(cls.__name__)[4:])
         return cls._dbtable_name
-
-    @staticproperty
-    def dbstreams(cls):
-
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     def discover(self):
         remote_oag =\
@@ -868,7 +851,7 @@ class OAG_RootNode(object):
 
     @classmethod
     def is_oagnode(cls, stream):
-        streaminfo = cls.dbstreams[stream][0]
+        streaminfo = cls.streams[stream][0]
         if type(streaminfo).__name__=='type':
             return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
         else:
@@ -995,7 +978,7 @@ class OAG_RootNode(object):
                                 reqcls(self).deregister(currval.rpcrtr, stream)
                             reqcls(self).register(newval.rpcrtr, stream)
                             try:
-                                self._cframe[self.db_oag_mapping[stream]]=newval.id
+                                self._cframe[self.stream_db_mapping[stream]]=newval.id
                             except KeyError:
                                 pass
                             invalidate_upstream = True
@@ -1019,6 +1002,23 @@ class OAG_RootNode(object):
 
     @property
     def sql_local(self): return {}
+
+    @staticproperty
+    def stream_db_mapping(cls):
+        if not getattr(cls, '_stream_db_mapping', None):
+            schema = {}
+            for stream, streaminfo in cls.streams.items():
+                if cls.is_oagnode(stream):
+                    schema[stream] = streaminfo[0].dbpkname[1:]
+                else:
+                    schema[stream] = stream
+            setattr(cls, '_stream_db_mapping', schema)
+        return cls._stream_db_mapping
+
+    @staticproperty
+    def streams(cls):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     def __cb_init_state_rpc(self):
 
@@ -1142,7 +1142,7 @@ class OAG_RootNode(object):
 
             if rpc:
                 self.init_state_rpc()
-                for stream in self.dbstreams:
+                for stream in self.streams:
                     currval = getattr(self, stream, None)
                     self.signal_surrounding_nodes(stream, currval, initmode=True)
 
@@ -1194,7 +1194,7 @@ class OAG_RootNode(object):
 
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
-            for stream in self.dbstreams:
+            for stream in self.streams:
                 setattr(self, stream, None)
             return
 
@@ -1211,7 +1211,7 @@ class OAG_RootNode(object):
                     def fget(obj,
                              cls=cls,
                              clauseprms=[getattr(self, fk['points_to_id'], None)],
-                             indexprm='by_'+{cls.db_oag_mapping[k]:k for k in cls.db_oag_mapping}[fk['id']],
+                             indexprm='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']],
                              logger=self.logger):
                         return cls(clauseprms, indexprm, logger=self.logger)
                     fget.__name__ = stream
@@ -1234,13 +1234,13 @@ class OAG_RootNode(object):
         processed_streams = {}
 
         # blank everything
-        for oagkey in self.dbstreams.keys():
+        for oagkey in self.streams.keys():
             setattr(self, oagkey, None)
 
         if len(userprms)==0:
             return []
 
-        invalid_streams = [ s for s in userprms.keys() if s not in self.dbstreams.keys() ]
+        invalid_streams = [ s for s in userprms.keys() if s not in self.streams.keys() ]
         if len(invalid_streams)>0:
             raise OAGraphIntegrityError("Invalid update stream(s) detected %s" % invalid_streams)
 
@@ -1255,7 +1255,7 @@ class OAG_RootNode(object):
         cframe_tmp = {}
         raw_missing_streams = []
 
-        all_streams = self.dbstreams.keys()
+        all_streams = self.streams.keys()
         if len(self._cframe) > 0:
             all_streams.append(self.dbpkname)
 
@@ -1268,12 +1268,12 @@ class OAG_RootNode(object):
 
             cfkey = oagkey
             if self.is_oagnode(oagkey):
-                cfkey = self.db_oag_mapping[oagkey]
+                cfkey = self.stream_db_mapping[oagkey]
             cfval = getattr(self, oagkey, None)
 
             # Special handling for nullable items
-            if type(self.dbstreams[oagkey][0])!=str\
-               and self.dbstreams[oagkey][1] is False:
+            if type(self.streams[oagkey][0])!=str\
+               and self.streams[oagkey][1] is False:
                 cframe_tmp[cfkey] = cfval.id if cfval else None
                 continue
 
@@ -1298,7 +1298,7 @@ class OAG_RootNode(object):
                 if self.is_oagnode(rms):
                     missing_streams.append(rms)
                 else:
-                    if self.dbstreams[rms][1] is not None:
+                    if self.streams[rms][1] is not None:
                         missing_streams.append(rms)
             if len(missing_streams)>0:
                 raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
@@ -1316,7 +1316,7 @@ class OAG_RootNode(object):
 
             new_clauseprms = []
             for i, key in enumerate(keys):
-                key = self.db_oag_mapping[key]
+                key = self.stream_db_mapping[key]
                 try:
                     new_clauseprms.append(self._cframe[key])
                 except KeyError:
@@ -1333,8 +1333,8 @@ class OAG_RootNode(object):
 
         # Normalize stream name to OAG form
         if streamform == 'cframe':
-            db_oag_mapping = {self.db_oag_mapping[k]:k for k in self.db_oag_mapping}
-            stream = db_oag_mapping[stream]
+            stream_db_mapping = {self.stream_db_mapping[k]:k for k in self.stream_db_mapping}
+            stream = stream_db_mapping[stream]
 
         if self.is_oagnode(stream):
 
@@ -1342,8 +1342,8 @@ class OAG_RootNode(object):
             try:
                 currattr = getattr(self, stream, None)
                 if currattr is None:
-                    if self.dbstreams[stream][1] is False and cfval:
-                        currattr = self.dbstreams[stream][0](cfval, indexprm, logger=self.logger)
+                    if self.streams[stream][1] is False and cfval:
+                        currattr = self.streams[stream][0](cfval, indexprm, logger=self.logger)
                         if not currattr.is_unique:
                             currattr = currattr[-1]
             except OAGraphRetrieveError:
@@ -1355,7 +1355,7 @@ class OAG_RootNode(object):
             # oagprop: actually set it
             def oagpropfn(obj,
                           stream=stream,
-                          streaminfo=self.dbstreams[stream],
+                          streaminfo=self.streams[stream],
                           clauseprms=[cfval],
                           indexprm=indexprm,
                           logger=self.logger,
@@ -1398,7 +1398,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
     }
 
     @staticproperty
-    def dbstreams(cls): return {
+    def streams(cls): return {
         'rpcinfname' : [ 'text',      "", None ],
         'stripe'     : [ 'int',       0 , None ],
         'url'        : [ 'text',      "", None ],
