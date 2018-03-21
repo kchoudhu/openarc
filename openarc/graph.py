@@ -415,7 +415,7 @@ class OAG_DbProxy(object):
             self.SQLexec(self._oag._extcur, insert_sql, vals)
             if self._oag._indexparm == 'id':
                 index_val = self._oag._extcur.fetchall()
-                self._clauseprms = index_val[0].values()
+                self._oag._clauseprms = index_val[0].values()
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
