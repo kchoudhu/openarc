@@ -918,8 +918,8 @@ class OAG_PropProxy(object):
 
         # Normalize stream name to OAG form
         if streamform == 'cframe':
-            stream_db_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
-            stream = stream_db_mapping[stream]
+            db_stream_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
+            stream = db_stream_mapping[stream]
 
         if self._oag.is_oagnode(stream):
 
