@@ -989,9 +989,14 @@ class OAG_RootNode(object):
 
         return self._prop_proxy
 
-    # API
-    @property
-    def context(self):
+    ##### User defined via inheritance
+    @staticproperty
+    def context(cls):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
+
+    @staticproperty
+    def streams(cls):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
@@ -1289,11 +1294,6 @@ class OAG_RootNode(object):
                     schema[stream] = stream
             setattr(cls, '_stream_db_mapping', schema)
         return cls._stream_db_mapping
-
-    @staticproperty
-    def streams(cls):
-
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     def __cb_init_state_rpc(self):
 
