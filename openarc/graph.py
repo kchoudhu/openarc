@@ -973,10 +973,23 @@ class OAG_RootNode(object):
     ##### Class variables
     _fkframe = []
 
+    ##### Proxies
     @property
     def db(self):
+
         return self._db_proxy
 
+    @property
+    def rdf(self):
+
+        return self._rdf_proxy
+
+    @property
+    def propmgr(self):
+
+        return self._prop_proxy
+
+    # API
     @property
     def dbcontext(self):
 
@@ -1177,16 +1190,7 @@ class OAG_RootNode(object):
     def oagurl(self): return self.rpcrtr.addr
 
     @property
-    def propmgr(self):
-        return self._prop_proxy
-
-    @property
     def proxyurl(self): return self._proxy_url
-
-    @property
-    def rdf(self):
-
-        return self._rdf_proxy
 
     def clone(self):
         oagcopy = self.__class__()
