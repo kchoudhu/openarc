@@ -404,6 +404,7 @@ class OAG_DbProxy(object):
         self._indexparm      = indexprm
 
     def clone(self, src):
+        self._schema     = src.db.schema
         self._clauseprms = src.db.searchprms
         self._indexparm  = src.db.searchidx
 
