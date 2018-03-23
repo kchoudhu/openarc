@@ -403,6 +403,10 @@ class OAG_DbProxy(object):
         self._clauseprms     = clauseprms
         self._indexparm      = indexprm
 
+    def clone(self, src):
+        self._clauseprms = src.db.searchprms
+        self._indexparm  = src.db.searchidx
+
     def create(self, initprms={}):
 
         self.schema.init()
@@ -410,7 +414,7 @@ class OAG_DbProxy(object):
         attrs = self._oag._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
         self._oag._set_cframe_from_attrs(attrs, fullhouse=True)
 
-        if self._oag._rawdata is not None:
+        if self._oag.rdf._rdf is not None:
             raise OAError("Cannot create item that has already been initiated")
 
         filtered_cframe = {k:self._oag._cframe[k] for k in self._oag._cframe if k[0] != '_'}
@@ -499,8 +503,8 @@ class OAG_DbProxy(object):
             if not norefresh:
                 self.__refresh_from_cursor(self._oag._extcur)
 
-        if not self._oag.is_unique and len(self._oag._rawdata_window)>0:
-            self._oag[self._oag._rawdata_window_index]
+        if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
+            self._oag[self._oag.rdf._rdf_window_index]
 
         return self._oag
 
@@ -535,7 +539,7 @@ class OAG_DbProxy(object):
                 self.__refresh_from_cursor(self._oag._extcur)
             self._oag._oagcache = {}
 
-        self._oag._rawdata_window = self._oag._rawdata
+        self._oag.rdf._rdf_window = self._oag.rdf._rdf
         if idxreset:
             self._oag._iteridx = 0
         self._oag._set_attrs_from_cframe()
@@ -548,10 +552,10 @@ class OAG_DbProxy(object):
             elif type(self.SQL).__name__ == "dict":
                 self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
 
-            self._oag._rawdata = cur.fetchall()
-            self._oag._rawdata_window = self._oag._rawdata
+            self._oag.rdf._rdf = cur.fetchall()
+            self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
-            for predicate in self._oag._rawdata_filter_cache:
+            for predicate in self._oag.rdf._rdf_filter_cache:
                 self._oag.filter(predicate, rerun=True)
         except psycopg2.ProgrammingError:
             raise OAGraphRetrieveError("Missing database table")
@@ -665,12 +669,75 @@ class OAG_DbProxy(object):
         key{2} in given SQL string"""
         return td(SQL.format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname))
 
+class OAG_RdfProxy(object):
+    """Responsible for manipulation of relational data frame"""
+    def __init__(self, oag):
+        self._oag = oag
+
+        # All data. Currently can only be set from database.
+        self._rdf = None
+
+        # An array of lambdas sequentially used to filter the rdf
+        self._rdf_filter_cache = []
+
+        # If this is a slice, it can be used to further filter the rdf
+        self._rdf_window_index = 0
+
+        # After
+        self._rdf_window = None
+
+    def clone(self, src):
+        self._rdf        = list(src.rdf._rdf)
+        self._rdf_window = list(src.rdf._rdf_window)
+        self._rdf_window_index =\
+                                src.rdf._rdf_window_index
+        self._rdf_filter_cache =\
+                                list(src.rdf._rdf_filter_cache)
+
+    def filter(self, predicate, rerun=False):
+        if self._oag.is_unique:
+            raise OAError("Cannot filter OAG that is marked unique")
+
+        self._oag._oagcache = {}
+
+        self._rdf_window = self._rdf
+
+        if rerun is False:
+            self._rdf_filter_cache.append(predicate)
+
+        self._rdf = []
+        for i, frame in enumerate(self._rdf):
+            self._oag._cframe = frame
+            self._oag._set_attrs_from_cframe()
+            if predicate(self._oag):
+                self._rdf_window.append(self._rdf[i])
+
+        if len(self._rdf_window)>0:
+            self._oag._cframe = self._rdf_window[0]
+        else:
+            self._rdf_window = []
+            self._oag._cframe = {}
+
+        self._oag._set_attrs_from_cframe()
+
+        return self.oag
+
+    def sort(self, key):
+
+        self._rdf.sort(key=lambda x: x[key])
+        self._rdf_window = self._rdf
+        self._rdf_window_index = None
+        self._oag._cframe = {}
+
+        return self
+
 class OAG_PropProxy(object):
     """Manipulates properties"""
-    def __init__(self, obj):
-        self.cls            = obj.__class__
+    def __init__(self, oag):
+        self._oag           = oag
+        self.cls            = self._oag.__class__
         self.cls.current_id = getattr(self.cls, 'current_id', str())
-        self.oagid          = obj.oagid
+        self.oagid          = self._oag.oagid
 
         oagprofiles = getattr(self.cls, 'oagprofiles', collections.OrderedDict())
         try:
@@ -685,6 +752,10 @@ class OAG_PropProxy(object):
         self.profile_set(self.oagid)
         setattr(self.cls, stream, oagprop)
         self.cls.oagprofiles[self.oagid][stream] = oagprop
+
+    def clone(self, src):
+
+        return self.__class__(self._oag)
 
     def profile_deregister(self, obj):
         del(self.cls.oagprofiles[obj.oagid])
@@ -812,33 +883,6 @@ class OAG_RootNode(object):
     @property
     def fanout(self): return False
 
-    def filter(self, predicate, rerun=False):
-        if self.is_unique:
-            raise OAError("Cannot filter OAG that is marked unique")
-        self._oagcache = {}
-
-        self._rawdata_window = self._rawdata
-
-        if rerun is False:
-            self._rawdata_filter_cache.append(predicate)
-
-        self._rawdata_window = []
-        for i, frame in enumerate(self._rawdata):
-            self._cframe = frame
-            self._set_attrs_from_cframe()
-            if predicate(self):
-                self._rawdata_window.append(self._rawdata[i])
-
-        if len(self._rawdata_window)>0:
-            self._cframe = self._rawdata_window[0]
-        else:
-            self._rawdata_window = []
-            self._cframe = {}
-
-        self._set_attrs_from_cframe()
-
-        return self
-
     @property
     def id(self):
         try:
@@ -872,7 +916,7 @@ class OAG_RootNode(object):
         if self.db.searchprms is not None:
             self.db.refresh(gotodb=True)
 
-            if len(self._rawdata_window) == 0:
+            if len(self.rdf._rdf_window) == 0:
                 raise OAGraphRetrieveError("No results found in database")
 
             if self.is_unique:
@@ -937,7 +981,7 @@ class OAG_RootNode(object):
         else:
             if self._iteridx < self.size:
                 self._oagcache = {}
-                self._cframe = self._rawdata_window[self._iteridx]
+                self._cframe = self.rdf._rdf_window[self._iteridx]
                 self._iteridx += 1
                 self._set_attrs_from_cframe()
                 return self
@@ -951,32 +995,24 @@ class OAG_RootNode(object):
     @property
     def proxyurl(self): return self._proxy_url
 
-    def rdfcopy(self):
-        oagcopy = self.__class__()
-        oagcopy._rawdata        = list(self._rawdata)
-        oagcopy._rawdata_window = list(self._rawdata_window)
-        oagcopy._rawdata_window_index =\
-                                  self._rawdata_window_index
-        oagcopy._cframe         = dict(self._cframe)
-        oagcopy._iteridx       = 0
+    @property
+    def rdf(self):
+        return self._rdf_proxy
 
-        oagcopy._db_proxy       = OAG_DbProxy(oagcopy, list(self.db.searchprms), self.db.searchidx)
-        oagcopy._oagprop_proxy  = OAG_PropProxy(oagcopy)
+    def clone(self):
+        oagcopy = self.__class__()
+
+        oagcopy._cframe         = dict(self._cframe)
+        oagcopy._iteridx        = 0
+
+        # Clone proxies
+        oagcopy.rdf.clone(self)
+        oagcopy.db.clone(self)
+        oagcopy._oagprop_proxy.clone(self)
 
         return oagcopy
 
-    def rdfsort(self, key):
-
-        self._rawdata.sort(key=lambda x: x[key])
-        self._rawdata_window = self._rawdata
-        self._rawdata_window_index = None
-        self._cframe = {}
-
-        return self
-
     def reset(self):
-        self._rawdata        = None
-        self._rawdata_window = None
         self._oagcache       = {}
         self._cframe         = {}
 
@@ -1041,10 +1077,10 @@ class OAG_RootNode(object):
 
     @property
     def size(self):
-        if self._rawdata_window is None:
+        if self.rdf._rdf_window is None:
             return 0
         else:
-            return len(self._rawdata_window)
+            return len(self.rdf._rdf_window)
 
     @property
     def sql_local(self): return {}
@@ -1132,17 +1168,17 @@ class OAG_RootNode(object):
         return object.__getattribute__(self, attr)
 
     def __getitem__(self, indexinfo):
-        self._rawdata_window_index = indexinfo
+        self.rdf._rdf_window_index = indexinfo
 
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
         self._oagcache = {}
 
-        if type(self._rawdata_window_index)==int:
-            self._cframe = self._rawdata_window[self._rawdata_window_index]
-        elif type(self._rawdata_window_index)==slice:
-            self._rawdata_window = self._rawdata_window[self._rawdata_window_index]
-            self._cframe = self._rawdata_window[0]
+        if type(self.rdf._rdf_window_index)==int:
+            self._cframe = self.rdf._rdf_window[self.rdf._rdf_window_index]
+        elif type(self.rdf._rdf_window_index)==slice:
+            self.rdf._rdf_window = self.rdf._rdf_window[self.rdf._rdf_window_index]
+            self._cframe = self.rdf._rdf_window[0]
 
         self._set_attrs_from_cframe()
 
@@ -1165,16 +1201,14 @@ class OAG_RootNode(object):
         self._rpc_heartbeat  = heartbeat
 
         self._cframe         = {}
-        self._rawdata        = None
-        self._rawdata_window = None
-        self._rawdata_window_index = 0
-        self._rawdata_filter_cache = []
         self._oagcache       = {}
         self._extcur         = extcur
         self._logger         = logger
         self._glets          = []
 
+        # Set up proxies
         self._db_proxy       = OAG_DbProxy(self, clauseprms, indexprm)
+        self._rdf_proxy      = OAG_RdfProxy(self)
         self._oagprop_proxy  = OAG_PropProxy(self)
 
         if initurl:
@@ -1249,11 +1283,11 @@ class OAG_RootNode(object):
                     self._oagprop_proxy.add_oagprop(stream, oagprop(fget))
 
     def _set_attrs_from_cframe_uniq(self):
-        if len(self._rawdata_window) > 1:
+        if len(self.rdf._rdf_window) > 1:
             raise OAGraphIntegrityError("Graph object indicated unique, but returns more than one row from database")
 
-        if len(self._rawdata_window) == 1:
-            self._cframe = self._rawdata_window[0]
+        if len(self.rdf._rdf_window) == 1:
+            self._cframe = self.rdf._rdf_window[0]
         else:
             self._cframe = []
 

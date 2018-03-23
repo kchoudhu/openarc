@@ -1221,7 +1221,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : a3a
             }, logger=logger).db.create()
 
-        a1a_copy = a1a.rdfcopy()
+        a1a_copy = a1a.clone()
 
         self.__check_autonode_equivalence(a1a_copy[0], a1a[0])
 
