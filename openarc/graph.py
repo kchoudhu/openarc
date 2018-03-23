@@ -286,14 +286,14 @@ class OAG_DbSchemaProxy(object):
         dbp = self._dbproxy
         oag = dbp._oag
 
-        with OADao(oag.dbcontext, cdict=False) as dao:
+        with OADao(oag.context, cdict=False) as dao:
             with dao.cur as cur:
-                # Check that dbcontext schema exists
+                # Check that context schema exists
                 dbp.SQLexec(cur, dbp.SQL['admin']['schema'])
                 check = cur.fetchall()
                 if len(check)==0:
                     if oag.logger.SQL:
-                        print "Creating missing schema [%s]" % oag.dbcontext
+                        print "Creating missing schema [%s]" % oag.context
                     dbp.SQLexec(cur, dbp.SQL['admin']['mkschema'])
                     dao.commit()
 
@@ -302,7 +302,7 @@ class OAG_DbSchemaProxy(object):
                     dbp.SQLexec(cur, dbp.SQL['admin']['table'])
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
-                    if ('relation "%s.%s" does not exist' % (oag.dbcontext, oag.dbtable)) in str(e):
+                    if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e):
                         if oag.logger.SQL:
                             print "Creating missing table [%s]" % oag.dbtable
                         dbp.SQLexec(cur, dbp.SQL['admin']['mktable'])
@@ -329,7 +329,7 @@ class OAG_DbSchemaProxy(object):
                                 add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                              % (subnode.dbpkname[1:],
                                                'NOT NULL' if oag.streams[col][1] else str(),
-                                                subnode.dbcontext,
+                                                subnode.context,
                                                 subnode.dbtable,
                                                 subnode.dbpkname)
                             else:
@@ -367,7 +367,7 @@ class OAG_DbSchemaProxy(object):
         if oag.is_proxied:
             return
 
-        with OADao(oag.dbcontext) as dao:
+        with OADao(oag.context) as dao:
             with dao.cur as cur:
                 for stream in oag.streams:
                     if oag.is_oagnode(stream):
@@ -425,7 +425,7 @@ class OAG_DbProxy(object):
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
         if self._oag._extcur is None:
-            with OADao(self._oag.dbcontext) as dao:
+            with OADao(self._oag.context) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, insert_sql, vals)
                     if self._indexparm == 'id':
@@ -456,7 +456,7 @@ class OAG_DbProxy(object):
         delete_sql = self.SQL['delete']['id']
 
         if self._oag._extcur is None:
-            with OADao(self._oag.dbcontext) as dao:
+            with OADao(self._oag.context) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, delete_sql, [self._oag.id])
                     dao.commit()
@@ -493,7 +493,7 @@ class OAG_DbProxy(object):
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag.propmgr._cframe[attr] for attr in member_attrs]
         if self._oag._extcur is None:
-            with OADao(self._oag.dbcontext) as dao:
+            with OADao(self._oag.context) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, update_sql, update_values)
                     if not norefresh:
@@ -533,7 +533,7 @@ class OAG_DbProxy(object):
         refresh instreams from the database"""
         if gotodb is True:
             if self._oag._extcur is None:
-                with OADao(self._oag.dbcontext) as dao:
+                with OADao(self._oag.context) as dao:
                     with dao.cur as cur:
                         self.__refresh_from_cursor(cur)
             else:
@@ -638,7 +638,7 @@ class OAG_DbProxy(object):
                   SELECT *
                     FROM {0}.{1}
                    WHERE {2}=%s
-                ORDER BY {3}""").format(self._oag.dbcontext, self._oag.dbtable, streaminfo[0].dbpkname[1:], self._oag.dbpkname)
+                ORDER BY {3}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:], self._oag.dbpkname)
                 default_sql['read'][stream_sql_key] = stream_sql
 
         # Add in other indices
@@ -647,7 +647,7 @@ class OAG_DbProxy(object):
                   SELECT *
                     FROM {0}.{1}
                    WHERE %s
-                ORDER BY {2}""").format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname)
+                ORDER BY {2}""").format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
             where_clauses = []
             for f in idxinfo[0]:
                 where_clauses.append("{0}=%s".format(self._oag.stream_db_mapping[f] if self._oag.is_oagnode(f) else f))
@@ -668,7 +668,7 @@ class OAG_DbProxy(object):
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
-        return td(SQL.format(self._oag.dbcontext, self._oag.dbtable, self._oag.dbpkname))
+        return td(SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname))
 
 class OAG_RdfProxy(object):
     """Responsible for manipulation of relational data frame"""
@@ -991,7 +991,7 @@ class OAG_RootNode(object):
 
     # API
     @property
-    def dbcontext(self):
+    def context(self):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
@@ -1452,7 +1452,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
     def is_unique(self): return False
 
     @property
-    def dbcontext(self): return "openarc"
+    def context(self): return "openarc"
 
     @staticproperty
     def dbindices(cls):

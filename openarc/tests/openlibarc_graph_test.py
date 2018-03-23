@@ -1241,7 +1241,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 #     def is_unique(self): return True
 
 #     @property
-#     def dbcontext(self): return "test"
+#     def context(self): return "test"
 
 #     @oagprop
 #     def subnode(self): return OAG_UniqNode((self.field2,))
@@ -1278,7 +1278,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
 # class OAG_MultiNode(OAGraphRootNode):
 #     @property
-#     def dbcontext(self): return "test"
+#     def context(self): return "test"
 
 #     @oagprop
 #     def subnode(self): return OAG_MultiNode((self.field3,))
@@ -1314,7 +1314,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
 class OAG_AutoNode1a(OAG_RootNode):
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def dbindices(cls) : return {
@@ -1333,7 +1333,7 @@ class OAG_AutoNode1a(OAG_RootNode):
 
 class OAG_AutoNode1b(OAG_RootNode):
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1348,7 +1348,7 @@ class OAG_AutoNode2(OAG_RootNode):
     def is_unique(self): return True
 
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1373,7 +1373,7 @@ class OAG_AutoNode3(OAG_RootNode):
     def is_unique(self): return True
 
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1386,7 +1386,7 @@ class OAG_AutoNode4(OAG_RootNode):
     def is_unique(self): return True
 
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1406,7 +1406,7 @@ class OAG_AutoNode5(OAG_RootNode):
     def is_unique(self): return True
 
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1416,7 +1416,7 @@ class OAG_AutoNode5(OAG_RootNode):
 
 class OAG_AutoNode6(OAG_RootNode):
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
@@ -1429,7 +1429,7 @@ class OAG_AutoNode7(OAG_RootNode):
     def is_unique(self): return True
 
     @property
-    def dbcontext(self): return "test"
+    def context(self): return "test"
 
     @staticproperty
     def streams(cls): return {
