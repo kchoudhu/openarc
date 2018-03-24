@@ -676,7 +676,7 @@ class OAG_DbProxy(object):
             default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
 
         # Add in user defined SQL
-        for action, sqlinfo in self._oag.sql_local.items():
+        for action, sqlinfo in self._oag.dblocalsql.items():
             for index, sql in sqlinfo.items():
                 default_sql[action][index] = sql
 
@@ -1026,6 +1026,9 @@ class OAG_RootNode(object):
     def dbindices(cls): return {}
 
     @staticproperty
+    def dblocalsql(cls): return {}
+
+    @staticproperty
     def infname_fields(cls):
         """Override in deriving classes as necessary"""
         return [k for k, v in cls.streams.items()]
@@ -1309,9 +1312,6 @@ class OAG_RootNode(object):
             return 0
         else:
             return len(self.rdf._rdf_window)
-
-    @property
-    def sql_local(self): return {}
 
     @staticproperty
     def stream_db_mapping(cls):

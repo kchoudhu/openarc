@@ -1441,7 +1441,7 @@ class OAG_AutoNode2(OAG_RootNode):
     def infname_fields(cls): return [ 'field4' ]
 
     @property
-    def sql_local(self):
+    def dblocalsql(self):
         return{
           "read" : {
             "id_2" : self.db.SQLpp("""
