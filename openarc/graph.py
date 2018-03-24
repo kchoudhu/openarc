@@ -41,11 +41,11 @@ class oagprop(object):
         if self.fget is None:
             raise AttributeError("unreadable attribute")
         try:
-            return obj._oagcache[self.fget.func_name]
+            return obj.cache.match(self.fget.func_name)
         except:
             oagprop = self.fget(obj)
             if oagprop is not None:
-                obj._oagcache[self.fget.func_name] = oagprop
+                obj.cache.put(self.fget.func_name, oagprop)
             return oagprop
 
     def __set__(self, obj, value):
@@ -185,18 +185,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         if self._oag.logger.RPC:
             print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
 
-        # Selectively clear cache
-        # - filter out all non-dbstream items
-        tmpoagcache = {oag:self._oag._oagcache[oag] for oag in self._oag._oagcache if oag in self._oag.streams.keys()}
-        # - filter out invalidated downstream node
-        tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != invstream}
-
-        # Reset fget
-        for stream, streaminfo in self._oag.propmgr._cframe.items():
-            self._oag.propmgr._set_oagprop(stream, streaminfo)
-
-        # Hack: fix oagcache corruption from setting fgets
-        self._oag._oagcache = tmpoagcache
+        self._oag.cache.invalidate(invstream)
 
         # Inform upstream
         for addr, stream in self._oag._rpcreqs.items():
@@ -277,6 +266,39 @@ class OAGRPC_REQ_Requests(OAGRPC):
         }
 
 reqcls = OAGRPC_REQ_Requests
+
+class OAG_CacheProxy(object):
+    """Responsible for manipulation of relational data frame"""
+    def __init__(self, oag):
+        self._oag = oag
+
+        # Cache storage object.
+        self._oagcache ={}
+
+    def clear(self):
+        self._oagcache = {}
+
+    def clone(self, src):
+        self._oagcache   = list(src.oagache._oagcache)
+
+    def invalidate(self, invstream):
+        # - filter out all non-dbstream items: calcs can no longer be trusted as node as been invalidated
+        tmpoagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag in self._oag.streams.keys()}
+        # - filter out invalidated downstream node
+        tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != invstream}
+
+        self._oagcache = tmpoagcache
+
+    def match(self, stream):
+        return self._oagcache[stream]
+
+    def put(self, stream, new_value):
+        self._oagcache[stream] = new_value
+
+    @property
+    def state(self):
+
+        return self._oagcache
 
 class OAG_DbSchemaProxy(object):
     def __init__(self, dbproxy):
@@ -538,7 +560,7 @@ class OAG_DbProxy(object):
                         self.__refresh_from_cursor(cur)
             else:
                 self.__refresh_from_cursor(self._oag._extcur)
-            self._oag._oagcache = {}
+            self._oag.cache.clear()
 
         self._oag.rdf._rdf_window = self._oag.rdf._rdf
         if idxreset:
@@ -699,7 +721,7 @@ class OAG_RdfProxy(object):
         if self._oag.is_unique:
             raise OAError("Cannot filter OAG that is marked unique")
 
-        self._oag._oagcache = {}
+        self._oag.cache.clear()
 
         self._rdf_window = self._rdf
 
@@ -935,7 +957,7 @@ class OAG_PropProxy(object):
                 currattr = None
 
             if currattr:
-                self._oag._oagcache[stream] = currattr
+                self._oag.cache.put(stream, currattr)
 
             # oagprop: actually set it
             def oagpropfn(obj,
@@ -974,6 +996,11 @@ class OAG_RootNode(object):
     _fkframe = []
 
     ##### Proxies
+    @property
+    def cache(self):
+
+        return self._cache_proxy
+
     @property
     def db(self):
 
@@ -1153,6 +1180,7 @@ class OAG_RootNode(object):
                 self._rpc_stop_list = [
                     'db',
                     'rdf',
+                    'cache',
                     'propmgr',
                     'logger',
                     'rpcrtr',
@@ -1182,7 +1210,7 @@ class OAG_RootNode(object):
             raise OAError("next: Unique OAGraph object is not iterable")
         else:
             if self._iteridx < self.size:
-                self._oagcache = {}
+                self.cache.clear()
                 self.propmgr._cframe = self.rdf._rdf_window[self._iteridx]
                 self._iteridx += 1
                 self.propmgr._set_attrs_from_cframe()
@@ -1210,8 +1238,9 @@ class OAG_RootNode(object):
         return oagcopy
 
     def reset(self):
-        self._oagcache      = {}
-        self.propmgr_cframe = {}
+        self.cache.clear()
+
+        self.propmgr._cframe = {}
         # add in rdf functionality
 
         return self
@@ -1240,7 +1269,7 @@ class OAG_RootNode(object):
             if self.is_oagnode(stream):
                 if newval:
                     # Update oagcache
-                    self._oagcache[stream] = newval
+                    self.cache.put(stream, newval)
                     # Update the oagprop
                     self.propmgr._set_oagprop(stream, newval.id, streamform='oag')
                     # Regenerate connections to surrounding nodes
@@ -1365,7 +1394,8 @@ class OAG_RootNode(object):
 
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
-        self._oagcache = {}
+
+        self.cache.clear()
 
         if type(self.rdf._rdf_window_index)==int:
             self.propmgr._cframe = self.rdf._rdf_window[self.rdf._rdf_window_index]
@@ -1393,7 +1423,6 @@ class OAG_RootNode(object):
         self._rpc_init_done  = False
         self._rpc_heartbeat  = heartbeat
 
-        self._oagcache       = {}
         self._extcur         = extcur
         self._logger         = logger
         self._glets          = []
@@ -1402,6 +1431,7 @@ class OAG_RootNode(object):
         self._db_proxy       = OAG_DbProxy(self, clauseprms, indexprm)
         self._rdf_proxy      = OAG_RdfProxy(self)
         self._prop_proxy     = OAG_PropProxy(self)
+        self._cache_proxy    = OAG_CacheProxy(self)
 
         if initurl:
             self.init_state_rpc()

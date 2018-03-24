@@ -282,11 +282,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Assert initial state
         # Cache state
-        self.assertEqual(a4._oagcache['subnode1'], a1a)
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state['subnode1'], a1a)
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -295,11 +295,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change subnode's oag: a4's oagcache should be blown
         a4.subnode1.subnode2 = a3b
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -308,21 +308,21 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change sub-subnode's dbstream
         a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
         # Assert cache state by level
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+            self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
 
         # Change second sub-subnode's dbstream
         a4.subnode1.subnode1.field4 = 'this is pretty weird'
         # Assert Cache state
-        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+            self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+            self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
 
         # Actual return for system
         self.assertEqual(a4.subnode1, a1a)
@@ -332,11 +332,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change subnode back
         a4.subnode1.subnode2 = a3a
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -381,11 +381,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Assert initial state
         # Cache state
-        self.assertEqual(a4._oagcache['subnode1'], a1a)
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state['subnode1'], a1a)
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -394,11 +394,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change subnode's oag: a4's oagcache should be blown
         a4.subnode1.subnode2 = a3b
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -407,20 +407,20 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change sub-subnode's dbstream
         a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
         # Assert cache state by level
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
+            self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
         # Change second sub-subnode's dbstream
         a4.subnode1.subnode1.field4 = 'this is pretty weird'
         # Assert Cache state
-        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
+            self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a4.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+            self.assertEqual(a4.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
 
         # Actual return for system
         self.assertEqual(a4.subnode1, a1a)
@@ -430,11 +430,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Change subnode back
         a4.subnode1.subnode2 = a3a
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a4.subnode1._oagcache['subnode1'], a2)
-        self.assertEqual(a4.subnode1._oagcache['subnode2'], a3a)
-        self.assertEqual(a4.subnode1.subnode1._oagcache, {})
-        self.assertEqual(a4.subnode1.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a4.subnode1.cache.state['subnode1'], a2)
+        self.assertEqual(a4.subnode1.cache.state['subnode2'], a3a)
+        self.assertEqual(a4.subnode1.subnode1.cache.state, {})
+        self.assertEqual(a4.subnode1.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a)
         self.assertEqual(a4.subnode1.subnode1, a2)
@@ -531,29 +531,33 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Assert initial state
         # Cache state
-        self.assertEqual(a4._oagcache['subnode1'], a1a_proxy)
-        self.assertEqual(a1a_proxy._oagcache, {})
+        self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
+        self.assertEqual(a1a_proxy.cache.state, {})
         self.assertEqual(a1a_proxy.proxyurl, a1a.oagurl)
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3a)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
         self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
 
         # Change subnode's oag: a4's oagcache should be blown
+        #logger.RPC = True
+
+
         with self.assertRaises(OAError):
             a4.subnode1.subnode2 = a3b
         a1a.subnode2 = a3b
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a_proxy._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3b)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a_proxy.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -564,21 +568,21 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
         a1a.subnode2.field8 = 'this is pretty hot stuff'
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a._oagcache['subnode2'], a3b)
+            self.assertEqual(a1a.cache.state['subnode2'], a3b)
         with self.assertRaises(OAError):
             a4.subnode1.subnode1.field4 = 'this is pretty weird'
         a1a.subnode1.field4 = 'this is pretty weird'
         # Assert Cache state
-        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a.subnode1._oagcache['subnode1'], a2)
+            self.assertEqual(a1a.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+            self.assertEqual(a1a.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -589,11 +593,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a4.subnode1.subnode2 = a3a
         a1a.subnode2 = a3a
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3a)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -639,13 +643,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         # Assert initial state
         # Cache state
-        self.assertEqual(a4._oagcache['subnode1'], a1a_proxy)
-        self.assertEqual(a1a_proxy._oagcache, {})
+        self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
+        self.assertEqual(a1a_proxy.cache.state, {})
         self.assertEqual(a1a_proxy.proxyurl, a1a.oagurl)
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3a)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -656,12 +660,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a4.subnode1.subnode2 = a3b
         a1a.subnode2 = a3b
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a_proxy._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3b)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a_proxy.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -672,21 +676,21 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a4.subnode1.subnode2.field8 = 'this is pretty hot stuff'
         a1a.subnode2.field8 = 'this is pretty hot stuff'
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a._oagcache['subnode2'], a3b)
+            self.assertEqual(a1a.cache.state['subnode2'], a3b)
         with self.assertRaises(OAError):
             a4.subnode1.subnode1.field4 = 'this is pretty weird'
         a1a.subnode1.field4 = 'this is pretty weird'
         # Assert Cache state
-        self.assertEqual(a4._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a.subnode1._oagcache['subnode1'], a2)
+            self.assertEqual(a1a.subnode1.cache.state['subnode1'], a2)
         with self.assertRaises(KeyError):
-            self.assertEqual(a1a.subnode1._oagcache['subnode2'], a3b)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+            self.assertEqual(a1a.subnode1.cache.state['subnode2'], a3b)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -697,11 +701,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a4.subnode1.subnode2 = a3a
         a1a.subnode2 = a3a
         # Cache state
-        self.assertEqual(a4._oagcache, {})
-        self.assertEqual(a1a._oagcache['subnode1'], a2)
-        self.assertEqual(a1a._oagcache['subnode2'], a3a)
-        self.assertEqual(a1a.subnode1._oagcache, {})
-        self.assertEqual(a1a.subnode2._oagcache, {})
+        self.assertEqual(a4.cache.state, {})
+        self.assertEqual(a1a.cache.state['subnode1'], a2)
+        self.assertEqual(a1a.cache.state['subnode2'], a3a)
+        self.assertEqual(a1a.subnode1.cache.state, {})
+        self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
         self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
@@ -977,19 +981,19 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # deriv prop is calculated cleanly
         self.assertEqual(a4.cacheable_deriv_prop, 10)
         # cache state
-        self.assertEqual(a4._oagcache['subnode1'], a1a)
-        self.assertEqual(a4._oagcache['cacheable_deriv_prop'], 10)
+        self.assertEqual(a4.cache.state['subnode1'], a1a)
+        self.assertEqual(a4.cache.state['cacheable_deriv_prop'], 10)
 
         a3a.field7 = 99
 
         with self.assertRaises(KeyError):
-            a4._oagcache['subnode1']
+            a4.cache.state['subnode1']
         with self.assertRaises(KeyError):
-            a4._oagcache['cacheable_deriv_prop']
+            a4.cache.state['cacheable_deriv_prop']
 
         self.assertEqual(a4.cacheable_deriv_prop, 101)
-        self.assertEqual(a4._oagcache['subnode1'], a1a)
-        self.assertEqual(a4._oagcache['cacheable_deriv_prop'], 101)
+        self.assertEqual(a4.cache.state['subnode1'], a1a)
+        self.assertEqual(a4.cache.state['cacheable_deriv_prop'], 101)
 
     def test_invalidation_oag_handler(self):
         logger = OALog()
