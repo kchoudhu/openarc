@@ -1425,7 +1425,7 @@ class OAG_AutoNode1b(OAG_RootNode):
     }
 
 class OAG_AutoNode2(OAG_RootNode):
-    @property
+    @staticproperty
     def is_unique(self): return True
 
     @staticproperty
@@ -1453,8 +1453,8 @@ class OAG_AutoNode2(OAG_RootNode):
         }
 
 class OAG_AutoNode3(OAG_RootNode):
-    @property
-    def is_unique(self): return True
+    @staticproperty
+    def is_unique(cls): return True
 
     @staticproperty
     def context(cls): return "test"
@@ -1466,8 +1466,8 @@ class OAG_AutoNode3(OAG_RootNode):
     }
 
 class OAG_AutoNode4(OAG_RootNode):
-    @property
-    def is_unique(self): return True
+    @staticproperty
+    def is_unique(cls): return True
 
     @staticproperty
     def context(cls): return "test"
@@ -1486,8 +1486,8 @@ class OAG_AutoNode4(OAG_RootNode):
         self.invcount += 1
 
 class OAG_AutoNode5(OAG_RootNode):
-    @property
-    def is_unique(self): return True
+    @staticproperty
+    def is_unique(cls): return True
 
     @staticproperty
     def context(cls): return "test"
@@ -1509,8 +1509,8 @@ class OAG_AutoNode6(OAG_RootNode):
     }
 
 class OAG_AutoNode7(OAG_RootNode):
-    @property
-    def is_unique(self): return True
+    @staticproperty
+    def is_unique(cls): return True
 
     @property
     def context(cls): return "test"

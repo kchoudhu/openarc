@@ -1023,17 +1023,20 @@ class OAG_RootNode(object):
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     @staticproperty
-    def streams(cls):
-
-        raise NotImplementedError("Must be implemented in deriving OAGraph class")
-
-    @staticproperty
     def dbindices(cls): return {}
 
     @staticproperty
     def infname_fields(cls):
         """Override in deriving classes as necessary"""
         return [k for k, v in cls.streams.items()]
+
+    @staticproperty
+    def is_unique(cls): return False
+
+    @staticproperty
+    def streams(cls):
+
+        raise NotImplementedError("Must be implemented in deriving OAGraph class")
 
     ##### Derivative fields
     @staticproperty
@@ -1199,9 +1202,6 @@ class OAG_RootNode(object):
     @property
     def is_proxied(self):
         return True if getattr(self, '_proxy_mode', None) else False
-
-    @property
-    def is_unique(self): return False
 
     @property
     def logger(self): return self._logger
