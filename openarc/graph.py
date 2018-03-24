@@ -1031,6 +1031,12 @@ class OAG_RootNode(object):
     def dbindices(cls): return {}
 
     @staticproperty
+    def infname_fields(cls):
+        """Override in deriving classes as necessary"""
+        return [k for k, v in cls.streams.items()]
+
+    ##### Derivative fields
+    @staticproperty
     def dbpkname(cls): return "_%s_id" % cls.dbtable
 
     @staticproperty
@@ -1125,16 +1131,11 @@ class OAG_RootNode(object):
 
     @property
     def infname(self):
-        if len(self.infname_fields)==0:
-            raise OAError("Cannot calculate infname if infname_fields not set")
+        if len(self.propmgr._cframe)==0:
+            raise OAError("Cannot calculate infname if OAG attributes have not set")
         return hashlib.sha256(str().join([str(getattr(self, k, ""))
                                           for k in self.infname_fields
                                           if k[0] != '_'])).hexdigest()
-
-    @property
-    def infname_fields(self):
-        """Override in deriving classes as necessary"""
-        return [k for k, v in self.propmgr._cframe.items()]
 
     def init_state_oag(self, clauseprms, indexprm, initprms={}):
         attrs = self.propmgr._set_attrs_from_userprms(initprms)

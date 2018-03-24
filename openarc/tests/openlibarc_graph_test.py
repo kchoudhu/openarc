@@ -16,7 +16,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.setUp_db()
 
     def tearDown(self):
-        self.tearDown_db()
+        #self.tearDown_db()
         pass
 
     def __check_autonode_equivalence(self, oag1, oag2):
@@ -48,6 +48,83 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             })
 
         return (a1, a2, a3)
+
+    def test_uniqnode_infname_functionality(self):
+        for i in xrange(10):
+            OAG_AutoNode2().db.create({
+                'field4' : i,
+                'field5' : 'infname_test'
+            })
+
+        node_uniq = OAG_AutoNode2(3)
+
+
+        # In memory and database items have same infnames
+        node_uniq_in_mem1 =\
+            OAG_AutoNode2(initprms={
+                # databases are 1 indexed (who knew?)
+                'field4' : 2,
+                'field5' : 'infname_test'
+            })
+        self.assertEqual(node_uniq.infname, node_uniq_in_mem1.infname)
+
+        # Changing initparm changes infname
+        node_uniq_in_mem2=\
+            OAG_AutoNode2(initprms={
+                'field4' : 3,
+                'field5' : 'infname_test'
+            })
+        self.assertNotEqual(node_uniq.infname, node_uniq_in_mem2.infname)
+
+        # Changing field via property setting changes infname
+        node_uniq_in_mem3 =\
+            OAG_AutoNode2(initprms={
+                'field4' : 2,
+                'field5' : 'infname_test'
+            })
+        self.assertEqual(node_uniq.infname, node_uniq_in_mem3.infname)
+        node_uniq_in_mem3.field4 = 33
+        self.assertNotEqual(node_uniq.infname, node_uniq_in_mem3.infname)
+
+        # Changing non-infname field doesn't change infname
+        node_uniq_in_mem4 =\
+            OAG_AutoNode2(initprms={
+                'field4' : 2,
+                'field5' : 'infname_test'
+            })
+        self.assertEqual(node_uniq.infname, node_uniq_in_mem4.infname)
+        node_uniq_in_mem4.field5 = 'infname_morph_test'
+        self.assertEqual(node_uniq.infname, node_uniq_in_mem4.infname)
+
+    def test_multinode_infname_functionality(self):
+
+        for i in xrange(10):
+            OAG_AutoNode8().db.create({
+                'field3' : i,
+                'field4' : 2,
+                'field5' : 'infname multinode test',
+            })
+
+        # Retrieve unintiialized multinode
+        node_multi = OAG_AutoNode8(2)
+
+        # Infname cannot be calculated until cframe is set on multinode
+        with self.assertRaises(OAError):
+            print node_multi.infname
+
+        # Looping through multinode results in different infnames
+        node_multi_idx1 = OAG_AutoNode8(2, 'by_f4_idx')
+        hashes = [x.infname for x in node_multi_idx1]
+        no_dupe_hashes = list(set(hashes))
+        self.assertEqual(len(hashes), 10)
+        self.assertEqual(len(hashes), len(no_dupe_hashes))
+
+        # Changing non-infname field doesn't change infname
+        node_multi_idx2 = OAG_AutoNode8(2, 'by_f4_idx')
+        for nmi in node_multi_idx2:
+            infname = nmi.infname
+            nmi.field5 = 'infname_morph_test'
+            self.assertEqual(infname, nmi.infname)
 
     def test_autonode_retrieval_styles(self, logger=OALog()):
         """Graph retrieval succeeds with no tuple"""
@@ -1317,7 +1394,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 #         return [ 'field2' ]
 
 class OAG_AutoNode1a(OAG_RootNode):
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1336,7 +1413,7 @@ class OAG_AutoNode1a(OAG_RootNode):
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1351,7 +1428,7 @@ class OAG_AutoNode2(OAG_RootNode):
     @property
     def is_unique(self): return True
 
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1359,6 +1436,9 @@ class OAG_AutoNode2(OAG_RootNode):
         'field4'   : [ 'int',         0, None ],
         'field5'   : [ 'varchar(50)', 0, None ],
     }
+
+    @staticproperty
+    def infname_fields(cls): return [ 'field4' ]
 
     @property
     def sql_local(self):
@@ -1376,7 +1456,7 @@ class OAG_AutoNode3(OAG_RootNode):
     @property
     def is_unique(self): return True
 
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1389,7 +1469,7 @@ class OAG_AutoNode4(OAG_RootNode):
     @property
     def is_unique(self): return True
 
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1409,7 +1489,7 @@ class OAG_AutoNode5(OAG_RootNode):
     @property
     def is_unique(self): return True
 
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1419,7 +1499,7 @@ class OAG_AutoNode5(OAG_RootNode):
     }
 
 class OAG_AutoNode6(OAG_RootNode):
-    @property
+    @staticproperty
     def context(cls): return "test"
 
     @staticproperty
@@ -1440,4 +1520,23 @@ class OAG_AutoNode7(OAG_RootNode):
         'subnode1' : [  OAG_AutoNode3, False,  None ],
         'field1'   : [ 'boolean',      None,   None ],
     }
+
+class OAG_AutoNode8(OAG_RootNode):
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'field3'   : [ 'int',         0, None ],
+        'field4'   : [ 'int',         0, None ],
+        'field5'   : [ 'varchar(50)', 0, None ],
+    }
+
+    @staticproperty
+    def dbindices(cls) : return {
+        'f4_idx' : [['field4'], False,   None ],
+    }
+
+    @staticproperty
+    def infname_fields(cls): return [ 'field3', 'field4' ]
 
