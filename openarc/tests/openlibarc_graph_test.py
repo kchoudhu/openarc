@@ -16,7 +16,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.setUp_db()
 
     def tearDown(self):
-        #self.tearDown_db()
+        self.tearDown_db()
         pass
 
     def __check_autonode_equivalence(self, oag1, oag2):
@@ -517,16 +517,16 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a4.subnode1.subnode1, a2)
         self.assertEqual(a4.subnode1.subnode2, a3a)
 
-    def test_oag_remote_proxy_simple(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
+    def test_oag_remote_proxy_simple(self, logger=OALog()):
 
-        (a1, a2, a3) = self.__generate_autonode_system()
+        (a1, a2, a3) = self.__generate_autonode_system(logger=logger)
 
         next(a1)
 
+
+
         a1_prox = OAG_AutoNode1a(initurl=a1.oagurl, logger=logger)
+
         with self.assertRaises(OAError):
             a1_prox.field2 = 32
 
@@ -610,7 +610,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Cache state
         self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
         self.assertEqual(a1a_proxy.cache.state, {})
-        self.assertEqual(a1a_proxy.proxyurl, a1a.oagurl)
+        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.oagurl)
         self.assertEqual(a1a.cache.state['subnode1'], a2)
         self.assertEqual(a1a.cache.state['subnode2'], a3a)
         self.assertEqual(a1a.subnode1.cache.state, {})
@@ -722,7 +722,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Cache state
         self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
         self.assertEqual(a1a_proxy.cache.state, {})
-        self.assertEqual(a1a_proxy.proxyurl, a1a.oagurl)
+        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.oagurl)
         self.assertEqual(a1a.cache.state['subnode1'], a2)
         self.assertEqual(a1a.cache.state['subnode2'], a3a)
         self.assertEqual(a1a.subnode1.cache.state, {})
@@ -888,31 +888,27 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_AutoNode1a([1, 9], 'by_a3_idx', logger=logger)
         self.__check_autonode_equivalence(a1a_chk_1[0], a1a_chk_3[0])
 
-    def test_rpc_discovery(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
-        #logger.SQL = True
+    def test_rpc_discovery(self, logger=OALog()):
 
         a2 =\
-            OAG_AutoNode2(logger=logger, heartbeat=False)\
+            OAG_AutoNode2(logger=logger)\
             .db.create({
                 'field4' :  1,
                 'field5' : 'this is an autonode2'
             })
 
-        self.assertEqual(a2.discoverable, False)
+        self.assertEqual(a2.rpc.discoverable, False)
 
         with a2:
             a2_remote =\
                 OAG_AutoNode2(initprms={
                     'field4' :  1,
                     'field5' : 'this is an autonode2'
-                }, logger=logger).discover()
+                }, logger=logger).rpc.discover()
 
             self.__check_autonode_equivalence(a2, a2_remote)
 
-        self.assertEqual(a2.discoverable, False)
+        self.assertEqual(a2.rpc.discoverable, False)
 
         with self.assertRaises(OAGraphRetrieveError):
             OAG_RpcDiscoverable({
@@ -920,11 +916,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             }, 'by_rpcinfname_idx', rpc=False)
 
     @unittest.skip("long running time")
-    def test_rpc_discovery_cleanup(self):
-        logger = OALog()
-        #logger.RPC = True
-        #logger.Graph = True
-        #logger.SQL = True
+    def test_rpc_discovery_cleanup(self, logger=OALog()):
 
         a2 =\
             OAG_AutoNode2(logger=logger, heartbeat=False)\
@@ -941,36 +933,33 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                     'field5' : 'this is an autonode2'
                 })
 
+            # Attempt to immediately make duplicate oag discoverable
             with self.assertRaises(OAError):
-                a2_dupe.discoverable = True
+                a2_dupe.rpc.discoverable = True
 
+            # Wait 5 seconds, and then try to make duplicate discoverable
             time.sleep(getenv().rpctimeout)
-
-            a2_dupe.discoverable = True
-
+            a2_dupe.rpc.discoverable = True
             rpcdisc =\
                 OAG_RpcDiscoverable({
                     'rpcinfname' : a2_dupe.infname
                 }, 'by_rpcinfname_idx', rpc=False)
 
-            # Previous rpcdisc has been evicted, new one available
-            self.assertNotEqual(rpcdisc[0].id, a2._rpc_discovery[0].id)
+            # ...Previous rpcdisc has been evicted, new one available
+            self.assertNotEqual(rpcdisc[0].id, a2.rpc._rpc_discovery[0].id)
 
-            a2_dupe.discoverable = False
+            a2_dupe.rpc.discoverable = False
 
+        # Context manager works as expected
         with self.assertRaises(OAGraphRetrieveError):
             OAG_RpcDiscoverable({
                 'rpcinfname' : a2.infname
             }, 'by_rpcinfname_idx', rpc=False)
 
     @unittest.skip("long running time")
-    def test_rpc_discovery_underlying_env_change(self):
+    def test_rpc_discovery_underlying_env_change(self, logger=OALog()):
         def test_func():
             import gevent
-            logger = OALog()
-            #logger.RPC = True
-            #logger.Graph = True
-            #logger.SQL = True
 
             a2 =\
                 OAG_AutoNode2(logger=logger).db.create({
@@ -994,14 +983,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             gevent.sleep(5)
 
     @unittest.skip("long running time")
-    def test_rpc_discovery_underlying_db_row_removal(self):
+    def test_rpc_discovery_underlying_db_row_removal(self, logger=OALog()):
         self._envid  = base64.b16encode(os.urandom(16))
         def test_func():
             import gevent
-            logger = OALog()
-            #logger.RPC = True
-            #logger.Graph = True
-            #logger.SQL = True
+
+            logger =OALog()
 
             a2 =\
                 OAG_AutoNode2(logger=logger).db.create({
@@ -1316,82 +1303,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             INSERT INTO test.sample_table( field2, field3 ) VALUES ( %s, %s )""")
         get_rows_from_sample_table = td("""
             SELECT field2 FROM test.sample_table""")
-
-# class OAG_UniqNode(OAGraphRootNode):
-#     @property
-#     def is_unique(self): return True
-
-#     @property
-#     def context(cls): return "test"
-
-#     @oagprop
-#     def subnode(self): return OAG_UniqNode((self.field2,))
-
-#     @property
-#     def SQL(self):
-#       return {
-#         "read" : {
-#           "id" : td("""
-#               SELECT _field1, field2, field3
-#                 FROM test.sample_table
-#                WHERE field2=%s
-#             ORDER BY _field1"""),
-#           "id_2" : td("""
-#               SELECT _field1, field2, field3
-#                 FROM test.sample_table
-#                WHERE field2=%s
-#                      AND field3=%s
-#             ORDER BY _field1""")
-#         },
-#         "update" : {
-#           "id" : td("""
-#              UPDATE test.sample_table
-#                 SET %s
-#               WHERE _field1=%s""")
-#         },
-#         "insert" : {
-#           "id" : td("""
-#         INSERT INTO test.sample_table(%s)
-#              VALUES (%s)
-#           RETURNING field2""")
-#         }
-#       }
-
-# class OAG_MultiNode(OAGraphRootNode):
-#     @property
-#     def context(cls): return "test"
-
-#     @oagprop
-#     def subnode(self): return OAG_MultiNode((self.field3,))
-
-#     @property
-#     def SQL(self):
-#       return {
-#         "read" : {
-#           "id" : td("""
-#               SELECT _field1, field2, field3
-#                 FROM test.sample_table
-#                WHERE field3=%s
-#             ORDER BY _field1""")
-#         },
-#         "update" : {
-#           "id" : td("""
-#               UPDATE test.sample_table
-#                  SET %s
-#                WHERE _field1=%s""")
-#         },
-#         "insert" : {
-#           "id" : td("""
-#         INSERT INTO test.sample_table(%s)
-#              VALUES (%s)
-#           RETURNING field3""")
-#         }
-#       }
-
-# class OAG_MultiWithCustomInfnameList(OAG_MultiNode):
-#     @property
-#     def infname_fields(self):
-#         return [ 'field2' ]
 
 class OAG_AutoNode1a(OAG_RootNode):
     @staticproperty

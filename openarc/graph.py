@@ -89,14 +89,14 @@ class OAGRPC(object):
                     toaddr = addr
                 else:
                     toaddr = target.id
-                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpcrtr.id, payload, toaddr)
+                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload, toaddr)
 
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
             rpcret = msgpack.loads(reply)
             if self._oag.logger.RPC:
-                print "[%s:req] Received reply [%s]" % (self._oag.rpcrtr.id, rpcret)
+                print "[%s:req] Received reply [%s]" % (self._oag.rpc.router.id, rpcret)
                 print "<======== "
 
             if rpcret['status'] != 'OK':
@@ -164,14 +164,14 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
     @OAGRPC.rpcprocfn
     def proc_deregister(self, ret, args):
-        self._oag._rpcreqs = {rpcreq:self._oag._rpcreqs[rpcreq] for rpcreq in self._oag._rpcreqs if rpcreq != args['addr']}
+        self._oag.rpc.registration_invalidate(args['addr'])
 
     @OAGRPC.rpcprocfn
     def proc_getstream(self, ret, args):
         attr = getattr(self._oag, args['stream'], None)
         if isinstance(attr, OAG_RootNode):
             ret['payload']['type']  = 'redirect'
-            ret['payload']['value'] = attr.rpcrtr.addr
+            ret['payload']['value'] = attr.rpc.router.addr
             ret['payload']['class'] = attr.__class__.__name__
         else:
             ret['payload']['type']  = 'value'
@@ -183,12 +183,12 @@ class OAGRPC_RTR_Requests(OAGRPC):
         invstream = args['stream']
 
         if self._oag.logger.RPC:
-            print '[%s:rtr] invalidation signal received' % self._oag._rpcrtr.id
+            print '[%s:rtr] invalidation signal received' % self._oag.rpc.router.id
 
         self._oag.cache.invalidate(invstream)
 
         # Inform upstream
-        for addr, stream in self._oag._rpcreqs.items():
+        for addr, stream in self._oag.rpc.registrations.items():
             OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
 
         # Execute any event handlers
@@ -202,18 +202,18 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
     @OAGRPC.rpcprocfn
     def proc_register(self, ret, args):
-        self._oag._rpcreqs[args['addr']] = args['stream']
+        self._oag.rpc.registration_add(args['addr'], args['stream'])
 
     @OAGRPC.rpcprocfn
     def proc_register_proxy(self, ret, args):
-        self._oag._rpcreqs[args['addr']] = args['stream']
+        self._oag.rpc.registration_add(args['addr'], args['stream'])
 
         rawprops = self._oag.streams.keys()\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
                    + getattr(self._oag.__class__, 'oagproplist', [])
 
-        ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag._rpc_stop_list]
+        ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag.rpc.stoplist]
 
 rtrcls = OAGRPC_RTR_Requests
 
@@ -227,7 +227,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
         return  {
             'args'      : {
                 'stream' : args[0][0],
-                'addr'   : self._oag.rpcrtr.addr
+                'addr'   : self._oag.rpc.router.addr
             }
         }
 
@@ -252,7 +252,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
         return {
             'args'      : {
                 'stream' : args[0][0],
-                'addr'   : self._oag.rpcrtr.addr
+                'addr'   : self._oag.rpc.router.addr
             }
         }
 
@@ -261,7 +261,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
         return {
             'args'      : {
                 'stream' : args[0][0],
-                'addr'   : self._oag.rpcrtr.addr
+                'addr'   : self._oag.rpc.router.addr
             }
         }
 
@@ -386,7 +386,7 @@ class OAG_DbSchemaProxy(object):
         oag = dbp._oag
 
         # Don't set props for proxied OAGs, they are passthrough entities
-        if oag.is_proxied:
+        if oag.rpc.is_proxy:
             return
 
         with OADao(oag.context) as dao:
@@ -754,6 +754,304 @@ class OAG_RdfProxy(object):
 
         return self
 
+class OAG_RpcProxy(object):
+    """Manipulates rpc functionality for OAG"""
+
+    def __init__(self, oag, initurl=None, rpc_enabled=True, heartbeat_enabled=True):
+
+        ### Store reference to OAG
+        self._oag = oag
+
+        # Greenlets spawned by RPC
+        self._glets = []
+
+        ### Spin up rpc infrastructure
+
+        # Imports
+        from gevent import spawn, monkey
+        from gevent.lock import BoundedSemaphore
+
+        # Is RPC initialization complete?
+        self._rpc_init_done = False
+
+        # A very basic question...
+        self._rpc_enabled = rpc_enabled
+
+        # Serialize access to RPC
+        self._rpcsem = BoundedSemaphore(1)
+
+        # Routes all incoming RPC requests (dead to start with)
+        self._rpcrtr = None
+
+        # Registrations received from other OAGs
+        self._rpcreqs = {}
+
+        # Holding spot for RPC discoverability - default off
+        self._rpc_discovery = None
+
+        # Should you heartbeat?
+        self._rpc_heartbeat = heartbeat_enabled
+
+        # Stoplist of OAG streams that shouldn't be exposed over RPC
+        self._rpc_stop_list = [
+            'cache',
+            'db',
+            'discoverable',
+            'logger',
+            'propmgr',
+            'rdf',
+            'rpc',
+        ] + [attr for attr in dir(self._oag) if attr[0]=='_']
+
+        ### Set up OAG proxying infrastructure
+
+        # Are we proxying for another OAG?
+        self._proxy_mode = False
+
+        # OAG URL this one is proxying
+        self._proxy_url = initurl
+
+        # List of props we are making RPC calls for
+        self._proxy_oags = []
+
+        ### Carry out ininitialization
+
+        # Is this OAG RPC enabled? If no, don't proceed
+        if not self._rpc_enabled:
+            return
+
+        # RPC routing
+        if not self._rpc_init_done:
+
+            monkey.patch_all()
+
+            with self._rpcsem:
+                self._rpcrtr = OAGRPC_RTR_Requests(self._oag)
+                self._rpcrtr.start()
+                self._glets.append(spawn(self.__cb_init))
+
+                # Force execution of newly spawned greenlets
+                gevent.sleep(0)
+
+                # Avoid double RPC initialization
+                self._rpc_init_done = True
+
+        # Proxying
+        if self._proxy_url:
+            self._proxy_mode = True
+
+    def clone(self, src):
+
+        pass
+
+    def discover(self):
+        remote_oag =\
+            OAG_RpcDiscoverable({
+                'rpcinfname' : self._oag.infname
+            }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+        return self._oag.__class__(initurl=remote_oag[0].url)
+
+    @property
+    def discoverable(self): return self._rpc_discovery is not None
+
+    @discoverable.setter
+    def discoverable(self, value):
+        if self._rpc_discovery==value:
+            return
+
+        if value is False:
+            if self._oag.logger.RPC:
+                print "[%s] Killing rpcdisc greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets))
+            [glet.kill() for glet in self._rpc_discovery.rpc._glets]
+            if self._oag.logger.RPC:
+                print "[%s] Killing OAG greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets))
+            [glet.kill() for glet in self._glets]
+            gevent.joinall(self._glets+self._rpc_discovery.rpc._glets)
+            self._rpc_discovery.db.delete()
+            self._rpc_discovery = None
+        else:
+            # Cleanup previous messes
+            try:
+                currtime = OATime().now
+                prevrpcs = OAG_RpcDiscoverable(self._oag.infname, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
+                number_active = 0
+                for rpc in prevrpcs:
+                    delta = currtime - rpc.heartbeat
+                    if delta < datetime.timedelta(seconds=getenv().rpctimeout):
+                        number_active += 1
+                    else:
+                        if self._oag.logger.RPC:
+                            print "[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
+                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat, delta)
+                        rpc.db.delete()
+
+                # Is there already an active subscription there?
+                if number_active > 0:
+                    if not self.fanout:
+                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
+                                   % (self.router.id, rpc.rpcinfname, rpc.heartbeat, delta)
+                        if self._oag.logger.RPC:
+                            print message
+                        raise OAError(message)
+                    else:
+                        raise OAError("Fanout not implemented yet")
+            except OAGraphRetrieveError as e:
+                pass
+
+            # Create new database entry
+            self._rpc_discovery =\
+                OAG_RpcDiscoverable(logger=self._oag.logger,
+                                    rpc=False,
+                                    heartbeat=self._rpc_heartbeat)\
+                .db.create({
+                    'rpcinfname' : self._oag.infname,
+                    'stripe'     : 0,
+                    'url'        : self._oag.oagurl,
+                    'type'       : self._oag.__class__.__name__,
+                    'envid'      : getenv().envid,
+                    'heartbeat'  : currtime
+                }).next()
+
+            self._rpc_discovery.start_heartbeat()
+
+    @property
+    def fanout(self): return False
+
+    def distribute_stream_change(self, stream, currval, newval=None, initmode=False):
+
+        if not self._rpc_enabled:
+            return
+
+        ###### Don't distribute if...
+        # Attribute is internal or protected
+        if stream[0] == '_':
+            return
+
+        # RPC isn't fully initialized
+        if not self._rpc_init_done:
+            return
+
+        ###### RPC eligibility has been established
+
+        # Flag driving whether or not to invalidate upstream nodes
+        invalidate_upstream = False
+
+        # Handle oagprops
+        if self._oag.is_oagnode(stream):
+            if newval:
+                # Update oagcache
+                self._oag.cache.put(stream, newval)
+                # Update the oagprop
+                self._oag.propmgr._set_oagprop(stream, newval.id, streamform='oag')
+                # Regenerate connections to surrounding nodes
+                if currval is None:
+                    if self._oag.logger.RPC:
+                        print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpc.router.id)
+                    reqcls(self._oag).register(newval.rpc.router, stream)
+                else:
+                    if currval != newval:
+                        if self._oag.logger.RPC:
+                            print "[%s] Detected changed stream [%s]->[%s]" % (stream,
+                                                                               currval.rpc.router.id,
+                                                                               newval.rpc.router.id)
+                        if currval:
+                            reqcls(self._oag).deregister(currval.rpc.router, stream)
+                        reqcls(self._oag).register(newval.rpc.router, stream)
+                        try:
+                            self._oag.propmgr._cframe[self._oag.stream_db_mapping[stream]]=newval.id
+                        except KeyError:
+                            pass
+                        invalidate_upstream = True
+        else:
+            if currval and currval != newval:
+                invalidate_upstream  = True
+
+        if invalidate_upstream:
+            if len(self._rpcreqs)>0:
+                if self._oag.logger.RPC:
+                    print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
+                for addr, stream_to_invalidate in self._rpcreqs.items():
+                    reqcls(self._oag).invalidate(addr, stream_to_invalidate)
+
+    @property
+    def is_init(self):
+
+        return getattr(self, '_rpc_init_done', False)
+
+    @property
+    def is_heartbeat(self):
+
+        return self._rpc_heartbeat
+
+    @property
+    def is_proxy(self):
+
+        return self._proxy_mode
+
+    @property
+    def proxied_url(self):
+
+        return self._proxy_url
+
+    @property
+    def proxied_oags(self):
+
+        return self._proxy_oags
+
+    @proxied_oags.setter
+    def proxied_oags(self, oag_array):
+
+        self._proxy_oags = oag_array
+
+    @property
+    def router(self):
+        if not self._rpc_enabled:
+            raise OAError("This OAG is not RPC enabled")
+        return self._rpcrtr
+
+    def register_with_surrounding_nodes(self):
+        if not self._rpc_enabled:
+            return
+
+        for stream in self._oag.streams:
+            node = getattr(self._oag, stream, None)
+            if node and self._oag.is_oagnode(stream):
+                if self._oag.logger.RPC:
+                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, node.rpc.router.id)
+                reqcls(self._oag).register(node.rpc.router, stream)
+
+    @property
+    def registrations(self):
+        return self._rpcreqs
+
+    def registration_add(self, registering_oag_addr, registering_stream):
+        self._rpcreqs[registering_oag_addr] = registering_stream
+
+    def registration_invalidate(self, deregistering_oag_addr):
+        self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
+
+    @property
+    def stoplist(self):
+        return self._rpc_stop_list
+
+    #### Callbacks
+    def __cb_init(self):
+
+        rpc_dispatch = {
+            'deregister'     : self._rpcrtr.proc_deregister,
+            'invalidate'     : self._rpcrtr.proc_invalidate,
+            'register'       : self._rpcrtr.proc_register,
+            'register_proxy' : self._rpcrtr.proc_register_proxy,
+            'getstream'      : self._rpcrtr.proc_getstream,
+        }
+
+        if self._oag.logger.RPC:
+            print "[%s:rtr] Listening for RPC requests [%s]" % (self._rpcrtr.id, self._oag.__class__.__name__)
+
+        while True:
+            (sender, payload) = self._rpcrtr._recv()
+            self._rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
+
 class OAG_PropProxy(object):
     """Manipulates properties"""
     def __init__(self, oag):
@@ -1016,6 +1314,11 @@ class OAG_RootNode(object):
 
         return self._prop_proxy
 
+    @property
+    def rpc(self):
+
+        return self._rpc_proxy
+
     ##### User defined via inheritance
     @staticproperty
     def context(cls):
@@ -1051,89 +1354,12 @@ class OAG_RootNode(object):
             setattr(cls, '_dbtable_name', inflection.underscore(cls.__name__)[4:])
         return cls._dbtable_name
 
-    def discover(self):
-        remote_oag =\
-            OAG_RpcDiscoverable({
-                'rpcinfname' : self.infname
-            }, 'by_rpcinfname_idx', rpc=False, logger=self.logger)
-        return self.__class__(initurl=remote_oag[0].url)
-
-    @property
-    def discoverable(self): return self._rpc_discovery is not None
-
-    @discoverable.setter
-    def discoverable(self, value):
-        if self._rpc_discovery==value:
-            return
-
-        if value is False:
-            if self.logger.RPC:
-                print "[%s] Killing rpcdisc greenlets [%d]" % (self._rpc_discovery.id, len(self._rpc_discovery._glets))
-            [glet.kill() for glet in self._rpc_discovery._glets]
-            if self.logger.RPC:
-                print "[%s] Killing OAG greenlets [%d]" % (self._rpc_discovery.id, len(self._glets))
-            [glet.kill() for glet in self._glets]
-            gevent.joinall(self._glets+self._rpc_discovery._glets)
-            self._rpc_discovery.db.delete()
-            self._rpc_discovery = None
-        else:
-            # Cleanup previous messes
-            try:
-                currtime = OATime().now
-                prevrpcs = OAG_RpcDiscoverable([self.infname], 'by_rpcinfname_idx', logger=self.logger)
-                number_active = 0
-                for rpc in prevrpcs:
-                    delta = currtime - rpc.heartbeat
-                    if delta < datetime.timedelta(seconds=getenv().rpctimeout):
-                        number_active += 1
-                    else:
-                        if self.logger.RPC:
-                            print "[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
-                                   % (rpc.id, rpc.type, rpc.stripe, rpc.heartbeat, delta)
-                        rpc.db.delete()
-
-                # Is there already an active subscription there?
-                if number_active > 0:
-                    if not self.fanout:
-                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
-                                   % (rpc.id, rpc.rpcinfname, rpc.heartbeat, delta)
-                        if self.logger.RPC:
-                            print message
-                        raise OAError(message)
-            except OAGraphRetrieveError as e:
-                pass
-
-            # Create new database entry
-            self._rpc_discovery =\
-                OAG_RpcDiscoverable(logger=self.logger,
-                                    rpc=False,
-                                    heartbeat=self._rpc_heartbeat)\
-                .db.create({
-                    'rpcinfname' : self.infname,
-                    'stripe'     : 0,
-                    'url'        : self.oagurl,
-                    'type'       : self.__class__.__name__,
-                    'envid'      : getenv().envid,
-                    'heartbeat'  : currtime
-                }).next()
-
-            self._rpc_discovery.start_heartbeat()
-
-    @property
-    def fanout(self): return False
-
     @property
     def id(self):
         try:
             return self.propmgr._cframe[self.dbpkname]
         except:
             return None
-
-    @property
-    def oagid(self):
-        if getattr(self, '_oagid', None) is None:
-            self._oagid = hashlib.sha256(str(self)).hexdigest()
-        return self._oagid
 
     @property
     def infname(self):
@@ -1143,7 +1369,7 @@ class OAG_RootNode(object):
                                           for k in self.infname_fields
                                           if k[0] != '_'])).hexdigest()
 
-    def init_state_oag(self, clauseprms, indexprm, initprms={}):
+    def is_init_oag(self, clauseprms, indexprm, initprms={}):
         attrs = self.propmgr._set_attrs_from_userprms(initprms)
         self.propmgr._set_cframe_from_attrs(attrs)
 
@@ -1158,42 +1384,6 @@ class OAG_RootNode(object):
 
         return self
 
-    def init_state_rpc(self):
-        # Intiailize reqs
-        if not self._rpc_init_done:
-
-            from gevent            import spawn
-            from gevent            import monkey
-            from gevent.lock       import BoundedSemaphore
-            monkey.patch_all()
-
-            self._rpcsem = BoundedSemaphore(1)
-            with self._rpcsem:
-                self._rpcrtr = OAGRPC_RTR_Requests(self)
-                self.rpcrtr.start()
-                self._glets.append(spawn(self.__cb_init_state_rpc))
-                gevent.sleep(0)
-
-                # Initialize REQ array
-                self._rpcreqs = {}
-
-                # Avoid double RPC initialization
-                self._rpc_init_done = True
-
-                # RPC discovery isn't actually on yet
-                self._rpc_discovery = None
-
-                # Some things probably shouldn't be sent over rpc
-                self._rpc_stop_list = [
-                    'db',
-                    'rdf',
-                    'cache',
-                    'propmgr',
-                    'logger',
-                    'rpcrtr',
-                    'discoverable'
-                ] + [attr for attr in dir(self) if attr[0]=='_']
-
     @classmethod
     def is_oagnode(cls, stream):
         streaminfo = cls.streams[stream][0]
@@ -1201,10 +1391,6 @@ class OAG_RootNode(object):
             return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
         else:
             return False
-
-    @property
-    def is_proxied(self):
-        return True if getattr(self, '_proxy_mode', None) else False
 
     @property
     def logger(self): return self._logger
@@ -1224,10 +1410,10 @@ class OAG_RootNode(object):
                 raise StopIteration()
 
     @property
-    def oagurl(self): return self.rpcrtr.addr
+    def oagid(self): return self._oagid
 
     @property
-    def proxyurl(self): return self._proxy_url
+    def oagurl(self): return self.rpc.router.addr
 
     def clone(self):
         oagcopy = self.__class__()
@@ -1250,63 +1436,6 @@ class OAG_RootNode(object):
         return self
 
     @property
-    def rpcreqs(self):
-        rpcreq = self._rpcreqs
-
-    @property
-    def rpcrtr(self): return self._rpcrtr
-
-    def signal_surrounding_nodes(self, stream, currval, newval=None, initmode=False):
-
-        if initmode and currval:
-            if self.is_oagnode(stream):
-                if self.logger.RPC:
-                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, currval.rpcrtr.id)
-
-                reqcls(self).register(currval.rpcrtr, stream)
-            return
-
-        if stream[0] != '_':
-            invalidate_upstream = False
-
-            # Handle oagprops
-            if self.is_oagnode(stream):
-                if newval:
-                    # Update oagcache
-                    self.cache.put(stream, newval)
-                    # Update the oagprop
-                    self.propmgr._set_oagprop(stream, newval.id, streamform='oag')
-                    # Regenerate connections to surrounding nodes
-                    if currval is None:
-                        if self.logger.RPC:
-                            print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpcrtr.id)
-                        reqcls(self).register(newval.rpcrtr, stream)
-                    else:
-                        if currval != newval:
-                            if self.logger.RPC:
-                                print "[%s] Detected changed stream [%s]->[%s]" % (stream,
-                                                                                   currval.rpcrtr.id,
-                                                                                   newval.rpcrtr.id)
-                            if currval:
-                                reqcls(self).deregister(currval.rpcrtr, stream)
-                            reqcls(self).register(newval.rpcrtr, stream)
-                            try:
-                                self.propmgr._cframe[self.stream_db_mapping[stream]]=newval.id
-                            except KeyError:
-                                pass
-                            invalidate_upstream = True
-            else:
-                if currval and currval != newval:
-                    invalidate_upstream  = True
-
-            if invalidate_upstream:
-                if len(self._rpcreqs)>0:
-                    if self.logger.RPC:
-                        print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
-                    for addr, stream_to_invalidate in self._rpcreqs.items():
-                        reqcls(self).invalidate(addr, stream_to_invalidate)
-
-    @property
     def size(self):
         if self.rdf._rdf_window is None:
             return 0
@@ -1325,23 +1454,6 @@ class OAG_RootNode(object):
             setattr(cls, '_stream_db_mapping', schema)
         return cls._stream_db_mapping
 
-    def __cb_init_state_rpc(self):
-
-        rpc_dispatch = {
-            'deregister'     : self.rpcrtr.proc_deregister,
-            'invalidate'     : self.rpcrtr.proc_invalidate,
-            'register'       : self.rpcrtr.proc_register,
-            'register_proxy' : self.rpcrtr.proc_register_proxy,
-            'getstream'      : self.rpcrtr.proc_getstream,
-        }
-
-        if self.logger.RPC:
-            print "[%s:rtr] Listening for RPC requests [%s]" % (self.rpcrtr.id, self.__class__.__name__)
-
-        while True:
-            (sender, payload) = self.rpcrtr._recv()
-            self.rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
-
     def __del__(self):
         try:
             self._prop_proxy.profile_deregister(self)
@@ -1352,39 +1464,38 @@ class OAG_RootNode(object):
             traceback.print_exc()
 
     def __enter__(self):
-        self.discoverable = True
+        self.rpc.discoverable = True
         return self
 
     def __exit__(self, type, value, traceback):
-        self.discoverable = False
+
+        self.rpc.discoverable = False
 
     def __getattribute__(self, attr):
-        def objattr(stream):
-            """returns local-accessible attributes"""
-            return object.__getattribute__(self, stream)
-
         try:
-            if objattr('_proxy_mode'):
-                if attr in objattr('_proxy_oags'):
-                    if objattr('logger').RPC:
-                        print "[%s] proxying request for [%s] to [%s]" % (attr, attr, objattr('_proxy_url'))
-                    payload = reqcls(self).getstream(objattr('_proxy_url'), attr)['payload']
+            logger  = object.__getattribute__(self, '_logger')
+            rpc     = object.__getattribute__(self, '_rpc_proxy')
+            if rpc.is_proxy:
+                if attr in rpc.proxied_oags:
+                    if logger.RPC:
+                        print "[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url)
+                    payload = reqcls(self).getstream(rpc.proxied_url, attr)['payload']
                     if payload['value']:
                         if payload['type'] == 'redirect':
                             for cls in OAG_RootNode.__subclasses__():
                                 if cls.__name__==payload['class']:
-                                    return cls(initurl=payload['value'], logger=objattr('logger'))
+                                    return cls(initurl=payload['value'], logger=logger)
                         else:
                             return payload['value']
-                    else:
-                        raise AttributeError("[%s] does not exist" % attr)
                 else:
-                    raise AttributeError("[%s] is not an allowed proxy attribute" % attr)
+                    raise AttributeError("[%s] does not exist at [%s]" % (attr, rpc.proxied_url))
         except AttributeError:
             pass
 
         try:
-            objattr('_prop_proxy').profile_set(objattr('_oagid'))
+            propmgr = object.__getattribute__(self, '_prop_proxy')
+            oagid   = object.__getattribute__(self, '_oagid')
+            propmgr.profile_set(oagid)
         except AttributeError:
             pass
 
@@ -1419,35 +1530,34 @@ class OAG_RootNode(object):
                  heartbeat=True):
 
         # Alphabetize
-        self._proxy_mode     = False
-
-        self._rpc_init_done  = False
-        self._rpc_heartbeat  = heartbeat
-
         self._extcur         = extcur
+        self._iteridx        = None
         self._logger         = logger
-        self._glets          = []
+        self._oagid          = hashlib.sha256(str(self)).hexdigest()
 
-        # Set up proxies
+        #### Set up proxies
+
+        # Database API
         self._db_proxy       = OAG_DbProxy(self, clauseprms, indexprm)
+
+        # Relational Dataframe manipulation
         self._rdf_proxy      = OAG_RdfProxy(self)
+
+        # Set attributes on OAG and keep them in sync with cframe
         self._prop_proxy     = OAG_PropProxy(self)
+
+        # Manage oagprop state
         self._cache_proxy    = OAG_CacheProxy(self)
 
-        if initurl:
-            self.init_state_rpc()
-            self._proxy_oags = reqcls(self).register_proxy(initurl, 'proxy')['payload']
-            self._proxy_mode = True
-            self._proxy_url  = initurl
-        else:
-            self._prop_proxy.profile_set(self.oagid)
-            self.init_state_oag(clauseprms, indexprm, initprms)
+        # All RPC operations
+        self._rpc_proxy      = OAG_RpcProxy(self, initurl=initurl, rpc_enabled=rpc, heartbeat_enabled=heartbeat)
 
-            if rpc:
-                self.init_state_rpc()
-                for stream in self.streams:
-                    currval = getattr(self, stream, None)
-                    self.signal_surrounding_nodes(stream, currval, initmode=True)
+        if not self._rpc_proxy.is_proxy:
+            self._prop_proxy.profile_set(self.oagid)
+            self.is_init_oag(clauseprms, indexprm, initprms)
+            self._rpc_proxy.register_with_surrounding_nodes()
+        else:
+            self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
 
     def __iter__(self):
         if self.is_unique:
@@ -1463,8 +1573,13 @@ class OAG_RootNode(object):
 
     def __setattr__(self, attr, newval):
 
+        # Get RPC proyx
+        rpc = getattr(self, '_rpc_proxy', None)
+
         # Setting values on a proxy OAG is nonsensical
-        if getattr(self, '_proxy_mode', None) == True and attr in getattr(self, '_proxy_oags', []):
+        if rpc\
+            and rpc.is_proxy\
+            and attr in rpc.proxied_oags:
             raise OAError("Cannot set value on a proxy OAG")
 
         # Stash existing value
@@ -1474,9 +1589,10 @@ class OAG_RootNode(object):
         super(OAG_RootNode, self).__setattr__(attr, newval)
 
         # Tell the world
-        if getattr(self, '_rpc_init_done', None) is True \
-            and attr not in getattr(self, '_rpc_stop_list', []):
-            self.signal_surrounding_nodes(attr, currval, newval)
+        if rpc\
+            and rpc.is_init is True\
+            and attr not in rpc.stoplist:
+            rpc.distribute_stream_change(attr, currval, newval)
 
 class OAG_RpcDiscoverable(OAG_RootNode):
     @property
@@ -1526,7 +1642,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
 
     def start_heartbeat(self):
         from gevent import spawn
-        if self._rpc_heartbeat:
+        if self.rpc.is_heartbeat:
             if self.logger.RPC:
                 print "[%s] Starting heartbeat greenlet" % (self.id)
-            self._glets.append(spawn(self.__cb_heartbeat))
+            self.rpc._glets.append(spawn(self.__cb_heartbeat))
