@@ -1354,6 +1354,27 @@ class OAG_RootNode(object):
             setattr(cls, '_dbtable_name', inflection.underscore(cls.__name__)[4:])
         return cls._dbtable_name
 
+    @classmethod
+    def is_oagnode(cls, stream):
+        streaminfo = cls.streams[stream][0]
+        if type(streaminfo).__name__=='type':
+            return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
+        else:
+            return False
+
+    @staticproperty
+    def stream_db_mapping(cls):
+        if not getattr(cls, '_stream_db_mapping', None):
+            schema = {}
+            for stream, streaminfo in cls.streams.items():
+                if cls.is_oagnode(stream):
+                    schema[stream] = streaminfo[0].dbpkname[1:]
+                else:
+                    schema[stream] = stream
+            setattr(cls, '_stream_db_mapping', schema)
+        return cls._stream_db_mapping
+
+    ##### User API
     @property
     def id(self):
         try:
@@ -1383,14 +1404,6 @@ class OAG_RootNode(object):
                 self.propmgr._set_attrs_from_cframe_uniq()
 
         return self
-
-    @classmethod
-    def is_oagnode(cls, stream):
-        streaminfo = cls.streams[stream][0]
-        if type(streaminfo).__name__=='type':
-            return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
-        else:
-            return False
 
     @property
     def logger(self): return self._logger
@@ -1442,18 +1455,9 @@ class OAG_RootNode(object):
         else:
             return len(self.rdf._rdf_window)
 
-    @staticproperty
-    def stream_db_mapping(cls):
-        if not getattr(cls, '_stream_db_mapping', None):
-            schema = {}
-            for stream, streaminfo in cls.streams.items():
-                if cls.is_oagnode(stream):
-                    schema[stream] = streaminfo[0].dbpkname[1:]
-                else:
-                    schema[stream] = stream
-            setattr(cls, '_stream_db_mapping', schema)
-        return cls._stream_db_mapping
+    ##### Stream attributes
 
+    ##### Internals
     def __del__(self):
         try:
             self._prop_proxy.profile_deregister(self)
