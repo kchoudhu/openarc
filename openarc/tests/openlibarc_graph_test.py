@@ -49,6 +49,143 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         return (a1, a2, a3)
 
+    def test_graph_isolation_control(self):
+        with self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            self.dbconn.commit()
+
+            # Object not created until commit
+            oa = OAG_AutoNode8(extcur=setupcur).db.create({
+                'field3' : 2,
+                'field4' : 2,
+                'field5' : 'infname multinode test',
+            })
+
+            with self.assertRaises(OAGraphRetrieveError):
+                oa_chk = OAG_AutoNode8(2, 'by_f4_idx')
+
+            self.dbconn.commit()
+            oa_chk = OAG_AutoNode8(2, 'by_f4_idx')
+            self.__check_autonode_equivalence(oa[0], oa_chk[0])
+
+            # Object not updated until commit
+            oa.field4 = 33
+            oa.db.update()
+            # -> no change yet, retrieval by previous index succeeds
+            oa_chk = OAG_AutoNode8(2, 'by_f4_idx')[0]
+            self.assertEqual(oa_chk.field4, 2)
+            self.dbconn.commit()
+            # -> update commited, retrieval fails
+            with self.assertRaises(OAGraphRetrieveError):
+                oa_chk = OAG_AutoNode8(2, 'by_f4_idx')
+            # -> but retrieval by new value succeeds
+            oa_chk = OAG_AutoNode8(33, 'by_f4_idx')[0]
+            self.__check_autonode_equivalence(oa, oa_chk)
+
+    def test_data_retrieval_failure(self):
+        """Attempt to retrieve no data fails with exception"""
+        with self.assertRaises(OAGraphRetrieveError):
+            oa = OAG_AutoNode2(1)
+
+    def test_uniquenode_data_integrity(self):
+        with self.dbconn.cursor() as setupcur:
+            setupcur.execute(self.SQL.create_sample_table)
+            for i in xrange(2):
+                setupcur.execute(self.SQL.insert_sample_row, [2, 2])
+            self.dbconn.commit()
+
+        with self.assertRaises(Exception):
+            oa = OAG_UniqNode((2,))
+
+    def test_multinode_refresh_behavior(self):
+
+        for i in xrange(10):
+            OAG_AutoNode8().db.create({
+                'field3' : i,
+                'field4' : 2,
+                'field5' : 'infname multinode test',
+            })
+
+        # Exhausted MultiNode is implicitly refreshed
+        node_multi = OAG_AutoNode8(2, 'by_f4_idx')
+
+        for oa in node_multi:
+            continue
+        accumulator = [ oa.field3 for oa in node_multi ]
+        self.assertEqual(len(accumulator), 10)
+
+        # Explicitly refreshed MultiNode allows full iteration again
+        for i, oa in enumerate(node_multi):
+            if i == 5:
+                break
+        node_multi.db.refresh()
+        accumulator_refreshed = [ oa.field3 for oa in node_multi ]
+        self.assertEqual(len(accumulator_refreshed), 10)
+
+    def test_oanode_size_reporting(self):
+        for i in xrange(10):
+            OAG_AutoNode8().db.create({
+                'field3' : i,
+                'field4' : 2,
+                'field5' : 'infname multinode test',
+            })
+
+        node_multi = OAG_AutoNode8(2, 'by_f4_idx')
+
+        self.assertEqual(node_multi.size, 10)
+
+    def test_oanode_oagprop_caching(self):
+        """Assigned OAG can be retrieved without new object being generated"""
+        (a1, a2, a3) = self.__generate_autonode_system()
+
+        a1_dupe = OAG_AutoNode1a(a1[0].id)
+
+        # No oagprops have been access, so cache should be empty
+        self.assertEqual(len(a1_dupe[0].cache.state), 0)
+
+        # Having accessed subnode1, it should now be stored in cache
+        self.__check_autonode_equivalence(a1_dupe.subnode1, a2)
+        self.assertEqual(len(a1_dupe.cache.state), 1)
+
+    @unittest.skip("multinode caching broken")
+    def test_multinode_oagprop_cache_invalidation(self, logger=OALog()):
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3(logger=logger).db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for i in range(10):
+
+            a1 =\
+                OAG_AutoNode1a(logger=logger).db.create({
+                    'field2'   : 2,
+                    'field3'   : i,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        node_multi = OAG_AutoNode1a(2, 'by_a2_idx', logger=logger)
+
+        for i, nm in enumerate(node_multi):
+            # Each iteration clears the cache
+            self.assertEqual(len(nm.cache.state), 0)
+
+            # Accessing a subnode adds one item to the cache
+            self.__check_autonode_equivalence(nm.subnode1, a2)
+            self.assertEqual(len(nm.cache.state), 1)
+
+            # Accessing second subnode adds another item to the cache
+            self.__check_autonode_equivalence(nm.subnode2, a3)
+            self.assertEqual(len(nm.cache.state), 2)
+
     def test_uniqnode_infname_functionality(self):
         for i in xrange(10):
             OAG_AutoNode2().db.create({
