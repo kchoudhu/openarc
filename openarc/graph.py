@@ -1081,6 +1081,13 @@ class OAG_PropProxy(object):
         setattr(self.cls, stream, oagprop)
         self.cls.oagprofiles[self.oagid][stream] = oagprop
 
+    def clear_all(self):
+        for stream in self._oag.streams:
+            if self._oag.is_oagnode(stream):
+                setattr(self._oag.__class__, stream, None)
+            else:
+                setattr(self._oag, stream, None)
+
     def clone(self, src):
 
         self._cframe = dict(src.propmgr._cframe)
@@ -1413,10 +1420,21 @@ class OAG_RootNode(object):
             raise OAError("next: Unique OAGraph object is not iterable")
         else:
             if self._iteridx < self.size:
+
+                # Clear all properties (use class clear for oagprops)
+                self.propmgr.clear_all()
+
+                # Clear oagcache
                 self.cache.clear()
+
+                # Set cframe according to rdf
                 self.propmgr._cframe = self.rdf._rdf_window[self._iteridx]
-                self._iteridx += 1
+
+                # Set attributes from cframe
                 self.propmgr._set_attrs_from_cframe()
+
+                # Set up next iteration
+                self._iteridx += 1
                 return self
             else:
                 self._iteridx = 0

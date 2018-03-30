@@ -147,45 +147,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.__check_autonode_equivalence(a1_dupe.subnode1, a2)
         self.assertEqual(len(a1_dupe.cache.state), 1)
 
-    @unittest.skip("multinode caching broken")
-    def test_multinode_oagprop_cache_invalidation(self, logger=OALog()):
-
-        a2 =\
-            OAG_AutoNode2(logger=logger).db.create({
-                'field4' :  1,
-                'field5' : 'this is an autonode2'
-            })
-
-        a3 =\
-            OAG_AutoNode3(logger=logger).db.create({
-                'field7' : 8,
-                'field8' : 'this is an autonode3'
-            })
-
-        for i in range(10):
-
-            a1 =\
-                OAG_AutoNode1a(logger=logger).db.create({
-                    'field2'   : 2,
-                    'field3'   : i,
-                    'subnode1' : a2,
-                    'subnode2' : a3
-                })
-
-        node_multi = OAG_AutoNode1a(2, 'by_a2_idx', logger=logger)
-
-        for i, nm in enumerate(node_multi):
-            # Each iteration clears the cache
-            self.assertEqual(len(nm.cache.state), 0)
-
-            # Accessing a subnode adds one item to the cache
-            self.__check_autonode_equivalence(nm.subnode1, a2)
-            self.assertEqual(len(nm.cache.state), 1)
-
-            # Accessing second subnode adds another item to the cache
-            self.__check_autonode_equivalence(nm.subnode2, a3)
-            self.assertEqual(len(nm.cache.state), 2)
-
     def test_uniqnode_infname_functionality(self):
         for i in xrange(10):
             OAG_AutoNode2().db.create({
@@ -1429,6 +1390,100 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a1a_copy = a1a.clone()
 
         self.__check_autonode_equivalence(a1a_copy[0], a1a[0])
+
+    def test_multinode_iteration_behavior_cache(self, logger=OALog()):
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3(logger=logger).db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for i in range(10):
+
+            a1 =\
+                OAG_AutoNode1a(logger=logger).db.create({
+                    'field2'   : 2,
+                    'field3'   : i,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+
+        node_multi = OAG_AutoNode1a(2, 'by_a2_idx', logger=logger)
+
+        for i, nm in enumerate(node_multi):
+            # Each iteration clears the cache
+            self.assertEqual(len(nm.cache.state), 0)
+
+            # Accessing a subnode adds one item to the cache
+            self.__check_autonode_equivalence(nm.subnode1, a2)
+            self.assertEqual(len(nm.cache.state), 1)
+
+            # Accessing second subnode adds another item to the cache
+            self.__check_autonode_equivalence(nm.subnode2, a3)
+            self.assertEqual(len(nm.cache.state), 2)
+
+    def test_multinode_iteration_behavior_properties(self, logger=OALog()):
+
+        # AutoNodes we are creating
+        a1s = []
+
+        a2 =\
+            OAG_AutoNode2(logger=logger).db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3(logger=logger).db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for i in xrange(10):
+            a1s.append(\
+                OAG_AutoNode1a(logger=logger).db.create({
+                    'field2'   : 2,
+                    'field3'   : i,
+                    'subnode1' : a2,
+                    'subnode2' : a3
+                })
+            )
+
+            # The objects returned by the subnodes are equivalent to what was
+            # initially assigned
+            self.assertEqual(a1s[i][0].subnode1, a2)
+            self.assertEqual(a1s[i][0].subnode2, a3)
+            self.assertEqual(a1s[i].subnode1, a2)
+            self.assertEqual(a1s[i].subnode2, a3)
+
+        for a1 in a1s:
+            self.assertTrue(a1.oagid in OAG_AutoNode1a.oagprofiles.keys())
+            self.assertEqual(a1[0].subnode1, a2)
+            self.assertEqual(a1[0].subnode2, a3)
+
+        a1_chk1 = OAG_AutoNode1a(2, 'by_a2_idx')
+        a1_chk2 = OAG_AutoNode1a(2, 'by_a2_idx')
+
+        self.assertEqual(a1_chk1.size, a1_chk2.size)
+
+        for i in range(a1_chk1.size):
+            self.__check_autonode_equivalence(a1_chk1[i], a1_chk2[i])
+            self.__check_autonode_equivalence(a1_chk1, a1_chk2)
+            self.__check_autonode_equivalence(a1_chk1[i], a1_chk2[i])
+
+        for i, nm in enumerate(a1_chk1):
+            self.assertEqual(a1_chk1.field2, 2)
+            self.assertEqual(a1_chk1.field3, i)
+            self.__check_autonode_equivalence(a1_chk2[2].subnode1, nm.subnode1)
+            self.__check_autonode_equivalence(nm.subnode1, a2)
+            self.__check_autonode_equivalence(nm.subnode2, a3)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
