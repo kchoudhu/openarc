@@ -1358,7 +1358,11 @@ class OAG_RootNode(object):
     @staticproperty
     def dbtable(cls):
         if not getattr(cls, '_dbtable_name', None):
-            setattr(cls, '_dbtable_name', inflection.underscore(cls.__name__)[4:])
+            db_table_name = inflection.underscore(cls.__name__)[4:]
+            reverse_class_name = "OAG_"+inflection.camelize(db_table_name)
+            if reverse_class_name != cls.__name__:
+                raise OAError("This table name isn't reversible: [%s]->[%s]->[%s]" % (cls.__name__, db_table_name, reverse_class_name))
+            setattr(cls, '_dbtable_name', db_table_name)
         return cls._dbtable_name
 
     @classmethod

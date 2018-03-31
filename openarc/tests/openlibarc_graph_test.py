@@ -1485,6 +1485,10 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.__check_autonode_equivalence(nm.subnode1, a2)
             self.__check_autonode_equivalence(nm.subnode2, a3)
 
+    def test_autonode_naming_reversibility(self, logger=OALog()):
+        with self.assertRaises(OAError):
+            OAG_AUTONodeNonReversible().db.create()
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1643,3 +1647,12 @@ class OAG_AutoNode8(OAG_RootNode):
     @staticproperty
     def infname_fields(cls): return [ 'field3', 'field4' ]
 
+class OAG_AUTONodeNonReversible(OAG_RootNode):
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'field7'   : [ 'int',         0, None ],
+        'field8'   : [ 'varchar(50)', 0, None ],
+    }
