@@ -349,7 +349,7 @@ class OAG_DbSchemaProxy(object):
                             if oag_columns[i] != db_columns_reqd[i]:
                                 subnode = oag.streams[col][0](logger=oag.logger, rpc=False).db.schema.init()
                                 add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
-                                             % (subnode.dbpkname[1:],
+                                             % (self._dbproxy._oag.stream_db_mapping[col],
                                                'NOT NULL' if oag.streams[col][1] else str(),
                                                 subnode.context,
                                                 subnode.dbtable,
@@ -660,7 +660,7 @@ class OAG_DbProxy(object):
                   SELECT *
                     FROM {0}.{1}
                    WHERE {2}=%s
-                ORDER BY {3}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:], self._oag.dbpkname)
+                ORDER BY {3}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:]+'_'+stream, self._oag.dbpkname)
                 default_sql['read'][stream_sql_key] = stream_sql
 
         # Add in other indices
@@ -1379,7 +1379,7 @@ class OAG_RootNode(object):
             schema = {}
             for stream, streaminfo in cls.streams.items():
                 if cls.is_oagnode(stream):
-                    schema[stream] = streaminfo[0].dbpkname[1:]
+                    schema[stream] = streaminfo[0].dbpkname[1:]+'_'+stream
                 else:
                     schema[stream] = stream
             setattr(cls, '_stream_db_mapping', schema)

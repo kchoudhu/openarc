@@ -1489,6 +1489,51 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         with self.assertRaises(OAError):
             OAG_AUTONodeNonReversible().db.create()
 
+    def test_autonode_with_many_subnodes_of_same_type(self, logger=OALog()):
+        pass
+        a2 =\
+            OAG_AutoNode2(logger=logger).db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3a =\
+            OAG_AutoNode3(logger=logger).db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3a'
+            })
+
+        a3b =\
+            OAG_AutoNode3(logger=logger).db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3b'
+            })
+
+        a10 =\
+            OAG_AutoNode10(logger=logger).db.create({
+                'subnode1' : a2,
+                'subnode2' : a3a,
+                'subnode3' : a3b
+            })
+
+        self.__check_autonode_equivalence(a10.subnode1, a2)
+        self.__check_autonode_equivalence(a10.subnode2, a3a)
+        self.__check_autonode_equivalence(a10.subnode3, a3b)
+
+        a10.subnode3 = a3a
+
+        self.__check_autonode_equivalence(a10.subnode3, a3a)
+
+        a10.db.update()
+
+        a10_chk = OAG_AutoNode10(a10.id)
+
+        self.__check_autonode_equivalence(a10, a10_chk)
+        self.__check_autonode_equivalence(a10_chk.subnode3, a3a)
+        self.__check_autonode_equivalence(a10_chk.subnode2, a3a)
+        self.__check_autonode_equivalence(a10_chk.subnode1, a2)
+
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1646,6 +1691,20 @@ class OAG_AutoNode8(OAG_RootNode):
 
     @staticproperty
     def infname_fields(cls): return [ 'field3', 'field4' ]
+
+class OAG_AutoNode10(OAG_RootNode):
+    @staticproperty
+    def is_unique(cls): return True
+
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'subnode1' : [ OAG_AutoNode2, True,  None ],
+        'subnode2' : [ OAG_AutoNode3, True, None ],
+        'subnode3' : [ OAG_AutoNode3, True, None ]
+    }
 
 class OAG_AUTONodeNonReversible(OAG_RootNode):
     @staticproperty
