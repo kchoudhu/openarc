@@ -484,14 +484,14 @@ class OAG_DbProxy(object):
         else:
             self.SQLexec(cur, delete_sql, [self._oag.id])
 
-        self.search(gotodb=True)
+        self.search(gotodb=True, throw_on_empty=False)
 
         if self._oag.is_unique:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
         return self
 
-    def search(self, gotodb=False, idxreset=True):
+    def search(self, gotodb=False, idxreset=True, throw_on_empty=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
         if gotodb is True:
@@ -501,6 +501,12 @@ class OAG_DbProxy(object):
                         self.__refresh_from_cursor(cur)
             else:
                 self.__refresh_from_cursor(self._oag._extcur)
+
+            # Is the new rdf empty?
+            if throw_on_empty and len(self._oag.rdf._rdf) == 0:
+                raise OAGraphRetrieveError("No results found in database")
+
+            # Reset cache
             self._oag.cache.clear()
 
         self._oag.rdf._rdf_window = self._oag.rdf._rdf
@@ -1404,20 +1410,6 @@ class OAG_RootNode(object):
                                           for k in self.infname_fields
                                           if k[0] != '_'])).hexdigest()
 
-    def is_init_oag(self, searchprms, searchidx, initprms={}):
-        self.propmgr._set_cframe_from_userprms(initprms, force_attr_refresh=True)
-
-        if self.db.searchprms is not None:
-            self.db.search(gotodb=True)
-
-            if len(self.rdf._rdf_window) == 0:
-                raise OAGraphRetrieveError("No results found in database")
-
-            if self.is_unique:
-                self.propmgr._set_attrs_from_cframe_uniq()
-
-        return self
-
     @property
     def logger(self): return self._logger
 
@@ -1582,7 +1574,12 @@ class OAG_RootNode(object):
 
         if not self._rpc_proxy.is_proxy:
             self._prop_proxy.profile_set(self.oagid)
-            self.is_init_oag(searchprms, searchidx, initprms)
+            self._prop_proxy._set_cframe_from_userprms(initprms, force_attr_refresh=True)
+            if self.db.searchprms:
+                self.db.search(gotodb=True)
+                if self.is_unique:
+                    self.propmgr._set_attrs_from_cframe_uniq()
+
             self._rpc_proxy.register_with_surrounding_nodes()
         else:
             self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
