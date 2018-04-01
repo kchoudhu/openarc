@@ -1,0 +1,24 @@
+env = "local"
+
+[dbinfo]
+
+# Database configuration
+
+host="localhost"
+user="kchoudhu"
+dbname="arc"
+port=5432
+
+[graph]
+
+heartbeat=5
+
+[crypto]
+
+# Tunables for crypto used in openarc
+
+rounds=4
+
+[extcreds]
+
+# External credentials for 3rd party services

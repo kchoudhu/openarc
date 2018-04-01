@@ -1,5 +1,5 @@
 DBRUNDIR?=~/run/db
-DBCFGDIR?=./cfg/env/dev/db/
+DBCFGDIR?=./cfg/
 PYTEST_BIN?="python -m unittest discover"
 PYTEST_FILE_PATTERN?="*_test.py"
 PROJECT=arc
