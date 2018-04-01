@@ -1490,7 +1490,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             OAG_AUTONodeNonReversible().db.create()
 
     def test_autonode_with_many_subnodes_of_same_type(self, logger=OALog()):
-        pass
         a2 =\
             OAG_AutoNode2(logger=logger).db.create({
                 'field4' :  1,
