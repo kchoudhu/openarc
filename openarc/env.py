@@ -2,38 +2,32 @@
 
 import base64
 import os
-import json
+import toml
 import traceback
 
+from openarc.exception import *
+
 class OAEnv(object):
-    @property
-    def static_http_root(self):
-        if self.envcfg['httpinfo']['secure'] is True:
-            security = "https://"
-        else:
-            security = "http://"
 
-        return "%s%s" % ( security, self.envcfg['httpinfo']['httproot'] )
-
-    @property
-    def dbinfo(self):
-        return self.envcfg['dbinfo']
-
-    @property
-    def crypto(self):
-        return self.envcfg['crypto']
-
-    @property
-    def extcreds(self):
-        return self.envcfg['extcreds']
-
-    def __init__(self, requested_env):
+    def __init__(self, cfgfile='openarc.toml'):
         self.envid   = base64.b16encode(os.urandom(16))
-        self.envname = requested_env
+
         self.rpctimeout = 5
-        cfg_file = "%s/envcfg.json" % ( os.environ.get("OPENARC_CFG_DIR") )
-        with open( cfg_file ) as f:
-            self.envcfg = json.loads( f.read() )[requested_env]
+        cfg_file = "%s/%s" % ( os.environ.get("OPENARC_CFG_DIR"), cfgfile )
+        try:
+            with open( cfg_file ) as f:
+                envcfg = toml.loads( f.read() )
+                self._envcfg = envcfg
+
+                # The highlights
+                self.crypto     = envcfg['crypto']
+                self.dbinfo     = envcfg['dbinfo']
+                self.extcreds   = envcfg['extcreds']
+                self.name       = envcfg['env']
+                self.rpctimeout = envcfg['graph']['heartbeat']
+
+        except IOError:
+            raise OAError("%s does not exist" % cfg_file)
 
 class OALog(object):
     SQL   = False
@@ -57,14 +51,14 @@ p_refcount_env = 0
 p_env = None
 
 
-def initenv(envstr):
+def initenv():
     """envstr: one of local, dev, qa, prod.
     Does not return OAEnv variable; for that, you
     must call getenv"""
     global p_env
     global p_refcount_env
     if p_refcount_env == 0:
-        p_env = OAEnv(envstr)
+        p_env = OAEnv()
         p_refcount_env += 1
 
 def getenv():
