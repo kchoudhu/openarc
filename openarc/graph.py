@@ -399,7 +399,7 @@ class OAG_DbSchemaProxy(object):
 
                 dbp.SQLexec(cur, dbp.SQL['admin']['fkeys'])
                 setattr(oag.__class__, '_fkframe', cur.fetchall())
-                dbp.refresh(idxreset=False)
+                dbp.search(idxreset=False)
 
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
@@ -462,7 +462,7 @@ class OAG_DbProxy(object):
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
-        self.refresh()
+        self.search()
 
         self.schema.init_fkeys()
 
@@ -484,12 +484,30 @@ class OAG_DbProxy(object):
         else:
             self.SQLexec(cur, delete_sql, [self._oag.id])
 
-        self.refresh(gotodb=True)
+        self.search(gotodb=True)
 
         if self._oag.is_unique:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
         return self
+
+    def search(self, gotodb=False, idxreset=True):
+        """Generally we want to simply reset the iterator; set gotodb=True to also
+        refresh instreams from the database"""
+        if gotodb is True:
+            if self._oag._extcur is None:
+                with OADao(self._oag.context) as dao:
+                    with dao.cur as cur:
+                        self.__refresh_from_cursor(cur)
+            else:
+                self.__refresh_from_cursor(self._oag._extcur)
+            self._oag.cache.clear()
+
+        self._oag.rdf._rdf_window = self._oag.rdf._rdf
+        if idxreset:
+            self._oag._iteridx = 0
+        self._oag.propmgr._set_attrs_from_cframe()
+        return self._oag
 
     @property
     def searchidx(self):
@@ -547,24 +565,6 @@ class OAG_DbProxy(object):
                     new_searchprms.append(self._searchprms[i])
 
             self._searchprms = new_searchprms
-
-    def refresh(self, gotodb=False, idxreset=True):
-        """Generally we want to simply reset the iterator; set gotodb=True to also
-        refresh instreams from the database"""
-        if gotodb is True:
-            if self._oag._extcur is None:
-                with OADao(self._oag.context) as dao:
-                    with dao.cur as cur:
-                        self.__refresh_from_cursor(cur)
-            else:
-                self.__refresh_from_cursor(self._oag._extcur)
-            self._oag.cache.clear()
-
-        self._oag.rdf._rdf_window = self._oag.rdf._rdf
-        if idxreset:
-            self._oag._iteridx = 0
-        self._oag.propmgr._set_attrs_from_cframe()
-        return self._oag
 
     def __refresh_from_cursor(self, cur):
         try:
@@ -1408,7 +1408,7 @@ class OAG_RootNode(object):
         self.propmgr._set_cframe_from_userprms(initprms, force_attr_refresh=True)
 
         if self.db.searchprms is not None:
-            self.db.refresh(gotodb=True)
+            self.db.search(gotodb=True)
 
             if len(self.rdf._rdf_window) == 0:
                 raise OAGraphRetrieveError("No results found in database")
