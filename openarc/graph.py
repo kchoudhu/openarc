@@ -434,8 +434,7 @@ class OAG_DbProxy(object):
 
         self.schema.init()
 
-        attrs = self._oag.propmgr._set_attrs_from_userprms(initprms) if len(initprms)>0 else []
-        self._oag.propmgr._set_cframe_from_attrs(attrs, fullhouse=True)
+        self._oag.propmgr._set_cframe_from_userprms(initprms, attrinit=(len(initprms)>0), fullhouse=True)
 
         if self._oag.rdf._rdf is not None:
             raise OAError("Cannot create item that has already been initiated")
@@ -502,8 +501,7 @@ class OAG_DbProxy(object):
 
     def update(self, updparms={}, norefresh=False):
 
-        attrs = self._oag.propmgr._set_attrs_from_userprms(updparms) if len(updparms)>0 else []
-        self._oag.propmgr._set_cframe_from_attrs(attrs)
+        self._oag.propmgr._set_cframe_from_userprms(updparms, attrinit=(len(updparms)>0))
 
         self.update_clauseprms()
 
@@ -1159,28 +1157,31 @@ class OAG_PropProxy(object):
 
         self._set_attrs_from_cframe()
 
-    def _set_attrs_from_userprms(self, userprms):
-        missing_streams = []
-        invalid_streams = []
-        processed_streams = {}
+    def _set_cframe_from_userprms(self, userprms, attrinit=True, fullhouse=False):
 
-        # blank everything
-        for oagkey in self._oag.streams.keys():
-            setattr(self._oag, oagkey, None)
+        setattrs = []
 
-        if len(userprms)==0:
-            return []
+        if attrinit:
 
-        invalid_streams = [ s for s in userprms.keys() if s not in self._oag.streams.keys() ]
-        if len(invalid_streams)>0:
-            raise OAGraphIntegrityError("Invalid update stream(s) detected %s" % invalid_streams)
+            invalid_streams = []
+            processed_streams = {}
 
-        processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
-        for stream, streaminfo in processed_streams.items():
-            setattr(self._oag, stream, streaminfo)
-            self._set_oagprop(stream, streaminfo, streamform='oag')
+            for oagkey in self._oag.streams.keys():
+                setattr(self._oag, oagkey, None)
 
-        return processed_streams.keys()
+            if len(userprms)>0:
+                invalid_streams = [ s for s in userprms.keys() if s not in self._oag.streams.keys() ]
+                if len(invalid_streams)>0:
+                    raise OAGraphIntegrityError("Invalid update stream(s) detected %s" % invalid_streams)
+
+                processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
+                for stream, streaminfo in processed_streams.items():
+                    setattr(self._oag, stream, streaminfo)
+                    self._set_oagprop(stream, streaminfo, streamform='oag')
+
+                setattrs = processed_streams.keys()
+
+        self._set_cframe_from_attrs(setattrs, fullhouse=fullhouse)
 
     def _set_cframe_from_attrs(self, attrs, fullhouse=False):
         cframe_tmp = {}
@@ -1402,8 +1403,7 @@ class OAG_RootNode(object):
                                           if k[0] != '_'])).hexdigest()
 
     def is_init_oag(self, clauseprms, indexprm, initprms={}):
-        attrs = self.propmgr._set_attrs_from_userprms(initprms)
-        self.propmgr._set_cframe_from_attrs(attrs)
+        self.propmgr._set_cframe_from_userprms(initprms)
 
         if self.db.searchprms is not None:
             self.db.refresh(gotodb=True)

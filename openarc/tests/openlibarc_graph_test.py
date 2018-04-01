@@ -312,7 +312,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a1a = OAG_AutoNode1a()
         for oagkey in a1a.streams.keys():
-            self.assertEqual(getattr(a1a, oagkey, ""), None)
+            self.assertEqual(getattr(a1a, oagkey), None)
 
         # non-oag instream marked None is missing, should not throw
         a1a.field2   = 3
@@ -1531,7 +1531,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.__check_autonode_equivalence(a10_chk.subnode3, a3a)
         self.__check_autonode_equivalence(a10_chk.subnode2, a3a)
         self.__check_autonode_equivalence(a10_chk.subnode1, a2)
-
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
