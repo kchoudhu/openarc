@@ -403,7 +403,7 @@ class OAG_DbSchemaProxy(object):
 
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, clauseprms, indexprm):
+    def __init__(self, oag, searchprms, searchidx):
 
         # Store reference to outer object
         self._oag = oag
@@ -412,23 +412,23 @@ class OAG_DbProxy(object):
         self._schema = None
 
         # Intialize search parameters, if any
-        if clauseprms:
-            if type(clauseprms).__name__ in ['dict']:
-                rawprms = [clauseprms[prm] for prm in sorted(clauseprms.keys())]
-            elif type(clauseprms).__name__ in ['list', 'tuple']:
-                rawprms = clauseprms
+        if searchprms:
+            if type(searchprms).__name__ in ['dict']:
+                rawprms = [searchprms[prm] for prm in sorted(searchprms.keys())]
+            elif type(searchprms).__name__ in ['list', 'tuple']:
+                rawprms = searchprms
             else:
-                rawprms = [clauseprms]
+                rawprms = [searchprms]
 
-            clauseprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
+            searchprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
 
-        self._clauseprms     = clauseprms
-        self._indexparm      = indexprm
+        self._searchprms     = searchprms
+        self._searchidx      = searchidx
 
     def clone(self, src):
         self._schema     = src.db.schema
-        self._clauseprms = src.db.searchprms
-        self._indexparm  = src.db.searchidx
+        self._searchprms = src.db.searchprms
+        self._searchidx  = src.db.searchidx
 
     def create(self, initprms={}):
 
@@ -449,16 +449,16 @@ class OAG_DbProxy(object):
             with OADao(self._oag.context) as dao:
                 with dao.cur as cur:
                     self.SQLexec(cur, insert_sql, vals)
-                    if self._indexparm == 'id':
+                    if self._searchidx == 'id':
                         index_val = cur.fetchall()
-                        self._clauseprms = index_val[0].values()
+                        self._searchprms = index_val[0].values()
                     self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._oag._extcur, insert_sql, vals)
-            if self._indexparm == 'id':
+            if self._searchidx == 'id':
                 index_val = self._oag._extcur.fetchall()
-                self._clauseprms = index_val[0].values()
+                self._searchprms = index_val[0].values()
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
@@ -493,17 +493,17 @@ class OAG_DbProxy(object):
 
     @property
     def searchidx(self):
-        return self._indexparm
+        return self._searchidx
 
     @property
     def searchprms(self):
-        return self._clauseprms
+        return self._searchprms
 
     def update(self, updparms={}, norefresh=False):
 
         self._oag.propmgr._set_cframe_from_userprms(updparms)
 
-        self.update_clauseprms()
+        self.update_searchprms()
 
         member_attrs  = [k for k in self._oag.propmgr._cframe if k[0] != '_']
         index_key     = [k for k in self._oag.propmgr._cframe if k[0] == '_'][0]
@@ -529,24 +529,24 @@ class OAG_DbProxy(object):
 
         return self._oag
 
-    def update_clauseprms(self):
+    def update_searchprms(self):
         # Update search parameteres from prop manager
-        index = self._indexparm[3:]
+        index = self._searchidx[3:]
         if index != str():
             try:
                 keys = self._oag.dbindices[index][0]
             except KeyError:
                 keys = [index]
 
-            new_clauseprms = []
+            new_searchprms = []
             for i, key in enumerate(keys):
                 key = self._oag.stream_db_mapping[key]
                 try:
-                    new_clauseprms.append(self._oag.propmgr._cframe[key])
+                    new_searchprms.append(self._oag.propmgr._cframe[key])
                 except KeyError:
-                    new_clauseprms.append(self._clauseprms[i])
+                    new_searchprms.append(self._searchprms[i])
 
-            self._clauseprms = new_clauseprms
+            self._searchprms = new_searchprms
 
     def refresh(self, gotodb=False, idxreset=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
@@ -569,9 +569,9 @@ class OAG_DbProxy(object):
     def __refresh_from_cursor(self, cur):
         try:
             if type(self.SQL).__name__ == "str":
-                self.SQLexec(cur, self.SQL, self._clauseprms)
+                self.SQLexec(cur, self.SQL, self._searchprms)
             elif type(self.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.SQL['read'][self._indexparm], self._clauseprms)
+                self.SQLexec(cur, self.SQL['read'][self._searchidx], self._searchprms)
 
             self._oag.rdf._rdf = cur.fetchall()
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
@@ -1139,10 +1139,10 @@ class OAG_PropProxy(object):
                     stream = fk['table']
                     def fget(obj,
                              cls=cls,
-                             clauseprms=[getattr(self._oag, fk['points_to_id'], None)],
-                             indexprm='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']],
+                             searchprms=[getattr(self._oag, fk['points_to_id'], None)],
+                             searchidx='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']],
                              logger=self._oag.logger):
-                        return cls(clauseprms, indexprm, logger=self._oag.logger)
+                        return cls(searchprms, searchidx, logger=self._oag.logger)
                     fget.__name__ = stream
                     self.add_oagprop(stream, oagprop(fget))
 
@@ -1239,7 +1239,7 @@ class OAG_PropProxy(object):
 
         self._cframe = cframe_tmp
 
-    def _set_oagprop(self, stream, cfval, indexprm='id', streamform='cframe'):
+    def _set_oagprop(self, stream, cfval, searchidx='id', streamform='cframe'):
 
         # primary key: set directly
         if stream[0] == '_':
@@ -1258,7 +1258,7 @@ class OAG_PropProxy(object):
                 currattr = getattr(self._oag, stream, None)
                 if currattr is None:
                     if self._oag.streams[stream][1] is False and cfval:
-                        currattr = self._oag.streams[stream][0](cfval, indexprm, logger=self._oag.logger)
+                        currattr = self._oag.streams[stream][0](cfval, searchidx, logger=self._oag.logger)
                         if not currattr.is_unique:
                             currattr = currattr[-1]
             except OAGraphRetrieveError:
@@ -1271,16 +1271,16 @@ class OAG_PropProxy(object):
             def oagpropfn(obj,
                           stream=stream,
                           streaminfo=self._oag.streams[stream],
-                          clauseprms=[cfval],
-                          indexprm=indexprm,
+                          searchprms=[cfval],
+                          searchidx=searchidx,
                           logger=self._oag.logger,
                           currattr=currattr):
                 # Do not instantiate objects unnecessarily
                 if currattr:
                     try:
-                        if currattr == clauseprms[0]:
+                        if currattr == searchprms[0]:
                             return currattr
-                        if currattr.id == clauseprms[0]:
+                        if currattr.id == searchprms[0]:
                             return currattr
                     except KeyError:
                         # We're dealing with in-memory OAGs, just return
@@ -1288,7 +1288,7 @@ class OAG_PropProxy(object):
                 elif streaminfo[1] is False:
                     return currattr
                 else:
-                    newattr = streaminfo[0](clauseprms, indexprm, logger=logger)
+                    newattr = streaminfo[0](searchprms, searchidx, logger=logger)
                     if not newattr.is_unique:
                         newattr = newattr[-1]
                     return newattr
@@ -1404,7 +1404,7 @@ class OAG_RootNode(object):
                                           for k in self.infname_fields
                                           if k[0] != '_'])).hexdigest()
 
-    def is_init_oag(self, clauseprms, indexprm, initprms={}):
+    def is_init_oag(self, searchprms, searchidx, initprms={}):
         self.propmgr._set_cframe_from_userprms(initprms, force_attr_refresh=True)
 
         if self.db.searchprms is not None:
@@ -1548,8 +1548,8 @@ class OAG_RootNode(object):
         return self
 
     def __init__(self,
-                 clauseprms=None,
-                 indexprm='id',
+                 searchprms=None,
+                 searchidx='id',
                  initprms={},
                  initurl=None,
                  extcur=None,
@@ -1566,7 +1566,7 @@ class OAG_RootNode(object):
         #### Set up proxies
 
         # Database API
-        self._db_proxy       = OAG_DbProxy(self, clauseprms, indexprm)
+        self._db_proxy       = OAG_DbProxy(self, searchprms, searchidx)
 
         # Relational Dataframe manipulation
         self._rdf_proxy      = OAG_RdfProxy(self)
@@ -1582,7 +1582,7 @@ class OAG_RootNode(object):
 
         if not self._rpc_proxy.is_proxy:
             self._prop_proxy.profile_set(self.oagid)
-            self.is_init_oag(clauseprms, indexprm, initprms)
+            self.is_init_oag(searchprms, searchidx, initprms)
             self._rpc_proxy.register_with_surrounding_nodes()
         else:
             self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
