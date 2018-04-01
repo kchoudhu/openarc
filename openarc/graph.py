@@ -434,7 +434,7 @@ class OAG_DbProxy(object):
 
         self.schema.init()
 
-        self._oag.propmgr._set_cframe_from_userprms(initprms, attrinit=(len(initprms)>0), fullhouse=True)
+        self._oag.propmgr._set_cframe_from_userprms(initprms, fullhouse=True)
 
         if self._oag.rdf._rdf is not None:
             raise OAError("Cannot create item that has already been initiated")
@@ -501,7 +501,7 @@ class OAG_DbProxy(object):
 
     def update(self, updparms={}, norefresh=False):
 
-        self._oag.propmgr._set_cframe_from_userprms(updparms, attrinit=(len(updparms)>0))
+        self._oag.propmgr._set_cframe_from_userprms(updparms)
 
         self.update_clauseprms()
 
@@ -1157,9 +1157,11 @@ class OAG_PropProxy(object):
 
         self._set_attrs_from_cframe()
 
-    def _set_cframe_from_userprms(self, userprms, attrinit=True, fullhouse=False):
+    def _set_cframe_from_userprms(self, userprms, force_attr_refresh=False, fullhouse=False):
 
         setattrs = []
+
+        attrinit = len(userprms)>0 or force_attr_refresh
 
         if attrinit:
 
@@ -1403,7 +1405,7 @@ class OAG_RootNode(object):
                                           if k[0] != '_'])).hexdigest()
 
     def is_init_oag(self, clauseprms, indexprm, initprms={}):
-        self.propmgr._set_cframe_from_userprms(initprms)
+        self.propmgr._set_cframe_from_userprms(initprms, force_attr_refresh=True)
 
         if self.db.searchprms is not None:
             self.db.refresh(gotodb=True)
