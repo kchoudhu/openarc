@@ -118,7 +118,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         for i, oa in enumerate(node_multi):
             if i == 5:
                 break
-        node_multi.db.search()
+        node_multi.reset()
         accumulator_refreshed = [ oa.field3 for oa in node_multi ]
         self.assertEqual(len(accumulator_refreshed), 10)
 
@@ -935,7 +935,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         a2.auto_node1a[0].db.delete()
 
-        a2.db.search()
+        a2.reset()
 
         self.assertEqual(a2.auto_node1a.size, 9)
 

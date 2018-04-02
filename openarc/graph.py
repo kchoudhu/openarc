@@ -399,7 +399,7 @@ class OAG_DbSchemaProxy(object):
 
                 dbp.SQLexec(cur, dbp.SQL['admin']['fkeys'])
                 setattr(oag.__class__, '_fkframe', cur.fetchall())
-                dbp.search(idxreset=False)
+                dbp._oag.reset(idxreset=False)
 
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
@@ -462,7 +462,7 @@ class OAG_DbProxy(object):
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
-        self.search()
+        self._oag.reset()
 
         self.schema.init_fkeys()
 
@@ -484,35 +484,33 @@ class OAG_DbProxy(object):
         else:
             self.SQLexec(cur, delete_sql, [self._oag.id])
 
-        self.search(gotodb=True, throw_on_empty=False)
+        self.search(throw_on_empty=False)
 
         if self._oag.is_unique:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
         return self
 
-    def search(self, gotodb=False, idxreset=True, throw_on_empty=True):
+    def search(self, throw_on_empty=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
-        if gotodb is True:
-            if self._oag._extcur is None:
-                with OADao(self._oag.context) as dao:
-                    with dao.cur as cur:
-                        self.__refresh_from_cursor(cur)
-            else:
-                self.__refresh_from_cursor(self._oag._extcur)
+        if self._oag._extcur is None:
+            with OADao(self._oag.context) as dao:
+                with dao.cur as cur:
+                    self.__refresh_from_cursor(cur)
+        else:
+            self.__refresh_from_cursor(self._oag._extcur)
 
-            # Is the new rdf empty?
-            if throw_on_empty and len(self._oag.rdf._rdf) == 0:
-                raise OAGraphRetrieveError("No results found in database")
+        # Is the new rdf empty?
+        if throw_on_empty and len(self._oag.rdf._rdf) == 0:
+            raise OAGraphRetrieveError("No results found in database")
 
-            # Reset cache
-            self._oag.cache.clear()
+        # Reset cache
+        self._oag.cache.clear()
 
-        self._oag.rdf._rdf_window = self._oag.rdf._rdf
-        if idxreset:
-            self._oag._iteridx = 0
-        self._oag.propmgr._set_attrs_from_cframe()
+        # Refresh
+        self._oag.reset()
+
         return self._oag
 
     @property
@@ -1456,12 +1454,11 @@ class OAG_RootNode(object):
 
         return oagcopy
 
-    def reset(self):
-        self.cache.clear()
-
-        self.propmgr._cframe = {}
-        # add in rdf functionality
-
+    def reset(self, idxreset=True):
+        self.rdf._rdf_window = self.rdf._rdf
+        if idxreset:
+            self._iteridx = 0
+        self.propmgr._set_attrs_from_cframe()
         return self
 
     @property
@@ -1579,7 +1576,7 @@ class OAG_RootNode(object):
             self._prop_proxy.profile_set(self.oagid)
             self._prop_proxy._set_cframe_from_userprms(initprms, force_attr_refresh=True)
             if self.db.searchprms:
-                self.db.search(gotodb=True)
+                self.db.search()
                 if self.is_unique:
                     self.propmgr._set_attrs_from_cframe_uniq()
 
