@@ -13,9 +13,10 @@ class OAEnv(object):
         self.envid   = base64.b16encode(os.urandom(16)).decode('ascii')
 
         self.rpctimeout = 5
-        cfg_file = "%s/%s" % ( os.environ.get("OPENARC_CFG_DIR"), cfgfile )
+        cfg_dir = os.environ.get("OPENARC_CFG_DIR") if os.environ.get("OPENARC_CFG_DIR") else str()
+        cfg_file_path = "%s/%s" % ( cfg_dir, cfgfile )
         try:
-            with open( cfg_file ) as f:
+            with open( cfg_file_path ) as f:
                 envcfg = toml.loads( f.read() )
                 self._envcfg = envcfg
 

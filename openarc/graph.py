@@ -21,7 +21,7 @@ gc.context = _zmqctx
 from textwrap          import dedent as td
 
 from openarc.dao       import *
-from openarc.env       import OALog
+from openarc.env       import *
 from openarc.exception import *
 from openarc.oatime    import *
 
@@ -1548,6 +1548,9 @@ class OAG_RootNode(object):
                  logger=OALog(),
                  rpc=True,
                  heartbeat=True):
+
+        # Initialize environment
+        initenv()
 
         # Alphabetize
         self._extcur         = extcur
