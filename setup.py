@@ -17,8 +17,10 @@ setup(name='openarc',
       packages=['openarc'],
       install_requires=[
           'gevent',
+          'inflection',
           'msgpack-python',
           'psycopg2',
+          'toml',
           'zmq'
       ],
       include_package_data=True,
