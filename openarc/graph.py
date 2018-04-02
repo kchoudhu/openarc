@@ -91,7 +91,7 @@ class OAGRPC(object):
                     toaddr = target.id
                 print("[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload, toaddr))
 
-            self._ctxsoc.send(msgpack.dumps(payload, use_bin_type=False))
+            self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
             rpcret = msgpack.loads(reply, raw=False)
@@ -150,7 +150,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
     def _send(self, sender, payload):
         self._ctxsoc.send(sender, zmq.SNDMORE)
         self._ctxsoc.send(str().encode('ascii'), zmq.SNDMORE)
-        self._ctxsoc.send(msgpack.dumps(payload, use_bin_type=True))
+        self._ctxsoc.send(msgpack.dumps(payload))
 
     def _recv(self):
         sender  = self._ctxsoc.recv()
