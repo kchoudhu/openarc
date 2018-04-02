@@ -6,7 +6,7 @@ env = "local"
 
 host="localhost"
 user="kchoudhu"
-dbname="arc"
+dbname="openarc"
 port=5432
 
 [graph]

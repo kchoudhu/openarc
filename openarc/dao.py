@@ -1,10 +1,10 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
 
-from   env       import *
+from   openarc.env import *
 
 ## Exportable classes
 

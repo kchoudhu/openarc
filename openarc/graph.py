@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import base64
 import collections
@@ -41,11 +41,11 @@ class oagprop(object):
         if self.fget is None:
             raise AttributeError("unreadable attribute")
         try:
-            return obj.cache.match(self.fget.func_name)
+            return obj.cache.match(self.fget.__name__)
         except:
             oagprop = self.fget(obj)
             if oagprop is not None:
-                obj.cache.put(self.fget.func_name, oagprop)
+                obj.cache.put(self.fget.__name__, oagprop)
             return oagprop
 
     def __set__(self, obj, value):
@@ -64,7 +64,7 @@ class OAGRPC(object):
     def id(self): return self._hash
 
     @property
-    def port(self): return self._ctxsoc.LAST_ENDPOINT.split(":")[-1]
+    def port(self): return self._ctxsoc.LAST_ENDPOINT.decode().split(":")[-1]
 
     @staticmethod
     def rpcfn(fn):
@@ -84,20 +84,20 @@ class OAGRPC(object):
             payload['authtoken'] = getenv().envid
 
             if self._oag.logger.RPC:
-                print "========>"
+                print("========>")
                 if addr==target:
                     toaddr = addr
                 else:
                     toaddr = target.id
-                print "[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload, toaddr)
+                print("[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload, toaddr))
 
-            self._ctxsoc.send(msgpack.dumps(payload))
+            self._ctxsoc.send(msgpack.dumps(payload, use_bin_type=False))
             reply = self._ctxsoc.recv()
 
-            rpcret = msgpack.loads(reply)
+            rpcret = msgpack.loads(reply, raw=False)
             if self._oag.logger.RPC:
-                print "[%s:req] Received reply [%s]" % (self._oag.rpc.router.id, rpcret)
-                print "<======== "
+                print("[%s:req] Received reply [%s]" % (self._oag.rpc.router.id, rpcret))
+                print("<======== ")
 
             if rpcret['status'] != 'OK':
                 raise OAError("[%s:req] Failed with status [%s] and message [%s]" % (self.id,
@@ -149,16 +149,16 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
     def _send(self, sender, payload):
         self._ctxsoc.send(sender, zmq.SNDMORE)
-        self._ctxsoc.send(str(), zmq.SNDMORE)
-        self._ctxsoc.send(msgpack.dumps(payload))
+        self._ctxsoc.send(str().encode('ascii'), zmq.SNDMORE)
+        self._ctxsoc.send(msgpack.dumps(payload, use_bin_type=True))
 
     def _recv(self):
         sender  = self._ctxsoc.recv()
         empty   = self._ctxsoc.recv()
-        payload = msgpack.loads(self._ctxsoc.recv())
+        payload = msgpack.loads(self._ctxsoc.recv(), raw=False)
 
         if self._oag.logger.RPC:
-            print "[%s:rtr] Received message [%s]" % (self.id, payload)
+            print("[%s:rtr] Received message [%s]" % (self.id, payload))
 
         return (sender, payload)
 
@@ -183,7 +183,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         invstream = args['stream']
 
         if self._oag.logger.RPC:
-            print '[%s:rtr] invalidation signal received' % self._oag.rpc.router.id
+            print('[%s:rtr] invalidation signal received' % self._oag.rpc.router.id)
 
         self._oag.cache.invalidate(invstream)
 
@@ -208,7 +208,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
     def proc_register_proxy(self, ret, args):
         self._oag.rpc.registration_add(args['addr'], args['stream'])
 
-        rawprops = self._oag.streams.keys()\
+        rawprops = list(self._oag.streams.keys())\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
                    + getattr(self._oag.__class__, 'oagproplist', [])
@@ -315,7 +315,7 @@ class OAG_DbSchemaProxy(object):
                 check = cur.fetchall()
                 if len(check)==0:
                     if oag.logger.SQL:
-                        print "Creating missing schema [%s]" % oag.context
+                        print("Creating missing schema [%s]" % oag.context)
                     dbp.SQLexec(cur, dbp.SQL['admin']['mkschema'])
                     dao.commit()
 
@@ -326,7 +326,7 @@ class OAG_DbSchemaProxy(object):
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e):
                         if oag.logger.SQL:
-                            print "Creating missing table [%s]" % oag.dbtable
+                            print("Creating missing table [%s]" % oag.dbtable)
                         dbp.SQLexec(cur, dbp.SQL['admin']['mktable'])
                         dbp.SQLexec(cur, dbp.SQL['admin']['table'])
 
@@ -342,7 +342,7 @@ class OAG_DbSchemaProxy(object):
                 add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
                 if len(add_cols)>0:
                     if oag.logger.SQL:
-                        print "Adding new columns %s to [%s]" % (add_cols, oag.dbtable)
+                        print("Adding new columns %s to [%s]" % (add_cols, oag.dbtable))
                     add_col_clauses = []
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
@@ -422,7 +422,7 @@ class OAG_DbProxy(object):
 
             searchprms = map(lambda x: x.id if isinstance(x, OAG_RootNode) else x, rawprms)
 
-        self._searchprms     = searchprms
+        self._searchprms     = list(searchprms) if searchprms else list()
         self._searchidx      = searchidx
 
     def clone(self, src):
@@ -451,14 +451,14 @@ class OAG_DbProxy(object):
                     self.SQLexec(cur, insert_sql, vals)
                     if self._searchidx == 'id':
                         index_val = cur.fetchall()
-                        self._searchprms = index_val[0].values()
+                        self._searchprms = list(index_val[0].values())
                     self.__refresh_from_cursor(cur)
                     dao.commit()
         else:
             self.SQLexec(self._oag._extcur, insert_sql, vals)
             if self._searchidx == 'id':
                 index_val = self._oag._extcur.fetchall()
-                self._searchprms = index_val[0].values()
+                self._searchprms = list(index_val[0].values())
             self.__refresh_from_cursor(self._oag._extcur)
 
         # Refresh to set iteridx
@@ -688,7 +688,7 @@ class OAG_DbProxy(object):
 
     def SQLexec(self, cur, query, parms=[]):
         if self._oag.logger.SQL:
-            print cur.mogrify(query, parms)
+            print(cur.mogrify(query, parms))
         cur.execute(query, parms)
 
     def SQLpp(self, SQL):
@@ -865,10 +865,10 @@ class OAG_RpcProxy(object):
 
         if value is False:
             if self._oag.logger.RPC:
-                print "[%s] Killing rpcdisc greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets))
+                print("[%s] Killing rpcdisc greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets)))
             [glet.kill() for glet in self._rpc_discovery.rpc._glets]
             if self._oag.logger.RPC:
-                print "[%s] Killing OAG greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets))
+                print("[%s] Killing OAG greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets)))
             [glet.kill() for glet in self._glets]
             gevent.joinall(self._glets+self._rpc_discovery.rpc._glets)
             self._rpc_discovery.db.delete()
@@ -885,8 +885,8 @@ class OAG_RpcProxy(object):
                         number_active += 1
                     else:
                         if self._oag.logger.RPC:
-                            print "[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"\
-                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat, delta)
+                            print("[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"
+                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat, delta))
                         rpc.db.delete()
 
                 # Is there already an active subscription there?
@@ -895,7 +895,7 @@ class OAG_RpcProxy(object):
                         message = "[%s] Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
                                    % (self.router.id, rpc.rpcinfname, rpc.heartbeat, delta)
                         if self._oag.logger.RPC:
-                            print message
+                            print(message)
                         raise OAError(message)
                     else:
                         raise OAError("Fanout not implemented yet")
@@ -946,18 +946,18 @@ class OAG_RpcProxy(object):
                 # Update oagcache
                 self._oag.cache.put(stream, newval)
                 # Update the oagprop
-                self._oag.propmgr._set_oagprop(stream, newval.id, streamform='oag')
+                self._oag.propmgr._set_oagprop(stream, newval.id, cframe_form=False)
                 # Regenerate connections to surrounding nodes
                 if currval is None:
                     if self._oag.logger.RPC:
-                        print "[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpc.router.id)
+                        print("[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpc.router.id))
                     reqcls(self._oag).register(newval.rpc.router, stream)
                 else:
                     if currval != newval:
                         if self._oag.logger.RPC:
-                            print "[%s] Detected changed stream [%s]->[%s]" % (stream,
+                            print("[%s] Detected changed stream [%s]->[%s]" % (stream,
                                                                                currval.rpc.router.id,
-                                                                               newval.rpc.router.id)
+                                                                               newval.rpc.router.id))
                         if currval:
                             reqcls(self._oag).deregister(currval.rpc.router, stream)
                         reqcls(self._oag).register(newval.rpc.router, stream)
@@ -973,7 +973,7 @@ class OAG_RpcProxy(object):
         if invalidate_upstream:
             if len(self._rpcreqs)>0:
                 if self._oag.logger.RPC:
-                    print "[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval)
+                    print("[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval))
                 for addr, stream_to_invalidate in self._rpcreqs.items():
                     reqcls(self._oag).invalidate(addr, stream_to_invalidate)
 
@@ -1021,7 +1021,7 @@ class OAG_RpcProxy(object):
             node = getattr(self._oag, stream, None)
             if node and self._oag.is_oagnode(stream):
                 if self._oag.logger.RPC:
-                    print "[%s] Connecting to new stream [%s] in initmode" % (stream, node.rpc.router.id)
+                    print("[%s] Connecting to new stream [%s] in initmode" % (stream, node.rpc.router.id))
                 reqcls(self._oag).register(node.rpc.router, stream)
 
     @property
@@ -1050,10 +1050,11 @@ class OAG_RpcProxy(object):
         }
 
         if self._oag.logger.RPC:
-            print "[%s:rtr] Listening for RPC requests [%s]" % (self._rpcrtr.id, self._oag.__class__.__name__)
+            print("[%s:rtr] Listening for RPC requests [%s]" % (self._rpcrtr.id, self._oag.__class__.__name__))
 
         while True:
             (sender, payload) = self._rpcrtr._recv()
+
             self._rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
 
 class OAG_PropProxy(object):
@@ -1119,8 +1120,8 @@ class OAG_PropProxy(object):
                 for stream, streaminfo in new_profile.items():
                     setattr(self.cls, stream, streaminfo)
             except KeyError as e:
-                print e.message
-                print "This should never, ever happen"
+                print(e.message)
+                print("This should never, ever happen")
 
             # Set up next invocation
             setattr(self.cls, 'current_id', obj_id)
@@ -1174,19 +1175,18 @@ class OAG_PropProxy(object):
             invalid_streams = []
             processed_streams = {}
 
-            for oagkey in self._oag.streams.keys():
+            for oagkey in self._oag.streams:
                 setattr(self._oag, oagkey, None)
 
             if len(userprms)>0:
-                invalid_streams = [ s for s in userprms.keys() if s not in self._oag.streams.keys() ]
+                invalid_streams = [ s for s in userprms if s not in self._oag.streams.keys() ]
                 if len(invalid_streams)>0:
                     raise OAGraphIntegrityError("Invalid update stream(s) detected %s" % invalid_streams)
 
-                processed_streams = { s:userprms[s] for s in userprms.keys() if s not in invalid_streams }
+                processed_streams = { s:userprms[s] for s in userprms if s not in invalid_streams }
                 for stream, streaminfo in processed_streams.items():
                     setattr(self._oag, stream, streaminfo)
-                    self._set_oagprop(stream, streaminfo, streamform='oag')
-
+                    self._set_oagprop(stream, streaminfo, cframe_form=False)
                 setattrs = processed_streams.keys()
 
         self._set_cframe_from_attrs(setattrs, fullhouse=fullhouse)
@@ -1195,7 +1195,7 @@ class OAG_PropProxy(object):
         cframe_tmp = {}
         raw_missing_streams = []
 
-        all_streams = self._oag.streams.keys()
+        all_streams = list(self._oag.streams.keys())
         if len(self._cframe) > 0:
             all_streams.append(self._oag.dbpkname)
 
@@ -1213,7 +1213,7 @@ class OAG_PropProxy(object):
 
             # Special handling for nullable items
             if type(self._oag.streams[oagkey][0])!=str\
-               and self._oag.streams[oagkey][1] is False:
+                and self._oag.streams[oagkey][1] is False:
                 cframe_tmp[cfkey] = cfval.id if cfval else None
                 continue
 
@@ -1245,7 +1245,7 @@ class OAG_PropProxy(object):
 
         self._cframe = cframe_tmp
 
-    def _set_oagprop(self, stream, cfval, searchidx='id', streamform='cframe'):
+    def _set_oagprop(self, stream, cfval, searchidx='id', cframe_form=True):
 
         # primary key: set directly
         if stream[0] == '_':
@@ -1253,7 +1253,7 @@ class OAG_PropProxy(object):
             return
 
         # Normalize stream name to OAG form
-        if streamform == 'cframe':
+        if cframe_form:
             db_stream_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
             stream = db_stream_mapping[stream]
 
@@ -1408,7 +1408,7 @@ class OAG_RootNode(object):
             raise OAError("Cannot calculate infname if OAG attributes have not set")
         return hashlib.sha256(str().join([str(getattr(self, k, ""))
                                           for k in self.infname_fields
-                                          if k[0] != '_'])).hexdigest()
+                                          if k[0] != '_']).encode('utf-8')).hexdigest()
 
     @property
     def logger(self): return self._logger
@@ -1478,8 +1478,8 @@ class OAG_RootNode(object):
         try:
             self._prop_proxy.profile_deregister(self)
         except Exception as e:
-            print e.message
-            print "This should never happen"
+            print(e.message)
+            print("This should never happen")
             import traceback
             traceback.print_exc()
 
@@ -1498,7 +1498,7 @@ class OAG_RootNode(object):
             if rpc.is_proxy:
                 if attr in rpc.proxied_oags:
                     if logger.RPC:
-                        print "[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url)
+                        print("[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url))
                     payload = reqcls(self).getstream(rpc.proxied_url, attr)['payload']
                     if payload['value']:
                         if payload['type'] == 'redirect':
@@ -1540,7 +1540,7 @@ class OAG_RootNode(object):
         return self
 
     def __init__(self,
-                 searchprms=None,
+                 searchprms=[],
                  searchidx='id',
                  initprms={},
                  initurl=None,
@@ -1553,7 +1553,7 @@ class OAG_RootNode(object):
         self._extcur         = extcur
         self._iteridx        = None
         self._logger         = logger
-        self._oagid          = hashlib.sha256(str(self)).hexdigest()
+        self._oagid          = hashlib.sha256(str(self).encode("utf-8")).hexdigest()
 
         #### Set up proxies
 
@@ -1650,18 +1650,18 @@ class OAG_RpcDiscoverable(OAG_RootNode):
                 rpcdisc = OAG_RpcDiscoverable([self.id])[0]
             except OAGraphRetrieveError as e:
                 if self.logger.RPC:
-                    print "[%s] Underlying db controller row is missing for [%s]-[%d], exiting" % (self.id, self.rpcinfname, self.stripe)
+                    print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting" % (self.id, self.rpcinfname, self.stripe))
                 sys.exit(1)
 
             # Did environment change?
             if self.envid != rpcdisc.envid:
                 if self.logger.RPC:
-                    print "[%s] Environment changed from [%s] to [%s], exiting" % (self.id, self.envid, rpcdisc.envid)
+                    print("[%s] Environment changed from [%s] to [%s], exiting" % (self.id, self.envid, rpcdisc.envid))
                 sys.exit(1)
 
             self.heartbeat = OATime().now
             if self.logger.RPC:
-                print "[%s] heartbeat %s" % (self.id, self.heartbeat)
+                print("[%s] heartbeat %s" % (self.id, self.heartbeat))
             self.db.update()
             gevent.sleep(getenv().rpctimeout)
 
@@ -1669,5 +1669,5 @@ class OAG_RpcDiscoverable(OAG_RootNode):
         from gevent import spawn
         if self.rpc.is_heartbeat:
             if self.logger.RPC:
-                print "[%s] Starting heartbeat greenlet" % (self.id)
+                print("[%s] Starting heartbeat greenlet" % (self.id))
             self.rpc._glets.append(spawn(self.__cb_heartbeat))

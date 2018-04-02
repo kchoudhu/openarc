@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import base64
 import os
@@ -10,7 +10,7 @@ from openarc.exception import *
 class OAEnv(object):
 
     def __init__(self, cfgfile='openarc.toml'):
-        self.envid   = base64.b16encode(os.urandom(16))
+        self.envid   = base64.b16encode(os.urandom(16)).decode('ascii')
 
         self.rpctimeout = 5
         cfg_file = "%s/%s" % ( os.environ.get("OPENARC_CFG_DIR"), cfgfile )
@@ -37,11 +37,11 @@ class OALog(object):
     def log(loginfo=None, ignore_exceptions=False):
         # Information about run env: hostname, pid, time
         if loginfo:
-            print loginfo
+            print(loginfo)
         # redirect to stdout, other logger as necessary
         logstr = traceback.format_exc()
         if logstr != "None\n" and ignore_exceptions is False:
-           print logstr
+            print(logstr)
 
 #This is where we hold library state.
 #You will get cut if you don't manipulate the p_* variables

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 
 import unittest
 import sys
@@ -58,7 +58,7 @@ class TestOADao(unittest.TestCase, TestOABase):
         # Nothing committed if commit() method is not called
         with OADao("test") as dao:
             with dao.cur as cur:
-                for i in xrange(10):
+                for i in range(10):
                     cur.execute(self.SQL.insert_sample_row, [i])
             with self.dbconn.cursor() as testcur:
                 testcur.execute(self.SQL.get_rows_from_sample_table)
@@ -67,7 +67,7 @@ class TestOADao(unittest.TestCase, TestOABase):
         # Data committed if commit() method is called
         with OADao("test") as dao:
             with dao.cur as cur:
-                for i in xrange(10):
+                for i in range(10):
                     cur.execute(self.SQL.insert_sample_row, [i])
                 dao.commit()
             with self.dbconn.cursor() as testcur:

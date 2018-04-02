@@ -2,7 +2,7 @@ DBRUNDIR?=~/run/db
 DBCFGDIR?=./cfg/
 PYTEST_BIN?="python -m unittest discover"
 PYTEST_FILE_PATTERN?="*_test.py"
-PROJECT=arc
+PROJECT=openarc
 
 clean:
 	@rm ./${PROJECT}/*.pyc
@@ -29,6 +29,6 @@ dbhardinit: dbmsinit dbinit
 test:
 	# Todo: replace this with TAP output
 	@echo "Running tests"
-	@export OPENARC_CFG_DIR=./cfg && python -m unittest discover ./openarc/tests -p ${PYTEST_FILE_PATTERN}
+	@export OPENARC_CFG_DIR=./cfg && python3 -m unittest discover ./openarc/tests -p ${PYTEST_FILE_PATTERN}
 
 testclean: dbrefresh test
