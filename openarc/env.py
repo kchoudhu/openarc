@@ -28,7 +28,7 @@ class OAEnv(object):
                 self.rpctimeout = envcfg['graph']['heartbeat']
 
         except IOError:
-            raise OAError("%s does not exist" % cfg_file)
+            raise OAError("%s does not exist" % cfg_file_path)
 
 class OALog(object):
     SQL   = False
