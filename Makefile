@@ -16,7 +16,7 @@ dbmsinit:
 	@pg_ctl init -D ${DBRUNDIR}/${PROJECT}
 	@cp ${DBCFGDIR}/*.conf ${DBRUNDIR}/${PROJECT}
 	@pg_ctl -D ${DBRUNDIR}/${PROJECT} -l /tmp/logfile start
-	@sleep 10
+	@sleep 3
 
 dbcreate:
 	-dropdb ${PROJECT}
