@@ -60,6 +60,7 @@ def initenv():
     global p_refcount_env
     if p_refcount_env == 0:
         from gevent import monkey
+        monkey.patch_all()
         p_env = OAEnv()
         p_refcount_env += 1
 
