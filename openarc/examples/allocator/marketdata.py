@@ -6,9 +6,7 @@ import pprint
 from openarc.graph  import *
 from openarc.oatime import *
 
-from gevent import spawn, monkey
-
-monkey.patch_all()
+from gevent import spawn
 
 class OAG_WsbBalancer(OAG_RootNode):
     @staticproperty
