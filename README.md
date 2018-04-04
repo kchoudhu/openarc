@@ -88,6 +88,11 @@ new_user.db.create()
 This creates a table in the database:
 
 ```SQL
+> select * from myproject.user;
+
+ _user_id | password | username
+----------+----------+----------
+        1 | hunter2  | kamil
 ```
 
 Update the object:
@@ -100,6 +105,11 @@ new_user.db.update()
 The database is updated accordingly:
 
 ```SQL
+> select * from myproject.user;
+
+ _user_id | password | username
+----------+----------+----------
+        1 | hunter2  | hana
 ```
 
 More documentation about the database capabilities of OpenARC is available here.
@@ -135,7 +145,7 @@ new_user.password = '*****'
 # [user_update_handler] User [hana] has been updated
 ```
 
-Nodes can be nested to arbitrary depths, permitting complex functional event chains. Think Excel, but for programmers.
+Nodes can be nested arbitrarily, permitting complex functional event chains. Think Excel, but for programmers.
 
 # Next Steps
 
