@@ -756,6 +756,26 @@ class OAG_RdfProxy(object):
 
         return self
 
+class OAG_RpcTransaction(object):
+    def __init__(self, rpc_proxy):
+        self.is_active = False
+        self.notify_upstream = False
+        self._rpc_proxy = rpc_proxy
+
+    def __enter__(self):
+        self.is_active = True
+
+    def __exit__(self, type, value, traceback):
+        if not self.is_active:
+            # can this really ever happen?
+            return
+
+        if self.notify_upstream:
+            for addr, stream_to_invalidate in self._rpc_proxy._rpcreqs.items():
+                reqcls(self._rpc_proxy._oag).invalidate(addr, stream_to_invalidate)
+
+        self.is_active = False
+
 class OAG_RpcProxy(object):
     """Manipulates rpc functionality for OAG"""
 
@@ -793,6 +813,9 @@ class OAG_RpcProxy(object):
 
         # Should you heartbeat?
         self._rpc_heartbeat = heartbeat_enabled
+
+        # Invalidation cache
+        self._rpc_transaction = OAG_RpcTransaction(self)
 
         # Stoplist of OAG streams that shouldn't be exposed over RPC
         self._rpc_stop_list = [
@@ -972,8 +995,11 @@ class OAG_RpcProxy(object):
             if len(self._rpcreqs)>0:
                 if self._oag.logger.RPC:
                     print("[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval))
-                for addr, stream_to_invalidate in self._rpcreqs.items():
-                    reqcls(self._oag).invalidate(addr, stream_to_invalidate)
+                if self.transaction.is_active:
+                    self.transaction.notify_upstream = True
+                else:
+                    for addr, stream_to_invalidate in self._rpcreqs.items():
+                        reqcls(self._oag).invalidate(addr, stream_to_invalidate)
 
     @property
     def is_init(self):
@@ -1035,6 +1061,10 @@ class OAG_RpcProxy(object):
     @property
     def stoplist(self):
         return self._rpc_stop_list
+
+    @property
+    def transaction(self):
+        return self._rpc_transaction
 
     #### Callbacks
     def __cb_init(self):
