@@ -6,15 +6,7 @@ def main():
 
     logger=OALog()
 
-    # Our streams, from the definition of OAG_WsbBalancer
-    #
-    # 'FB'         : [ OAG_Ticker, None, "rebalance_portfolio" ],
-    # 'AMZN'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
-    # 'NFLX'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
-    # 'TSLA'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
-    # 'AMD'        : [ OAG_Ticker, None, "rebalance_portfolio" ]
-
-    # Create ticker objects
+    # Create ticker objects from tickers in WsbBalancer
     ticker_oags = {
         ticker: OAG_Ticker(logger=logger).db.create({
             'ticker' : ticker,
