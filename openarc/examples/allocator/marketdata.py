@@ -20,8 +20,8 @@ class OAG_WsbBalancer(OAG_RootNode):
 
     @staticproperty
     def streams(cls): return {
-        'FB'         : [ OAG_Ticker, None, "rebalance_portfolio" ],
-        'AMZN'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
+        'SVXY'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
+        'XIVH'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
         'NFLX'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
         'TSLA'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
         'AMD'        : [ OAG_Ticker, None, "rebalance_portfolio" ]
@@ -140,7 +140,7 @@ class OAG_Ticker(OAG_RootNode):
                 #
                 # Typically, setting a property will trigger an immediate notification of
                 # node invalidation to upstream consumers. By using an rpc.transaction,
-                # invalidation notifications are held until the the context manager dies.
+                # invalidation notifications are held until the context manager dies.
                 with self.rpc.transaction:
                     self.updatetime = current_time
                     self.price = new_price

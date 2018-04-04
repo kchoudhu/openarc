@@ -6,7 +6,7 @@ def main():
 
     logger=OALog()
 
-    # OUr streams, from the definition of OAG_WsbBalancer
+    # Our streams, from the definition of OAG_WsbBalancer
     #
     # 'FB'         : [ OAG_Ticker, None, "rebalance_portfolio" ],
     # 'AMZN'       : [ OAG_Ticker, None, "rebalance_portfolio" ],
