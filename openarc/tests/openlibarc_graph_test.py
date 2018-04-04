@@ -377,7 +377,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
-        a1.next().subnode1 = a2_b
+        a1.subnode1 = a2_b
         a1.db.update()
 
         self.assertEqual(a1.subnode1, a2_b)

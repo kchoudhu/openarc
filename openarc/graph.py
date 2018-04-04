@@ -466,8 +466,14 @@ class OAG_DbProxy(object):
 
         self.schema.init_fkeys()
 
-        # Set attrs if this is a unique oag
-        if self._oag.is_unique:
+
+        # Autosetting a multinode is ok here, because it is technically
+        # only restoring properties that were originally set before the
+        # call to the database.
+        if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
+
+            self._oag[self._oag.rdf._rdf_window_index]
+        else:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
         return self._oag
