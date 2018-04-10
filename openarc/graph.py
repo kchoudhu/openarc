@@ -404,7 +404,7 @@ class OAG_DbSchemaProxy(object):
 class OAG_DbTransaction(object):
     def __init__(self, db_proxy, exttxn):
 
-        self.is_active = exttxn.is_active if exttxn else False
+        self.depth = exttxn.depth if exttxn else 0
 
         self._parent_txn = exttxn
         self._db_proxy = db_proxy
@@ -419,7 +419,7 @@ class OAG_DbTransaction(object):
         if self._connection is None:
             self._connection = OADao(self._db_proxy._oag.context)
 
-        self.is_active = True
+        self.depth += 1
         return self
 
     def __exit__(self, type, value, traceback):
@@ -429,13 +429,14 @@ class OAG_DbTransaction(object):
             return
 
         # Clean some stuff up
-        self._cursor = None
-        self._connection.commit()
-        self._connection.close()
-        self._connection = None
+        if self.depth==1:
+            self._cursor = None
+            self._connection.commit()
+            self._connection.close()
+            self._connection = None
 
         # You are definitely not using this transaction again
-        self.is_active = False
+        self.depth -= 1
 
     @property
     def connection(self):
@@ -494,11 +495,12 @@ class OAG_DbProxy(object):
         formatstrs = ', '.join(['%s' for v in vals])
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
-        results = self.SQLexec(insert_sql, vals)
-        if self._searchidx=='id':
-            index_val = results
-            self._searchprms = list(index_val[0].values())
-        self.__refresh_from_cursor()
+        with self.transaction:
+            results = self.SQLexec(insert_sql, vals)
+            if self._searchidx=='id':
+                index_val = results
+                self._searchprms = list(index_val[0].values())
+            self.__refresh_from_cursor()
 
         # Refresh to set iteridx
         self._oag.reset()
@@ -521,9 +523,10 @@ class OAG_DbProxy(object):
 
         delete_sql = self.SQL['delete']['id']
 
-        self.SQLexec(delete_sql, [self._oag.id])
+        with self.transaction:
+            self.SQLexec(delete_sql, [self._oag.id])
 
-        self.search(throw_on_empty=False)
+            self.search(throw_on_empty=False)
 
         if self._oag.is_unique:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
@@ -568,9 +571,11 @@ class OAG_DbProxy(object):
         update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag.propmgr._cframe[attr] for attr in member_attrs]
-        self.SQLexec(update_sql, update_values)
-        if not norefresh:
-            self.__refresh_from_cursor()
+
+        with self.transaction:
+            self.SQLexec(update_sql, update_values)
+            if not norefresh:
+                self.__refresh_from_cursor()
 
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
             self._oag[self._oag.rdf._rdf_window_index]
@@ -726,7 +731,7 @@ class OAG_DbProxy(object):
         return_results = True
         # Figure out which cursor to use
         if cur is None:
-            if self.transaction.is_active:
+            if self.transaction.depth>0:
                 cur = self.transaction.cur
         else:
             return_results = False
