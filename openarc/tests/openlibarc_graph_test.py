@@ -50,12 +50,11 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         return (a1, a2, a3)
 
     def test_graph_isolation_control(self, logger=OALog()):
-        with self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as setupcur:
-            setupcur.execute(self.SQL.create_sample_table)
-            self.dbconn.commit()
 
-            # Object not created until commit
-            oa = OAG_AutoNode8(extcur=setupcur, logger=logger).db.create({
+        # Object not created until commit
+        oa = OAG_AutoNode8(logger=logger)
+        with oa.db.transaction as txn:
+            oa.db.create({
                 'field3' : 2,
                 'field4' : 2,
                 'field5' : 'infname multinode test',
@@ -64,23 +63,41 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             with self.assertRaises(OAGraphRetrieveError):
                 oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)
 
-            self.dbconn.commit()
-            oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)
-            self.__check_autonode_equivalence(oa[0], oa_chk[0])
+        oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)
+        self.__check_autonode_equivalence(oa[0], oa_chk[0])
 
-            # Object not updated until commit
+        # Object not updated until commit
+        with oa.db.transaction as txn:
             oa.field4 = 33
             oa.db.update()
+
             # -> no change yet, retrieval by previous index succeeds
             oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)[0]
             self.assertEqual(oa_chk.field4, 2)
-            self.dbconn.commit()
-            # -> update commited, retrieval fails
-            with self.assertRaises(OAGraphRetrieveError):
-                oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)
-            # -> but retrieval by new value succeeds
-            oa_chk = OAG_AutoNode8(33, 'by_f4_idx', logger=logger)[0]
+
+        # -> update commited, retrieval fails
+        with self.assertRaises(OAGraphRetrieveError):
+            oa_chk = OAG_AutoNode8(2, 'by_f4_idx', logger=logger)
+
+        # -> but retrieval by new value succeeds
+        oa_chk = OAG_AutoNode8(33, 'by_f4_idx', logger=logger)[0]
+        self.__check_autonode_equivalence(oa, oa_chk)
+
+        # Check transaction passing
+        with oa.db.transaction as txn:
+            oa.field4 = 66
+            oa.db.update()
+
+            # -> Passed transaction can see update
+            oa_chk = OAG_AutoNode8(66, 'by_f4_idx', logger=logger, exttxn=txn)[0]
             self.__check_autonode_equivalence(oa, oa_chk)
+
+            # -> non passed transaction CANNOT see update
+            with self.assertRaises(OAGraphRetrieveError):
+                oa_chk = OAG_AutoNode8(66, 'by_f4_idx', logger=logger)
+
+        oa_chk = OAG_AutoNode8(66, 'by_f4_idx', logger=logger)[0]
+        self.__check_autonode_equivalence(oa, oa_chk)
 
     def test_data_retrieval_failure(self):
         """Attempt to retrieve no data fails with exception"""

@@ -311,24 +311,24 @@ class OAG_DbSchemaProxy(object):
         with OADao(oag.context, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that context schema exists
-                dbp.SQLexec(cur, dbp.SQL['admin']['schema'])
+                dbp.SQLexec(dbp.SQL['admin']['schema'], cur=cur)
                 check = cur.fetchall()
                 if len(check)==0:
                     if oag.logger.SQL:
                         print("Creating missing schema [%s]" % oag.context)
-                    dbp.SQLexec(cur, dbp.SQL['admin']['mkschema'])
+                    dbp.SQLexec(dbp.SQL['admin']['mkschema'], cur=cur)
                     dao.commit()
 
                 # Check for presence of table
                 try:
-                    dbp.SQLexec(cur, dbp.SQL['admin']['table'])
+                    dbp.SQLexec(dbp.SQL['admin']['table'], cur=cur)
                 except psycopg2.ProgrammingError as e:
                     dao.commit()
                     if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e):
                         if oag.logger.SQL:
                             print("Creating missing table [%s]" % oag.dbtable)
-                        dbp.SQLexec(cur, dbp.SQL['admin']['mktable'])
-                        dbp.SQLexec(cur, dbp.SQL['admin']['table'])
+                        dbp.SQLexec(dbp.SQL['admin']['mktable'], cur=cur)
+                        dbp.SQLexec(dbp.SQL['admin']['table'], cur=cur)
 
                 # Check for table schema integrity
                 oag_columns     = sorted(oag.streams.keys())
@@ -361,7 +361,7 @@ class OAG_DbSchemaProxy(object):
                             add_col_clauses.append(add_clause)
 
                     addcol_sql = dbp.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
-                    dbp.SQLexec(cur, addcol_sql)
+                    dbp.SQLexec(addcol_sql, cur=cur)
 
                 for idx, idxinfo in oag.dbindices.items():
                     col_sql     = ','.join(map(lambda x: oag.stream_db_mapping[x], idxinfo[0]))
@@ -376,7 +376,7 @@ class OAG_DbSchemaProxy(object):
                             'WHERE %s' % ' AND '.join('%s=%s' % (oag.stream_db_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
                     exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
-                    dbp.SQLexec(cur, exec_sql)
+                    dbp.SQLexec(exec_sql, cur=cur)
 
             dao.commit()
             return oag
@@ -397,19 +397,68 @@ class OAG_DbSchemaProxy(object):
                         if currattr:
                             currattr.db.schema.init_fkeys()
 
-                dbp.SQLexec(cur, dbp.SQL['admin']['fkeys'])
+                dbp.SQLexec(dbp.SQL['admin']['fkeys'], cur=cur)
                 setattr(oag.__class__, '_fkframe', cur.fetchall())
                 dbp._oag.reset(idxreset=False)
 
+class OAG_DbTransaction(object):
+    def __init__(self, db_proxy, exttxn):
+
+        self.is_active = exttxn.is_active if exttxn else False
+
+        self._parent_txn = exttxn
+        self._db_proxy = db_proxy
+
+        self._connection = exttxn.connection if exttxn else None
+        self._cursor = None
+
+        self._commit_on_exit = False if exttxn else True
+
+    def __enter__(self):
+
+        if self._connection is None:
+            self._connection = OADao(self._db_proxy._oag.context)
+
+        self.is_active = True
+        return self
+
+    def __exit__(self, type, value, traceback):
+
+        # short circuit transaction commit if flag is not set
+        if not self._commit_on_exit:
+            return
+
+        # Clean some stuff up
+        self._cursor = None
+        self._connection.commit()
+        self._connection.close()
+        self._connection = None
+
+        # You are definitely not using this transaction again
+        self.is_active = False
+
+    @property
+    def connection(self):
+        return self._connection
+
+    @property
+    def cur(self):
+        if not self._cursor:
+            self._cursor = self.connection.cur
+        return self._cursor
+
 class OAG_DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, searchprms, searchidx):
+    def __init__(self, oag, searchprms, searchidx, exttxn):
 
         # Store reference to outer object
         self._oag = oag
 
         # Schema is unknown right now
         self._schema = None
+
+        # Transaction management
+        self._db_transaction = OAG_DbTransaction(self, exttxn)
 
         # Intialize search parameters, if any
         if searchprms:
@@ -445,21 +494,11 @@ class OAG_DbProxy(object):
         formatstrs = ', '.join(['%s' for v in vals])
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
-        if self._oag._extcur is None:
-            with OADao(self._oag.context) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, insert_sql, vals)
-                    if self._searchidx == 'id':
-                        index_val = cur.fetchall()
-                        self._searchprms = list(index_val[0].values())
-                    self.__refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._oag._extcur, insert_sql, vals)
-            if self._searchidx == 'id':
-                index_val = self._oag._extcur.fetchall()
-                self._searchprms = list(index_val[0].values())
-            self.__refresh_from_cursor(self._oag._extcur)
+        results = self.SQLexec(insert_sql, vals)
+        if self._searchidx=='id':
+            index_val = results
+            self._searchprms = list(index_val[0].values())
+        self.__refresh_from_cursor()
 
         # Refresh to set iteridx
         self._oag.reset()
@@ -482,13 +521,7 @@ class OAG_DbProxy(object):
 
         delete_sql = self.SQL['delete']['id']
 
-        if self._oag._extcur is None:
-            with OADao(self._oag.context) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, delete_sql, [self._oag.id])
-                    dao.commit()
-        else:
-            self.SQLexec(cur, delete_sql, [self._oag.id])
+        self.SQLexec(delete_sql, [self._oag.id])
 
         self.search(throw_on_empty=False)
 
@@ -500,12 +533,7 @@ class OAG_DbProxy(object):
     def search(self, throw_on_empty=True):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
-        if self._oag._extcur is None:
-            with OADao(self._oag.context) as dao:
-                with dao.cur as cur:
-                    self.__refresh_from_cursor(cur)
-        else:
-            self.__refresh_from_cursor(self._oag._extcur)
+        self.__refresh_from_cursor()
 
         # Is the new rdf empty?
         if throw_on_empty and len(self._oag.rdf._rdf) == 0:
@@ -540,17 +568,9 @@ class OAG_DbProxy(object):
         update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag.propmgr._cframe[attr] for attr in member_attrs]
-        if self._oag._extcur is None:
-            with OADao(self._oag.context) as dao:
-                with dao.cur as cur:
-                    self.SQLexec(cur, update_sql, update_values)
-                    if not norefresh:
-                        self.__refresh_from_cursor(cur)
-                    dao.commit()
-        else:
-            self.SQLexec(self._oag._extcur, update_sql, update_values)
-            if not norefresh:
-                self.__refresh_from_cursor(self._oag._extcur)
+        self.SQLexec(update_sql, update_values)
+        if not norefresh:
+            self.__refresh_from_cursor()
 
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
             self._oag[self._oag.rdf._rdf_window_index]
@@ -576,14 +596,12 @@ class OAG_DbProxy(object):
 
             self._searchprms = new_searchprms
 
-    def __refresh_from_cursor(self, cur):
+    def __refresh_from_cursor(self):
         try:
-            if type(self.SQL).__name__ == "str":
-                self.SQLexec(cur, self.SQL, self._searchprms)
-            elif type(self.SQL).__name__ == "dict":
-                self.SQLexec(cur, self.SQL['read'][self._searchidx], self._searchprms)
-
-            self._oag.rdf._rdf = cur.fetchall()
+            # if type(self.SQL).__name__ == "str":
+            #     self._oag.rdf._rdf = self.SQLexec(self.SQL, self._searchprms)
+            # elif type(self.SQL).__name__ == "dict":
+            self._oag.rdf._rdf = self.SQLexec(self.SQL['read'][self._searchidx], self._searchprms)
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
@@ -690,15 +708,47 @@ class OAG_DbProxy(object):
 
         return default_sql
 
-    def SQLexec(self, cur, query, parms=[]):
-        if self._oag.logger.SQL:
-            print(cur.mogrify(query, parms))
-        cur.execute(query, parms)
+    def SQLexec(self, query, parms=[], cur=None):
+
+        def curexec():
+            if self._oag.logger.SQL:
+                print(cur.mogrify(query, parms))
+            cur.execute(query, parms)
+            if return_results:
+                try:
+                    return cur.fetchall()
+                except:
+                    return None
+            else:
+                return None
+
+        results = None
+        return_results = True
+        # Figure out which cursor to use
+        if cur is None:
+            if self.transaction.is_active:
+                cur = self.transaction.cur
+        else:
+            return_results = False
+
+        if cur is None:
+            with OADao(self._oag.context) as dao:
+                with dao.cur as cur:
+                    results = curexec()
+                    dao.commit()
+        else:
+            results = curexec()
+
+        return results
 
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
         return td(SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname))
+
+    @property
+    def transaction(self):
+        return self._db_transaction
 
 class OAG_RdfProxy(object):
     """Responsible for manipulation of relational data frame"""
@@ -1577,7 +1627,7 @@ class OAG_RootNode(object):
                  searchidx='id',
                  initprms={},
                  initurl=None,
-                 extcur=None,
+                 exttxn=None,
                  logger=OALog(),
                  rpc=True,
                  heartbeat=True):
@@ -1586,7 +1636,6 @@ class OAG_RootNode(object):
         initenv()
 
         # Alphabetize
-        self._extcur         = extcur
         self._iteridx        = None
         self._logger         = logger
         self._oagid          = hashlib.sha256(str(self).encode("utf-8")).hexdigest()
@@ -1594,7 +1643,7 @@ class OAG_RootNode(object):
         #### Set up proxies
 
         # Database API
-        self._db_proxy       = OAG_DbProxy(self, searchprms, searchidx)
+        self._db_proxy       = OAG_DbProxy(self, searchprms, searchidx, exttxn)
 
         # Relational Dataframe manipulation
         self._rdf_proxy      = OAG_RdfProxy(self)
