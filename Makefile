@@ -1,5 +1,8 @@
 DBRUNDIR?=~/run/db
 DBCFGDIR?=./cfg/
+DBSOCKDIR?=/tmp
+DBLOGDIR?=/tmp
+PGCTL?=/usr/local/bin/pg_ctl
 PYTEST_BIN?="python -m unittest discover"
 PYTEST_FILE_PATTERN?="*_test.py"
 PROJECT=openarc
@@ -13,14 +16,14 @@ dbmsinit:
 	@rm -rf /tmp/.s.PGSQL*
 	@rm -rf ${DBRUNDIR}/${PROJECT}
 	@/bin/mkdir -p ${DBRUNDIR}/${PROJECT}
-	@pg_ctl init -D ${DBRUNDIR}/${PROJECT}
+	@${PGCTL} init -D ${DBRUNDIR}/${PROJECT}
 	@cp ${DBCFGDIR}/*.conf ${DBRUNDIR}/${PROJECT}
-	@pg_ctl -D ${DBRUNDIR}/${PROJECT} -l /tmp/logfile start
+	@${PGCTL} -D ${DBRUNDIR}/${PROJECT} -l ${DBLOGDIR}/logfile start
 	@sleep 3
 
 dbcreate:
-	-dropdb ${PROJECT}
-	createdb ${PROJECT}
+	-dropdb -h ${DBSOCKDIR} ${PROJECT}
+	createdb -h ${DBSOCKDIR} ${PROJECT}
 
 dbinit: dbcreate
 
