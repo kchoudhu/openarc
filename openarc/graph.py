@@ -363,20 +363,20 @@ class OAG_DbSchemaProxy(object):
                     addcol_sql = dbp.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
                     dbp.SQLexec(addcol_sql, cur=cur)
 
-                for idx, idxinfo in oag.dbindices.items():
-                    col_sql     = ','.join(map(lambda x: oag.stream_db_mapping[x], idxinfo[0]))
+                    for idx, idxinfo in oag.dbindices.items():
+                        col_sql     = ','.join(map(lambda x: oag.stream_db_mapping[x], idxinfo[0]))
 
-                    unique_sql  = str()
-                    if idxinfo[1]:
-                        unique_sql = 'UNIQUE'
+                        unique_sql  = str()
+                        if idxinfo[1]:
+                            unique_sql = 'UNIQUE'
 
-                    partial_sql = str()
-                    if idxinfo[2]:
-                        partial_sql =\
-                            'WHERE %s' % ' AND '.join('%s=%s' % (oag.stream_db_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
+                        partial_sql = str()
+                        if idxinfo[2]:
+                            partial_sql =\
+                                'WHERE %s' % ' AND '.join('%s=%s' % (oag.stream_db_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
-                    exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
-                    dbp.SQLexec(exec_sql, cur=cur)
+                        exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
+                        dbp.SQLexec(exec_sql, cur=cur)
 
             dao.commit()
             return oag
@@ -404,15 +404,18 @@ class OAG_DbSchemaProxy(object):
 class OAG_DbTransaction(object):
     def __init__(self, db_proxy, exttxn):
 
-        self.depth = exttxn.depth if exttxn else 0
-
-        self._parent_txn = exttxn
-        self._db_proxy = db_proxy
-
-        self._connection = exttxn.connection if exttxn else None
+        self._commit_on_exit = True
+        self._connection = None
         self._cursor = None
+        self._db_proxy = db_proxy
+        self.depth = 0
+        self.external_registrations = []
 
-        self._commit_on_exit = False if exttxn else True
+        if exttxn:
+            exttxn.external_registrations.append(self)
+            self._commit_on_exit = False
+            self._connection = exttxn.connection
+            self.depth = exttxn.depth
 
     def __enter__(self):
 
@@ -434,6 +437,12 @@ class OAG_DbTransaction(object):
             self._connection.commit()
             self._connection.close()
             self._connection = None
+            while len(self.external_registrations)>0:
+                extreg = self.external_registrations.pop()
+                extreg._commit_on_exit = True
+                extreg._connection = None
+                extreg._cursor = None
+                extreg.depth = 0
 
         # You are definitely not using this transaction again
         self.depth -= 1
@@ -506,7 +515,6 @@ class OAG_DbProxy(object):
         self._oag.reset()
 
         self.schema.init_fkeys()
-
 
         # Autosetting a multinode is ok here, because it is technically
         # only restoring properties that were originally set before the
