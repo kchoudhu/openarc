@@ -11,7 +11,7 @@ class TestOABase(object):
     """Mixin class to assist with database testing"""
     def setUp_db(self):
         """Create scratch "test" schema in database"""
-        initenv()
+        initenv(on_demand_oags=True)
         dbinfo = getenv().dbinfo
         self.dbconn = psycopg2.connect(dbname='openarc',
                                        user=dbinfo['user'],

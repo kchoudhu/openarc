@@ -491,7 +491,8 @@ class OAG_DbProxy(object):
 
     def create(self, initprms={}):
 
-        self.schema.init()
+        if getenv().on_demand_oags:
+            self.schema.init()
 
         self._oag.propmgr._set_cframe_from_userprms(initprms, fullhouse=True)
 
@@ -514,7 +515,8 @@ class OAG_DbProxy(object):
         # Refresh to set iteridx
         self._oag.reset()
 
-        self.schema.init_fkeys()
+        if getenv().on_demand_oags:
+            self.schema.init_fkeys()
 
         # Autosetting a multinode is ok here, because it is technically
         # only restoring properties that were originally set before the

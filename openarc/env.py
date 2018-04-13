@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import base64
+import inspect
 import os
+import sys
 import toml
 import traceback
 
@@ -9,9 +11,9 @@ from openarc.exception import *
 
 class OAEnv(object):
 
-    def __init__(self, cfgfile='openarc.toml'):
-        self.envid   = base64.b16encode(os.urandom(16)).decode('ascii')
-
+    def __init__(self, on_demand_oags, cfgfile='openarc.toml'):
+        self.envid = base64.b16encode(os.urandom(16)).decode('ascii')
+        self.on_demand_oags = on_demand_oags
         self.rpctimeout = 5
         cfg_dir = os.environ.get("OPENARC_CFG_DIR") if os.environ.get("OPENARC_CFG_DIR") else '.'
         cfg_file_path = "%s/%s" % ( cfg_dir, cfgfile )
@@ -44,6 +46,30 @@ class OALog(object):
         if logstr != "None\n" and ignore_exceptions is False:
             print(logstr)
 
+def initoags():
+    modules = sorted(sys.modules)
+    for module in modules:
+        fns = inspect.getmembers(sys.modules[module], inspect.isclass)
+
+        # If classes are OAG_RootNodes, create their tables in the database
+        for fn in fns:
+            #print(fn[1])
+            #if fn[1] in OAG_RootNode.__subclasses__():
+            if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
+                try:
+                    fn[1]().db.schema.init()
+                except OAError:
+                    pass
+
+        # Once all tables are materialized, we need to create foreign key relationships
+        for fn in fns:
+            #if fn[1] in OAG_RootNode.__subclasses__():
+            if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
+                try:
+                    fn[1]().db.schema.init_fkeys()
+                except OAError:
+                    pass
+
 #This is where we hold library state.
 #You will get cut if you don't manipulate the p_* variables
 #via getenv() and initenv()
@@ -51,18 +77,25 @@ class OALog(object):
 p_refcount_env = 0
 p_env = None
 
-
-def initenv():
+def initenv(on_demand_oags=False):
     """envstr: one of local, dev, qa, prod.
     Does not return OAEnv variable; for that, you
     must call getenv"""
     global p_env
     global p_refcount_env
+
     if p_refcount_env == 0:
+
+        p_env = OAEnv(on_demand_oags=on_demand_oags)
+        p_refcount_env += 1
+
+        # Initialize gevent
         from gevent import monkey
         monkey.patch_all()
-        p_env = OAEnv()
-        p_refcount_env += 1
+
+        # Create all OAGs if on demand oag creation is turned off
+        if not p_env.on_demand_oags:
+            initoags()
 
 def getenv():
     """Accessor method for global state"""
