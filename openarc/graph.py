@@ -620,7 +620,7 @@ class OAG_DbProxy(object):
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
-                self._oag.filter(predicate, rerun=True)
+                self._oag.rdf.filter(predicate, rerun=True)
         except psycopg2.ProgrammingError:
             raise OAGraphRetrieveError("Missing database table")
 
@@ -801,7 +801,7 @@ class OAG_RdfProxy(object):
         if rerun is False:
             self._rdf_filter_cache.append(predicate)
 
-        self._rdf = []
+        self._rdf_window = []
         for i, frame in enumerate(self._rdf):
             self._oag.propmgr._cframe = frame
             self._oag.propmgr._set_attrs_from_cframe()
@@ -816,7 +816,7 @@ class OAG_RdfProxy(object):
 
         self._oag.propmgr._set_attrs_from_cframe()
 
-        return self.oag
+        return self._oag
 
     def sort(self, key):
 
