@@ -53,8 +53,6 @@ def initoags():
 
         # If classes are OAG_RootNodes, create their tables in the database
         for fn in fns:
-            #print(fn[1])
-            #if fn[1] in OAG_RootNode.__subclasses__():
             if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
                 try:
                     fn[1]().db.schema.init()
@@ -63,7 +61,6 @@ def initoags():
 
         # Once all tables are materialized, we need to create foreign key relationships
         for fn in fns:
-            #if fn[1] in OAG_RootNode.__subclasses__():
             if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
                 try:
                     fn[1]().db.schema.init_fkeys()
