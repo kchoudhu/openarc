@@ -825,7 +825,7 @@ class OAG_RdfProxy(object):
         self._rdf_window_index = None
         self._oag.propmgr._cframe = {}
 
-        return self
+        return self._oag
 
 class OAG_RpcTransaction(object):
     def __init__(self, rpc_proxy):
