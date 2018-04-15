@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from gevent import monkey
+monkey.patch_all()
+
 import psycopg2
 import psycopg2.extras
 import psycopg2.extensions

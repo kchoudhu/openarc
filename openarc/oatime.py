@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from gevent import monkey
+monkey.patch_all()
+
 import time
 
 from textwrap    import dedent as td

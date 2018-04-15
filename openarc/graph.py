@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from gevent import monkey
+monkey.patch_all()
+
 import base64
 import collections
 import datetime
@@ -787,8 +790,8 @@ class OAG_RdfProxy(object):
         self._rdf_window = list(src.rdf._rdf_window)
         self._rdf_window_index =\
                                 src.rdf._rdf_window_index
-        self._rdf_filter_cache =\
-                                list(src.rdf._rdf_filter_cache)
+        # self._rdf_filter_cache =\
+        #                         list(src.rdf._rdf_filter_cache)
 
     def filter(self, predicate, rerun=False):
         if self._oag.is_unique:
@@ -815,6 +818,22 @@ class OAG_RdfProxy(object):
             self._oag.propmgr._cframe = {}
 
         self._oag.propmgr._set_attrs_from_cframe()
+
+        return self._oag
+
+    def reset(self):
+
+        # Clear RDF
+        self._rdf = None
+        self._rdf_filter_cache = []
+        self._rdf_window_index = 0
+        self._rdf_window = None
+
+        # Clear RDF cache
+        self._oag.cache.clear()
+
+        # Clear cframe
+        self._oag.propmgr._cframe = {}
 
         return self._oag
 

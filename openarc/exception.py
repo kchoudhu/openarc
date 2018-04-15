@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from gevent import monkey
+monkey.patch_all()
+
 class OAError(Exception):
     """Exception for general purpose openarc error"""
     def __init__(self, message):

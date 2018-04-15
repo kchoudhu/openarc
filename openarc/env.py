@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+from gevent import monkey
+monkey.patch_all()
+
 import base64
 import inspect
 import os
@@ -31,6 +34,9 @@ class OAEnv(object):
 
         except IOError:
             raise OAError("%s does not exist" % cfg_file_path)
+
+    def cfg(self):
+        return self._envcfg
 
 class OALog(object):
     SQL   = False
@@ -82,13 +88,8 @@ def initenv(on_demand_oags=False):
     global p_refcount_env
 
     if p_refcount_env == 0:
-
-        p_env = OAEnv(on_demand_oags=on_demand_oags)
+        p_env = OAEnv(on_demand_oags)
         p_refcount_env += 1
-
-        # Initialize gevent
-        from gevent import monkey
-        monkey.patch_all()
 
         # Create all OAGs if on demand oag creation is turned off
         if not p_env.on_demand_oags:
