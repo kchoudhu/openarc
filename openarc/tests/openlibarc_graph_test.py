@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
-import unittest
+import gevent
 import sys
+import unittest
+
 from textwrap import dedent as td
 
 sys.path.append('../')
@@ -1076,8 +1078,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     @unittest.skip("long running time")
     def test_rpc_discovery_underlying_env_change(self, logger=OALog()):
         def test_func():
-            import gevent
-
             a2 =\
                 OAG_AutoNode2(logger=logger).db.create({
                     'field4' :  1,
@@ -1103,8 +1103,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def test_rpc_discovery_underlying_db_row_removal(self, logger=OALog()):
         self._envid  = base64.b16encode(os.urandom(16))
         def test_func():
-            import gevent
-
             logger =OALog()
 
             a2 =\
