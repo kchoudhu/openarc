@@ -5,11 +5,12 @@ monkey.patch_all()
 
 import hashlib
 import inspect
+import socket
 import sys
 
 from ._db   import *
 from ._rdf  import *
-from ._rpc  import rtrcls, reqcls, RpcTransaction, RpcProxy
+from ._rpc  import rtrcls, reqcls, RpcTransaction, RpcProxy, RestProxy
 from ._util import oagprop, staticproperty
 
 from openarc.env       import *
@@ -47,6 +48,11 @@ class OAG_RootNode(object):
 
         return self._rpc_proxy
 
+    @property
+    def REST(self):
+
+        return self._rest_proxy
+
     ##### User defined via inheritance
     @staticproperty
     def context(cls):
@@ -66,6 +72,9 @@ class OAG_RootNode(object):
 
     @staticproperty
     def is_unique(cls): return False
+
+    @staticproperty
+    def restapi(cls): return []
 
     @staticproperty
     def streams(cls):
@@ -258,6 +267,7 @@ class OAG_RootNode(object):
                  exttxn=None,
                  logger=OALog(),
                  rpc=True,
+                 rest=False,
                  heartbeat=True):
 
         # Initialize environment
@@ -284,6 +294,9 @@ class OAG_RootNode(object):
 
         # All RPC operations
         self._rpc_proxy      = RpcProxy(self, initurl=initurl, rpc_enabled=rpc, heartbeat_enabled=heartbeat)
+
+        # All REST operations
+        self._rest_proxy     = RestProxy(self, rest_enabled=rest)
 
         if not self._rpc_proxy.is_proxy:
             self._prop_proxy.profile_set(self.oagid)
@@ -383,3 +396,55 @@ class OAG_RpcDiscoverable(OAG_RootNode):
             if self.logger.RPC:
                 print("[%s] Starting heartbeat greenlet" % (self.id))
             self.rpc._glets.append(spawn(self.__cb_heartbeat))
+
+class OAG_RootD(OAG_RootNode):
+    @staticproperty
+    def context(cls): return "openarc"
+
+    @staticproperty
+    def daemonname(cls): return cls.dbtable
+
+    @staticproperty
+    def dbindices(cls): return {
+        'host' : [ ['host'], False, None ]
+    }
+
+    @staticproperty
+    def streams(cls): return {
+        'host'    : [ 'text', str, None ],
+        'stripe'  : [ 'int',  int, None ],
+    }
+
+    def __enter__(self):
+
+        self.db.create()
+        return self
+
+    def __exit__(self, type, value, traceback):
+
+        self.db.delete()
+
+    def start(self):
+
+        hostname = socket.gethostname()
+        stripe_info = [hosts for hosts in getenv().cfg()['chatd']['hosts'] if hosts['host']==hostname]
+
+        # Am I even allowed to run on this host?
+        if len(stripe_info)==0:
+            raise OAError("[%s] is not configured to run on [%s]." % (self.daemonname, hostname))
+
+        # Are there too many stripes?
+        try:
+            _d = self.__class__(hostname, 'by_host')
+            num_stripes = _d.size
+        except OAGraphRetrieveError as e:
+            num_stripes = 0
+
+        if num_stripes>=stripe_info[0]['stripes']:
+            raise OAError("All necessary stripes are already running")
+
+        # set up and run this daemon
+        self.host = hostname
+        self.stripe = num_stripes
+        with self as daemon:
+            daemon.REST.start(port=stripe_info[0]['startport']+self.stripe)

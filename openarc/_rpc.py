@@ -563,3 +563,41 @@ class RpcProxy(object):
 
             self._rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
 
+class RestProxy(object):
+    def __init__(self, oag, rest_enabled):
+
+        ### Store reference to OAG
+        self._oag = oag
+
+        # Greenlets spawned by RPC
+        self._glets = []
+
+        self._app = None
+
+        self._rest_enabled = rest_enabled
+
+        self._rest_addr = None
+
+    @property
+    def addr(self):
+        if self._rest_enabled:
+            return self._rest_addr
+        else:
+            OAError("REST API has not yet been enabled")
+
+    def start(self, port):
+        if self._rest_enabled:
+            from flask import Flask, request, redirect, make_response
+            self._app = Flask(getenv().envid)
+
+        for endpoint, details in self._oag.restapi.items():
+            rootfn = getattr(self._oag, details[0], None)
+            self._app.route(endpoint, methods=details[1])(rootfn)
+
+        from socket      import gethostname
+        from gevent.wsgi import WSGIServer
+
+        http_server = WSGIServer(('0.0.0.0', port), self._app)
+        self._rest_addr = "%s:%d" % (gethostname(), port)
+        print('Serving on: [%s]' % self.addr)
+        http_server.serve_forever()
