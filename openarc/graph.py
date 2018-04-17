@@ -427,7 +427,8 @@ class OAG_RootD(OAG_RootNode):
     def start(self):
 
         hostname = socket.gethostname()
-        stripe_info = [hosts for hosts in getenv().cfg()['chatd']['hosts'] if hosts['host']==hostname]
+        daemoncfg = getenv().cfg()[self.daemonname]
+        stripe_info = [hosts for hosts in daemoncfg['hosts'] if hosts['host']==hostname]
 
         # Am I even allowed to run on this host?
         if len(stripe_info)==0:
@@ -439,7 +440,6 @@ class OAG_RootD(OAG_RootNode):
             num_stripes = _d.size
         except OAGraphRetrieveError as e:
             num_stripes = 0
-
         if num_stripes>=stripe_info[0]['stripes']:
             raise OAError("All necessary stripes are already running")
 
@@ -447,4 +447,4 @@ class OAG_RootD(OAG_RootNode):
         self.host = hostname
         self.stripe = num_stripes
         with self as daemon:
-            daemon.REST.start(port=stripe_info[0]['startport']+self.stripe)
+            daemon.REST.start(port=daemoncfg['startport']+self.stripe)
