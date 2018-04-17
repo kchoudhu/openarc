@@ -116,7 +116,7 @@ class RdfProxy(object):
         self._rdf_window_index = None
         self._oag.propmgr._cframe = {}
 
-        return self._oags
+        return self._oag
 
 class PropProxy(object):
     """Manipulates properties"""
