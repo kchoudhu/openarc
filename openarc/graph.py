@@ -68,7 +68,7 @@ class OAG_RootNode(object):
     @staticproperty
     def infname_fields(cls):
         """Override in deriving classes as necessary"""
-        return [k for k, v in cls.streams.items()]
+        return sorted([k for k, v in cls.streams.items()])
 
     @staticproperty
     def is_unique(cls): return False
@@ -127,9 +127,13 @@ class OAG_RootNode(object):
     def infname(self):
         if len(self.propmgr._cframe)==0:
             raise OAError("Cannot calculate infname if OAG attributes have not set")
-        return hashlib.sha256(str().join([str(getattr(self, k, ""))
-                                          for k in self.infname_fields
-                                          if k[0] != '_']).encode('utf-8')).hexdigest()
+
+        hashstr = str()
+        for stream in self.infname_fields:
+            node = getattr(self, stream, None)
+            hashstr += node.infname if self.is_oagnode(stream) else str(node)
+
+        return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
 
     @property
     def logger(self): return self._logger
