@@ -435,7 +435,7 @@ class OAG_RootD(OAG_RootNode):
     @staticproperty
     def streams(cls): return {
         'host'    : [ 'text', str, None ],
-        'stripe'  : [ 'int',  int, None ],
+        'port'    : [ 'int',  int, None ],
     }
 
     def __enter__(self):
@@ -459,18 +459,21 @@ class OAG_RootD(OAG_RootNode):
             raise OAError("[%s] is not configured to run on [%s]." % (self.daemonname, hostname))
 
         # Are there too many stripes?
+        allowed_stripes = stripe_info[0]['stripes']
         try:
             _d = self.__class__(hostname, 'by_host')
-            num_stripes = _d.size
+            occupied_ports = [dd.port for dd in _d]
         except OAGraphRetrieveError as e:
-            num_stripes = 0
-        if num_stripes>=stripe_info[0]['stripes']:
+            occupied_ports = []
+        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(allowed_stripes)]
+
+        if len(occupied_ports)==len(allowed_ports):
             raise OAError("All necessary stripes are already running")
 
         # set up and run this daemon
         self.host = hostname
-        self.stripe = num_stripes
+        self.port = list(set(allowed_ports)-set(occupied_ports))[0]
         with self as daemon:
             signal.signal(signal.SIGTERM, self.__exit__)
             signal.signal(signal.SIGINT, self.__exit__)
-            daemon.REST.start(port=daemoncfg['startport']+self.stripe)
+            daemon.REST.start(port=self.port)
