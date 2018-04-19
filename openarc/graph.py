@@ -432,9 +432,6 @@ class OAG_RootD(OAG_RootNode):
     }
 
     @staticproperty
-    def streamable(cls): return False
-
-    @staticproperty
     def streams(cls): return {
         'host'    : [ 'text', str, None ],
         'stripe'  : [ 'int',  int, None ],
