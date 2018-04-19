@@ -285,6 +285,7 @@ class OAG_RootNode(object):
                  exttxn=None,
                  logger=OALog(),
                  rpc=True,
+                 rpc_acl=ACL.LOCAL_ALL,
                  rest=False,
                  heartbeat=True):
 
@@ -311,7 +312,7 @@ class OAG_RootNode(object):
         self._cache_proxy    = CacheProxy(self)
 
         # All RPC operations
-        self._rpc_proxy      = RpcProxy(self, initurl=initurl, rpc_enabled=rpc, heartbeat_enabled=heartbeat)
+        self._rpc_proxy      = RpcProxy(self, initurl=initurl, rpc_enabled=rpc, rpc_acl_policy=rpc_acl, heartbeat_enabled=heartbeat)
 
         # All REST operations
         self._rest_proxy     = RestProxy(self, rest_enabled=rest)

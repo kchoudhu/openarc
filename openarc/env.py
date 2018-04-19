@@ -12,6 +12,12 @@ import traceback
 
 from openarc.exception import *
 
+class ACL(object):
+    # OAG can only be accessed from current process
+    LOCAL_ALL  = 1
+    # OAG is as open for business as your mom
+    REMOTE_ALL = 2
+
 class OAEnv(object):
 
     def __init__(self, on_demand_oags, cfgfile='openarc.toml'):

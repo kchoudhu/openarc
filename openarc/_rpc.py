@@ -82,8 +82,13 @@ class OAGRPC(object):
             }
 
             try:
-                if args[0]['authtoken'] != getenv().envid:
-                    raise OAError("Client unauthorized")
+                acl_policy = self._oag._rpc_proxy._rpc_acl_policy
+                if acl_policy == ACL.LOCAL_ALL:
+                    if args[0]['authtoken'] != getenv().envid:
+                        raise OAError("Client unauthorized")
+                elif acl_policy == ACL.REMOTE_ALL:
+                    pass
+
                 fn(self, ret, args[0]['args'])
             except OAError as e:
                 ret['status'] = 'FAIL'
@@ -255,7 +260,7 @@ class RpcTransaction(object):
 class RpcProxy(object):
     """Manipulates rpc functionality for OAG"""
 
-    def __init__(self, oag, initurl=None, rpc_enabled=True, heartbeat_enabled=True):
+    def __init__(self, oag, initurl=None, rpc_enabled=True, rpc_acl_policy=ACL.LOCAL_ALL, heartbeat_enabled=True):
 
         ### Store reference to OAG
         self._oag = oag
@@ -274,6 +279,9 @@ class RpcProxy(object):
 
         # A very basic question...
         self._rpc_enabled = rpc_enabled
+
+        # Who's allowed to access this node?
+        self._rpc_acl_policy = rpc_acl_policy
 
         # Serialize access to RPC
         self._rpcsem = BoundedSemaphore(1)
