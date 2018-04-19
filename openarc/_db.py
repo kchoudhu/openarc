@@ -12,7 +12,7 @@ class DbSchemaProxy(object):
         dbp = self._dbproxy
         oag = dbp._oag
 
-        if oag.streamable:
+        if not oag.streamable:
             return oag
 
         with OADao(oag.context, cdict=False) as dao:
