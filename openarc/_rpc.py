@@ -349,7 +349,7 @@ class RpcProxy(object):
         from .graph import OAG_RpcDiscoverable
         remote_oag =\
             OAG_RpcDiscoverable({
-                'rpcinfname' : self._oag.infname
+                'rpcinfname' : self._oag.infname_semantic
             }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
         return self._oag.__class__(initurl=remote_oag[0].url)
 
@@ -376,7 +376,7 @@ class RpcProxy(object):
             # Cleanup previous messes
             try:
                 currtime = OATime().now
-                prevrpcs = OAG_RpcDiscoverable(self._oag.infname, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
+                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
                 number_active = 0
                 for rpc in prevrpcs:
                     delta = currtime - rpc.heartbeat
@@ -407,7 +407,7 @@ class RpcProxy(object):
                                     rpc=False,
                                     heartbeat=self._rpc_heartbeat)\
                 .db.create({
-                    'rpcinfname' : self._oag.infname,
+                    'rpcinfname' : self._oag.infname_semantic,
                     'stripe'     : 0,
                     'url'        : self._oag.oagurl,
                     'type'       : self._oag.__class__.__name__,

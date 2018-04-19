@@ -1020,10 +1020,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         with a2:
             a2_remote =\
-                OAG_AutoNode2(initprms={
-                    'field4' :  1,
-                    'field5' : 'this is an autonode2'
-                }, logger=logger).rpc.discover()
+                OAG_AutoNode2(a2.id, logger=logger).rpc.discover()
 
             self.__check_autonode_equivalence(a2, a2_remote)
 
@@ -1031,7 +1028,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         with self.assertRaises(OAGraphRetrieveError):
             OAG_RpcDiscoverable({
-                'rpcinfname' : a2.infname
+                'rpcinfname' : a2.infname_semantic
             }, 'by_rpcinfname_idx', rpc=False)
 
     @unittest.skip("long running time")
@@ -1046,11 +1043,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         with a2:
             a2_dupe =\
-                OAG_AutoNode2(logger=logger, heartbeat=False)\
-                .db.create({
-                    'field4' :  1,
-                    'field5' : 'this is an autonode2'
-                })
+                OAG_AutoNode2(a2.id, logger=logger, heartbeat=False)
 
             # Attempt to immediately make duplicate oag discoverable
             with self.assertRaises(OAError):
@@ -1061,7 +1054,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             a2_dupe.rpc.discoverable = True
             rpcdisc =\
                 OAG_RpcDiscoverable({
-                    'rpcinfname' : a2_dupe.infname
+                    'rpcinfname' : a2_dupe.infname_semantic
                 }, 'by_rpcinfname_idx', rpc=False)
 
             # ...Previous rpcdisc has been evicted, new one available
