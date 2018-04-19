@@ -459,14 +459,12 @@ class OAG_RootD(OAG_RootNode):
             raise OAError("[%s] is not configured to run on [%s]." % (self.daemonname, hostname))
 
         # Are there too many stripes?
-        allowed_stripes = stripe_info[0]['stripes']
+        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(stripe_info[0]['stripes'])]
         try:
             _d = self.__class__(hostname, 'by_host')
             occupied_ports = [dd.port for dd in _d]
         except OAGraphRetrieveError as e:
             occupied_ports = []
-        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(allowed_stripes)]
-
         if len(occupied_ports)==len(allowed_ports):
             raise OAError("All necessary stripes are already running")
 
