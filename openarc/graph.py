@@ -136,6 +136,20 @@ class OAG_RootNode(object):
         return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
 
     @property
+    def infname_semantic(self):
+        if None in [self.db.searchidx, self.db.searchprms]:
+            raise OAError("Cannot calculate infname_semantic if search parameters are not initialized")
+
+        hashstr = str()
+        hashstr += self.context
+        hashstr += self.__class__.__name__
+        hashstr += self.db.searchidx
+        for searchprm in self.db.searchprms:
+            hashstr += str(searchprm)
+
+        return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
+
+    @property
     def logger(self): return self._logger
 
     def next(self):
