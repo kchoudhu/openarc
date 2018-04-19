@@ -5,6 +5,7 @@ monkey.patch_all()
 
 import hashlib
 import inspect
+import signal
 import socket
 import sys
 
@@ -442,9 +443,10 @@ class OAG_RootD(OAG_RootNode):
         self.db.create()
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, *args):
 
         self.db.delete()
+        sys.exit(0)
 
     def start(self):
 
@@ -469,4 +471,6 @@ class OAG_RootD(OAG_RootNode):
         self.host = hostname
         self.stripe = num_stripes
         with self as daemon:
+            signal.signal(signal.SIGTERM, self.__exit__)
+            signal.signal(signal.SIGINT, self.__exit__)
             daemon.REST.start(port=daemoncfg['startport']+self.stripe)
