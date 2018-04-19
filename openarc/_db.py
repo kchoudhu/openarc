@@ -12,6 +12,9 @@ class DbSchemaProxy(object):
         dbp = self._dbproxy
         oag = dbp._oag
 
+        if oag.streamable:
+            return oag
+
         with OADao(oag.context, cdict=False) as dao:
             with dao.cur as cur:
                 # Check that context schema exists

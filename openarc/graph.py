@@ -77,6 +77,9 @@ class OAG_RootNode(object):
     def restapi(cls): return []
 
     @staticproperty
+    def streamable(cls): return True
+
+    @staticproperty
     def streams(cls):
 
         raise NotImplementedError("Must be implemented in deriving OAGraph class")
@@ -427,6 +430,9 @@ class OAG_RootD(OAG_RootNode):
     def dbindices(cls): return {
         'host' : [ ['host'], False, None ]
     }
+
+    @staticproperty
+    def streamable(cls): return False
 
     @staticproperty
     def streams(cls): return {
