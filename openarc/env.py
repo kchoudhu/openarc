@@ -86,7 +86,7 @@ def initoags():
 p_refcount_env = 0
 p_env = None
 
-def initenv(on_demand_oags=False):
+def initenv(oag=None, on_demand_oags=False):
     """envstr: one of local, dev, qa, prod.
     Does not return OAEnv variable; for that, you
     must call getenv"""
@@ -100,6 +100,12 @@ def initenv(on_demand_oags=False):
         # Create all OAGs if on demand oag creation is turned off
         if not p_env.on_demand_oags:
             initoags()
+
+            # Force refresh of some class variables to ensure initoag
+            # didn't corrupt them
+            if oag:
+                setattr(oag.__class__, '_dbtable_name',      None)
+                setattr(oag.__class__, '_stream_db_mapping', None)
 
 def getenv():
     """Accessor method for global state"""

@@ -294,7 +294,7 @@ class OAG_RootNode(object):
                  heartbeat=True):
 
         # Initialize environment
-        initenv()
+        initenv(oag=self)
 
         # Alphabetize
         self._iteridx        = None
