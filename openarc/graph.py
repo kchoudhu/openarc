@@ -438,6 +438,9 @@ class OAG_RootD(OAG_RootNode):
         'port'    : [ 'int',  int, None ],
     }
 
+    @staticproperty
+    def streamable(cls): return False
+
     def __enter__(self):
 
         self.db.create()
