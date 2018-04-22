@@ -25,3 +25,8 @@ class OAGraphIntegrityError(Exception):
     def __init__(self, message):
         super(OAGraphIntegrityError, self).__init__(message)
         self.message = message
+
+class OADiscoveryError(Exception):
+    def __init__(self, message):
+        super(OADiscoveryError, self).__init__(message)
+        self.message = message

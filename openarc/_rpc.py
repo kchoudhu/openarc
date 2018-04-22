@@ -355,10 +355,17 @@ class RpcProxy(object):
 
     def discover(self):
         from .graph import OAG_RpcDiscoverable
-        remote_oag =\
-            OAG_RpcDiscoverable({
-                'rpcinfname' : self._oag.infname_semantic
-            }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+        try:
+            remote_oag =\
+                OAG_RpcDiscoverable({
+                    'rpcinfname' : self._oag.infname_semantic
+                }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+        except OAGraphRetrieveError:
+            raise OADiscoveryError("Nothing to discover yet")
+
+        if(OATime().now-remote_oag[0].heartbeat > datetime.timedelta(seconds=getenv().rpctimeout)):
+            raise OADiscoveryError("Stale discoverable detected")
+
         return self._oag.__class__(initurl=remote_oag[0].url)
 
     @property
