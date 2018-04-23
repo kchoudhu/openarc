@@ -185,6 +185,16 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag.rpc.stoplist]
 
+    @OAGRPC.rpcprocfn
+    def proc_update_broadcast(self, ret, args):
+        print('[%s:rtr] update broadcast signal received from %s' % (self._oag.rpc.router.id, args['addr']))
+        self._oag.db.search()
+
+        # Tell upstream
+        for addr, stream in self._oag.rpc.registrations.items():
+            OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
+
+
 rtrcls = OAGRPC_RTR_Requests
 
 class OAGRPC_REQ_Requests(OAGRPC):
@@ -235,6 +245,14 @@ class OAGRPC_REQ_Requests(OAGRPC):
             }
         }
 
+    @OAGRPC.rpcfn
+    def update_broadcast(self, *args, **kwargs):
+        return {
+            'args' : {
+                'addr'   : self._oag.rpc.router.addr
+            }
+        }
+
 reqcls = OAGRPC_REQ_Requests
 
 class RpcTransaction(object):
@@ -260,7 +278,13 @@ class RpcTransaction(object):
 class RpcProxy(object):
     """Manipulates rpc functionality for OAG"""
 
-    def __init__(self, oag, initurl=None, rpc_enabled=True, rpc_acl_policy=ACL.LOCAL_ALL, heartbeat_enabled=True):
+    def __init__(self,
+                 oag,
+                 initurl=None,
+                 rpc_enabled=True,
+                 rpc_acl_policy=ACL.LOCAL_ALL,
+                 rpc_dbupdate_listen=False,
+                 heartbeat_enabled=True):
 
         ### Store reference to OAG
         self._oag = oag
@@ -294,6 +318,9 @@ class RpcProxy(object):
 
         # Holding spot for RPC discoverability - default off
         self._rpc_discovery = None
+
+        # Listen for dbupdates elsewhere
+        self._rpc_dbupdate_listen = rpc_dbupdate_listen
 
         # Should you heartbeat?
         self._rpc_heartbeat = heartbeat_enabled
@@ -363,7 +390,7 @@ class RpcProxy(object):
         except OAGraphRetrieveError:
             raise OADiscoveryError("Nothing to discover yet")
 
-        if(OATime().now-remote_oag[0].heartbeat > datetime.timedelta(seconds=getenv().rpctimeout)):
+        if not remote_oag[0].is_valid:
             raise OADiscoveryError("Stale discoverable detected")
 
         return self._oag.__class__(initurl=remote_oag[0].url)
@@ -390,17 +417,15 @@ class RpcProxy(object):
         else:
             # Cleanup previous messes
             try:
-                currtime = OATime().now
-                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
                 number_active = 0
+                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
                 for rpc in prevrpcs:
-                    delta = currtime - rpc.heartbeat
-                    if delta < datetime.timedelta(seconds=getenv().rpctimeout):
+                    if rpc.is_valid:
                         number_active += 1
                     else:
                         if self._oag.logger.RPC:
-                            print("[%s] Removing stale discoverable [%s]-[%d], last HA at [%s], %s seconds ago"
-                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat, delta))
+                            print("[%s] Removing stale discoverable [%s]-[%d], last HA at [%s]"
+                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat))
                         rpc.db.delete()
 
                 # Is there already an active subscription there?
@@ -427,7 +452,8 @@ class RpcProxy(object):
                     'url'        : self._oag.oagurl,
                     'type'       : self._oag.__class__.__name__,
                     'envid'      : getenv().envid,
-                    'heartbeat'  : currtime
+                    'heartbeat'  : OATime().now,
+                    'listen'     : self._rpc_dbupdate_listen,
                 }).next()
 
             self._rpc_discovery.start_heartbeat()
@@ -563,11 +589,12 @@ class RpcProxy(object):
     def __cb_init(self):
 
         rpc_dispatch = {
-            'deregister'     : self._rpcrtr.proc_deregister,
-            'invalidate'     : self._rpcrtr.proc_invalidate,
-            'register'       : self._rpcrtr.proc_register,
-            'register_proxy' : self._rpcrtr.proc_register_proxy,
-            'getstream'      : self._rpcrtr.proc_getstream,
+            'deregister'       : self._rpcrtr.proc_deregister,
+            'getstream'        : self._rpcrtr.proc_getstream,
+            'invalidate'       : self._rpcrtr.proc_invalidate,
+            'register'         : self._rpcrtr.proc_register,
+            'register_proxy'   : self._rpcrtr.proc_register_proxy,
+            'update_broadcast' : self._rpcrtr.proc_update_broadcast,
         }
 
         if self._oag.logger.RPC:

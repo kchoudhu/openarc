@@ -169,7 +169,6 @@ class DbProxy(object):
     def __init__(self, oag, searchprms, searchidx, exttxn):
         from .graph import OAG_RootNode
 
-
         # Store reference to outer object
         self._oag = oag
 
@@ -238,24 +237,23 @@ class DbProxy(object):
 
         return self._oag
 
-    def delete(self):
+    def delete(self, broadcast=False):
 
         delete_sql = self.SQL['delete']['id']
 
         with self.transaction:
             self.SQLexec(delete_sql, [self._oag.id])
-
-            self.search(throw_on_empty=False)
+            self.search(throw_on_empty=False, broadcast=broadcast)
 
         if self._oag.is_unique:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
         return self
 
-    def search(self, throw_on_empty=True):
+    def search(self, throw_on_empty=True, broadcast=False):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
-        self.__refresh_from_cursor()
+        self.__refresh_from_cursor(broadcast=broadcast)
 
         # Is the new rdf empty?
         if throw_on_empty and len(self._oag.rdf._rdf) == 0:
@@ -277,7 +275,7 @@ class DbProxy(object):
     def searchprms(self):
         return self._searchprms
 
-    def update(self, updparms={}, norefresh=False):
+    def update(self, updparms={}, norefresh=False, broadcast=False):
 
         self._oag.propmgr._set_cframe_from_userprms(updparms)
 
@@ -294,7 +292,7 @@ class DbProxy(object):
         with self.transaction:
             self.SQLexec(update_sql, update_values)
             if not norefresh:
-                self.__refresh_from_cursor()
+                self.__refresh_from_cursor(broadcast=broadcast)
 
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
             self._oag[self._oag.rdf._rdf_window_index]
@@ -320,7 +318,7 @@ class DbProxy(object):
 
             self._searchprms = new_searchprms
 
-    def __refresh_from_cursor(self):
+    def __refresh_from_cursor(self, broadcast=False):
         try:
             # if type(self.SQL).__name__ == "str":
             #     self._oag.rdf._rdf = self.SQLexec(self.SQL, self._searchprms)
@@ -330,6 +328,21 @@ class DbProxy(object):
 
             for predicate in self._oag.rdf._rdf_filter_cache:
                 self._oag.rdf.filter(predicate, rerun=True)
+
+            if broadcast:
+                from .graph import OAG_RpcDiscoverable
+                remote_oags =\
+                    OAG_RpcDiscoverable({
+                        'rpcinfname' : self._oag.infname_semantic
+                    }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+
+                listeners = [r.url for r in remote_oags if (r.listen is True and r.is_valid)]
+
+                print('sending mesages to: %s' % listeners)
+                from openarc._rpc import OAGRPC_REQ_Requests
+                for listener in listeners:
+                    OAGRPC_REQ_Requests(self._oag).update_broadcast(listener)
+
         except psycopg2.ProgrammingError:
             raise OAGraphRetrieveError("Missing database table")
 

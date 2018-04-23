@@ -3,6 +3,7 @@
 from gevent import monkey, sleep, spawn
 monkey.patch_all()
 
+import datetime
 import hashlib
 import inspect
 import signal
@@ -290,6 +291,7 @@ class OAG_RootNode(object):
                  logger=OALog(),
                  rpc=True,
                  rpc_acl=ACL.LOCAL_ALL,
+                 rpc_dbupdate_listen=False,
                  rest=False,
                  heartbeat=True):
 
@@ -316,7 +318,12 @@ class OAG_RootNode(object):
         self._cache_proxy    = CacheProxy(self)
 
         # All RPC operations
-        self._rpc_proxy      = RpcProxy(self, initurl=initurl, rpc_enabled=rpc, rpc_acl_policy=rpc_acl, heartbeat_enabled=heartbeat)
+        self._rpc_proxy      = RpcProxy(self,
+                                        initurl=initurl,
+                                        rpc_enabled=rpc,
+                                        rpc_acl_policy=rpc_acl,
+                                        rpc_dbupdate_listen=rpc_dbupdate_listen,
+                                        heartbeat_enabled=heartbeat)
 
         # All REST operations
         self._rest_proxy     = RestProxy(self, rest_enabled=rest)
@@ -384,13 +391,18 @@ class OAG_RpcDiscoverable(OAG_RootNode):
 
     @staticproperty
     def streams(cls): return {
-        'rpcinfname' : [ 'text',      "", None ],
-        'stripe'     : [ 'int',       0 , None ],
-        'url'        : [ 'text',      "", None ],
-        'type'       : [ 'text',      "", None ],
-        'envid'      : [ 'text',      "", None ],
-        'heartbeat'  : [ 'timestamp', "", None ],
+        'envid'      : [ 'text',      "",   None ],
+        'heartbeat'  : [ 'timestamp', "",   None ],
+        'listen'     : [ 'boolean',   True, None ],
+        'rpcinfname' : [ 'text',      "",   None ],
+        'stripe'     : [ 'int',       0 ,   None ],
+        'type'       : [ 'text',      "",   None ],
+        'url'        : [ 'text',      "",   None ],
     }
+
+    @property
+    def is_valid(self):
+        return OATime().now-self.heartbeat < datetime.timedelta(seconds=getenv().rpctimeout)
 
     def __cb_heartbeat(self):
         while True:
