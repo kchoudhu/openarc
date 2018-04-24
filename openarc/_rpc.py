@@ -283,6 +283,7 @@ class RpcProxy(object):
                  initurl=None,
                  rpc_enabled=True,
                  rpc_acl_policy=ACL.LOCAL_ALL,
+                 rpc_async=True,
                  rpc_dbupdate_listen=False,
                  heartbeat_enabled=True):
 
@@ -315,6 +316,9 @@ class RpcProxy(object):
 
         # Registrations received from other OAGs
         self._rpcreqs = {}
+
+        # Async
+        self._rpc_async = rpc_async
 
         # Holding spot for RPC discoverability - default off
         self._rpc_discovery = None
@@ -364,13 +368,13 @@ class RpcProxy(object):
             with self._rpcsem:
                 self._rpcrtr = OAGRPC_RTR_Requests(self._oag)
                 self._rpcrtr.start()
-                self._glets.append(spawn(self.__cb_init))
+                if self._rpc_async:
+                    # Force execution of newly spawned greenlets
+                    self._glets.append(spawn(self.start))
+                    gevent.sleep(0)
 
-                # Force execution of newly spawned greenlets
-                gevent.sleep(0)
-
-                # Avoid double RPC initialization
-                self._rpc_init_done = True
+            # Avoid double RPC initialization
+            self._rpc_init_done = True
 
         # Proxying
         if self._proxy_url:
@@ -418,7 +422,7 @@ class RpcProxy(object):
             # Cleanup previous messes
             try:
                 number_active = 0
-                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, heartbeat=False)
+                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, rpc=False, heartbeat=False)
                 for rpc in prevrpcs:
                     if rpc.is_valid:
                         number_active += 1
@@ -521,6 +525,10 @@ class RpcProxy(object):
                         reqcls(self._oag).invalidate(addr, stream_to_invalidate)
 
     @property
+    def is_async(self):
+        return self._rpc_async
+
+    @property
     def is_init(self):
 
         return getattr(self, '_rpc_init_done', False)
@@ -577,16 +585,7 @@ class RpcProxy(object):
     def registration_invalidate(self, deregistering_oag_addr):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
 
-    @property
-    def stoplist(self):
-        return self._rpc_stop_list
-
-    @property
-    def transaction(self):
-        return self._rpc_transaction
-
-    #### Callbacks
-    def __cb_init(self):
+    def start(self):
 
         rpc_dispatch = {
             'deregister'       : self._rpcrtr.proc_deregister,
@@ -602,8 +601,19 @@ class RpcProxy(object):
 
         while True:
             (sender, payload) = self._rpcrtr._recv()
-
             self._rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
+            if not self.is_async and self.is_proxy:
+                reqcls(self._oag).deregister(self.proxied_url, 'proxy')
+                break
+
+    @property
+    def stoplist(self):
+        return self._rpc_stop_list
+
+    @property
+    def transaction(self):
+        return self._rpc_transaction
+
 
 class RestProxy(object):
     def __init__(self, oag, rest_enabled):

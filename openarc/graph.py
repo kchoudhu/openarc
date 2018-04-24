@@ -282,18 +282,22 @@ class OAG_RootNode(object):
 
         return self
 
-    def __init__(self,
+    def __init__(
+                 self,
+                 # Implied positional args
                  searchprms=[],
                  searchidx='id',
+                 # Actual Named args
+                 exttxn=None,
+                 heartbeat=True,
                  initprms={},
                  initurl=None,
-                 exttxn=None,
                  logger=OALog(),
+                 rest=False,
                  rpc=True,
                  rpc_acl=ACL.LOCAL_ALL,
-                 rpc_dbupdate_listen=False,
-                 rest=False,
-                 heartbeat=True):
+                 rpc_async=True,
+                 rpc_dbupdate_listen=False):
 
         # Initialize environment
         initenv(oag=self)
@@ -322,6 +326,7 @@ class OAG_RootNode(object):
                                         initurl=initurl,
                                         rpc_enabled=rpc,
                                         rpc_acl_policy=rpc_acl,
+                                        rpc_async=rpc_async,
                                         rpc_dbupdate_listen=rpc_dbupdate_listen,
                                         heartbeat_enabled=heartbeat)
 
@@ -339,6 +344,8 @@ class OAG_RootNode(object):
             self._rpc_proxy.register_with_surrounding_nodes()
         else:
             self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
+            if not self._rpc_proxy.is_async:
+                self.rpc.start()
 
     def __iter__(self):
         if self.is_unique:
@@ -408,7 +415,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
         while True:
             # Did our underlying db control row evaporate? If so, holy shit.
             try:
-                rpcdisc = OAG_RpcDiscoverable([self.id])[0]
+                rpcdisc = OAG_RpcDiscoverable([self.id], rpc=False)[0]
             except OAGraphRetrieveError as e:
                 if self.logger.RPC:
                     print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting" % (self.id, self.rpcinfname, self.stripe))
