@@ -76,7 +76,7 @@ class OAG_RootNode(object):
     def is_unique(cls): return False
 
     @staticproperty
-    def restapi(cls): return []
+    def restapi(cls): return {}
 
     @staticproperty
     def streamable(cls): return True

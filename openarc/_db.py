@@ -438,6 +438,14 @@ class DbProxy(object):
                 where_clauses.append("{0}=%s".format(self._oag.stream_db_mapping[f] if self._oag.is_oagnode(f) else f))
             default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
 
+        # Add in "all" search
+        all_sql = td("""
+                  SELECT *
+                    FROM {0}.{1}
+                   WHERE 1=1
+                ORDER BY {2}""")
+        default_sql['read']['by_all'] = all_sql.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
+
         # Add in user defined SQL
         for action, sqlinfo in self._oag.dblocalsql.items():
             for index, sql in sqlinfo.items():

@@ -11,6 +11,8 @@ import datetime
 import gevent
 import msgpack
 import os
+import requests
+import secrets
 import socket
 
 from ._util            import oagprop
@@ -629,6 +631,31 @@ class RestProxy(object):
         self._rest_enabled = rest_enabled
 
         self._rest_addr = None
+
+        # Generate wrapper around REST API
+        from types import MethodType
+        for endpoint, details in self._oag.restapi.items():
+            def apifn(self, prms):
+
+                # Figure out load balanced url to call
+                all_stripes = self._oag.__class__('all', searchidx='by_all')
+                if all_stripes.size == 0:
+                    return {}
+                all_urls = ["http://%s:%s%s"% (stripe.host, stripe.port, endpoint) for stripe in all_stripes ]
+                url = secrets.choice(all_urls)
+
+                # Build request
+                dispatch = {
+                    'GET'  : requests.get,
+                    'POST' : requests.post
+                }
+
+                # Execute request
+                return dispatch[details[1][0]](url, prms)
+
+            apifn_name = endpoint[1:].replace('/', '_')
+            apifn.__name__ = apifn_name
+            setattr(self, apifn_name, MethodType(apifn, self))
 
     @property
     def addr(self):
