@@ -11,7 +11,6 @@ import datetime
 import gevent
 import msgpack
 import os
-import requests
 import secrets
 import socket
 
@@ -189,10 +188,13 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
     @OAGRPC.rpcprocfn
     def proc_update_broadcast(self, ret, args):
-        print('[%s:rtr] update broadcast signal received from %s' % (self._oag.rpc.router.id, args['addr']))
+        if self._oag.logger.RPC:
+            print('[%s:rtr] update broadcast signal received from %s' % (self._oag.rpc.router.id, args['addr']))
         self._oag.db.search()
 
         # Tell upstream
+        if self._oag.logger.RPC:
+            print('[%s:rtr] sending updates to %s' % (self._oag.rpc.router.id, self._oag.rpc.registrations))
         for addr, stream in self._oag.rpc.registrations.items():
             OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
 
@@ -399,7 +401,7 @@ class RpcProxy(object):
         if not remote_oag[0].is_valid:
             raise OADiscoveryError("Stale discoverable detected")
 
-        return self._oag.__class__(initurl=remote_oag[0].url)
+        return self._oag.__class__(initurl=remote_oag[0].url, rpc_acl=self._rpc_acl_policy)
 
     @property
     def discoverable(self): return self._rpc_discovery is not None
@@ -633,6 +635,7 @@ class RestProxy(object):
         self._rest_addr = None
 
         # Generate wrapper around REST API
+        import requests
         from types import MethodType
         for endpoint, details in self._oag.restapi.items():
             def apifn(self, prms):
