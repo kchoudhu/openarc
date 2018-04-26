@@ -638,7 +638,7 @@ class RestProxy(object):
         import requests
         from types import MethodType
         for endpoint, details in self._oag.restapi.items():
-            def apifn(self, prms):
+            def apifn(self, prms, endpoint=endpoint, details=details):
 
                 # Figure out load balanced url to call
                 all_stripes = self._oag.__class__('all', searchidx='by_all')
