@@ -128,72 +128,56 @@ class PropProxy(object):
         # Mutuable pointer to a row in OAG's RDF
         self._cframe        = {}
 
-        # Other convenience functions
-        self.cls            = self._oag.__class__
-        self.cls.current_id = getattr(self.cls, 'current_id', str())
-        self.oagid          = self._oag.oagid
+        # Used to store properties for __getattribute__ calls
+        self._oagprops      = {}
 
-        oagprofiles = getattr(self.cls, 'oagprofiles', collections.OrderedDict())
-        try:
-            profile = oagprofiles[self.oagid]
-        except KeyError:
-            oagprofiles[self.oagid] = collections.OrderedDict()
+    def add(self, stream, oagprop, fk=False):
+        if fk or self.is_managed_oagprop(stream):
+            self._oagprops[stream] = oagprop
+        else:
+            raise OAGraphIntegrityError("This [%s] is not a managed oagprop" % stream)
 
-        setattr(self.cls, 'oagprofiles', oagprofiles)
-        self.profile_set(self.oagid)
-
-    def add_oagprop(self, stream, oagprop):
-        self.profile_set(self.oagid)
-        setattr(self.cls, stream, oagprop)
-        self.cls.oagprofiles[self.oagid][stream] = oagprop
-
-    def clear_all(self):
-        for stream in self._oag.streams:
-            if self._oag.is_oagnode(stream):
-                setattr(self._oag.__class__, stream, None)
-            else:
-                setattr(self._oag, stream, None)
+    def clear(self):
+        for stream in self._oagprops:
+            self._oagprops[stream] = None
 
     def clone(self, src):
-
         self._cframe = dict(src.propmgr._cframe)
 
-    def profile_deregister(self, obj):
-        del(self.cls.oagprofiles[obj.oagid])
-        self.cls.current_id = str()
+    def get(self, stream):
+        try:
+            if self.is_managed_oagprop(stream):
+                # Set default value on class
+                try:
+                    attr = object.__getattribute__(self._oag, stream)
+                except AttributeError:
+                    setattr(self._oag.__class__, stream, None)
 
-    def profile_set(self, obj_id):
-        if obj_id == self.cls.current_id:
-            # redundant call, don't do anything
-            return
-        else:
-            # change detected, store and blank old oagprops, hydrate set new current_id
-            try:
-                current_profile = self.cls.oagprofiles[self.cls.current_id]
-                for stream, streaminfo in current_profile.items():
-                    current_profile[stream] = getattr(self.cls, stream, None)
-                    delattr(self.cls, stream)
-            except KeyError as e:
-                pass
+                # Return it
+                if type(self._oagprops[stream])==oagprop:
+                    return self._oagprops[stream].__get__(self._oag)
+                else:
+                    return self._oagprops[stream]
+            else:
+                raise AttributeError("This attribute is not managed by the propmanager")
+        except KeyError as e:
+            raise AttributeError("Cannot find attribute [%s] in propmanager" % stream)
 
-            try:
-                new_profile = self.cls.oagprofiles[obj_id]
-                for stream, streaminfo in new_profile.items():
-                    setattr(self.cls, stream, streaminfo)
-            except KeyError as e:
-                print(e.message)
-                print("This should never, ever happen")
-
-            # Set up next invocation
-            setattr(self.cls, 'current_id', obj_id)
+    def is_managed_oagprop(self, stream):
+        """Takes requested attribute and returns True or false"""
+        allowed_streams = list(set(
+            [object.__getattribute__(self._oag, 'dbpkname')] +\
+            list(object.__getattribute__(self._oag, 'streams').keys()) +\
+            list(self._oagprops.keys())
+        ))
+        return stream in allowed_streams
 
     def _set_attrs_from_cframe(self):
         from .graph import OAG_RootNode
 
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
-            for stream in self._oag.streams:
-                setattr(self._oag, stream, None)
+            self.clear()
             return
 
         # Set dbstream attributes
@@ -213,7 +197,7 @@ class PropProxy(object):
                              logger=self._oag.logger):
                         return cls(searchprms, searchidx, logger=self._oag.logger)
                     fget.__name__ = stream
-                    self.add_oagprop(stream, oagprop(fget))
+                    self.add(stream, oagprop(fget), fk=True)
 
     def _set_attrs_from_cframe_uniq(self):
         if len(self._oag.rdf._rdf_window) > 1:
@@ -336,13 +320,13 @@ class PropProxy(object):
                 self._oag.cache.put(stream, currattr)
 
             # oagprop: actually set it
-            def oagpropfn(obj,
-                          stream=stream,
-                          streaminfo=self._oag.streams[stream],
-                          searchprms=[cfval],
-                          searchidx=searchidx,
-                          logger=self._oag.logger,
-                          currattr=currattr):
+            def fget(obj,
+                     stream=stream,
+                     streaminfo=self._oag.streams[stream],
+                     searchprms=[cfval],
+                     searchidx=searchidx,
+                     logger=self._oag.logger,
+                     currattr=currattr):
                 # Do not instantiate objects unnecessarily
                 if currattr:
                     try:
@@ -360,8 +344,9 @@ class PropProxy(object):
                     if not newattr.is_unique:
                         newattr = newattr[-1]
                     return newattr
-            oagpropfn.__name__ = stream
-
-            self.add_oagprop(stream, oagprop(oagpropfn))
+                newattr = streaminfo[0](searchprms, searchidx, logger=logger)
+                return newattr
+            fget.__name__ = stream
+            self.add(stream, oagprop(fget))
         else:
             setattr(self._oag, stream, cfval)

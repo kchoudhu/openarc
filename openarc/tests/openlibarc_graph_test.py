@@ -324,7 +324,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_autonode_create_nested(self):
         (a1, a2, a3) = self.__generate_autonode_system()
-        a1_chk = OAG_AutoNode1a((a1[0].id,))
+        a1_chk = OAG_AutoNode1a(a1[0].id)
         self.__check_autonode_equivalence(next(a1), next(a1_chk))
 
     def test_autonode_create_with_properties(self):
@@ -715,7 +715,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'field3'   : 2,
                 'subnode1' : a2,
                 'subnode2' : a3a
-            }).next()
+            })
 
         a1a_proxy = OAG_AutoNode1a(initurl=a1a.oagurl, logger=logger)
 
@@ -1474,7 +1474,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
             self.assertEqual(a1s[i].subnode2, a3)
 
         for a1 in a1s:
-            self.assertTrue(a1.oagid in OAG_AutoNode1a.oagprofiles.keys())
             self.assertEqual(a1[0].subnode1, a2)
             self.assertEqual(a1[0].subnode2, a3)
 

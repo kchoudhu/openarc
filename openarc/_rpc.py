@@ -13,6 +13,7 @@ import msgpack
 import os
 import secrets
 import socket
+import types
 
 from ._util            import oagprop
 
@@ -182,7 +183,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         rawprops = list(self._oag.streams.keys())\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
                    + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
-                   + getattr(self._oag.__class__, 'oagproplist', [])
+                   + list(self._oag.propmgr._oagprops.keys())
 
         ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag.rpc.stoplist]
 
@@ -439,8 +440,8 @@ class RpcProxy(object):
                 # Is there already an active subscription there?
                 if number_active > 0:
                     if not self.fanout:
-                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s], %s seconds ago"\
-                                   % (self.router.id, rpc.rpcinfname, rpc.heartbeat, delta)
+                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s]"\
+                                   % (self.router.id, rpc.rpcinfname, rpc.heartbeat)
                         if self._oag.logger.RPC:
                             print(message)
                         raise OAError(message)
@@ -636,7 +637,6 @@ class RestProxy(object):
 
         # Generate wrapper around REST API
         import requests
-        from types import MethodType
         for endpoint, details in self._oag.restapi.items():
             def apifn(self, prms, endpoint=endpoint, details=details):
 
@@ -658,7 +658,7 @@ class RestProxy(object):
 
             apifn_name = endpoint[1:].replace('/', '_')
             apifn.__name__ = apifn_name
-            setattr(self, apifn_name, MethodType(apifn, self))
+            setattr(self, apifn_name, types.MethodType(apifn, self))
 
     @property
     def addr(self):

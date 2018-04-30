@@ -102,10 +102,13 @@ class OAG_RootNode(object):
 
     @classmethod
     def is_oagnode(cls, stream):
-        streaminfo = cls.streams[stream][0]
-        if type(streaminfo).__name__=='type':
-            return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
-        else:
+        try:
+            streaminfo = cls.streams[stream][0]
+            if type(streaminfo).__name__=='type':
+                return 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(streaminfo)]
+            else:
+                return False
+        except KeyError:
             return False
 
     @staticproperty
@@ -163,8 +166,8 @@ class OAG_RootNode(object):
         else:
             if self._iteridx < self.size:
 
-                # Clear all properties (use class clear for oagprops)
-                self.propmgr.clear_all()
+                # Clear propcache
+                self.propmgr.clear()
 
                 # Clear oagcache
                 self.cache.clear()
@@ -217,15 +220,6 @@ class OAG_RootNode(object):
     ##### Stream attributes
 
     ##### Internals
-    def __del__(self):
-        try:
-            self._prop_proxy.profile_deregister(self)
-        except Exception as e:
-            print(e.message)
-            print("This should never happen")
-            import traceback
-            traceback.print_exc()
-
     def __enter__(self):
         self.rpc.discoverable = True
         return self
@@ -235,6 +229,13 @@ class OAG_RootNode(object):
         self.rpc.discoverable = False
 
     def __getattribute__(self, attr):
+        """Cascade through the following lookups:
+
+        1. Attempt to retrieve via RPC if applicable.
+        2. Attempt a lookup via the propmgr.
+        3. Attempt a regular attribute lookup.
+
+        Failure at each step is denoted by the generation of an AttributeError"""
         try:
             logger  = object.__getattribute__(self, '_logger')
             rpc     = object.__getattribute__(self, '_rpc_proxy')
@@ -257,9 +258,8 @@ class OAG_RootNode(object):
 
         try:
             propmgr = object.__getattribute__(self, '_prop_proxy')
-            oagid   = object.__getattribute__(self, '_oagid')
-            propmgr.profile_set(oagid)
-        except AttributeError:
+            return propmgr.get(attr)
+        except AttributeError as e:
             pass
 
         return object.__getattribute__(self, attr)
@@ -334,7 +334,6 @@ class OAG_RootNode(object):
         self._rest_proxy     = RestProxy(self, rest_enabled=rest)
 
         if not self._rpc_proxy.is_proxy:
-            self._prop_proxy.profile_set(self.oagid)
             self._prop_proxy._set_cframe_from_userprms(initprms, force_attr_refresh=True)
             if self.db.searchprms:
                 self.db.search()
@@ -361,26 +360,30 @@ class OAG_RootNode(object):
 
     def __setattr__(self, attr, newval):
 
-        # Get RPC proyx
-        rpc = getattr(self, '_rpc_proxy', None)
-
         # Setting values on a proxy OAG is nonsensical
+        rpc = getattr(self, '_rpc_proxy', None)
         if rpc\
             and rpc.is_proxy\
             and attr in rpc.proxied_oags:
             raise OAError("Cannot set value on a proxy OAG")
 
-        # Stash existing value
+        # Stash existing value, set new value, distribute notifications
         currval = getattr(self, attr, None)
 
-        # Set new value
-        super(OAG_RootNode, self).__setattr__(attr, newval)
+        try:
+            propmgr = getattr(self, '_prop_proxy', None)
+            if propmgr:
+                propmgr.add(attr, newval)
+                if rpc\
+                    and rpc.is_init is True\
+                    and attr not in rpc.stoplist:
+                    rpc.distribute_stream_change(attr, currval, newval)
+            else:
+                raise OAGraphIntegrityError("Use direct attribute set")
+        except OAGraphIntegrityError:
+            super(OAG_RootNode, self).__setattr__(attr, newval)
 
-        # Tell the world
-        if rpc\
-            and rpc.is_init is True\
-            and attr not in rpc.stoplist:
-            rpc.distribute_stream_change(attr, currval, newval)
+
 
 class OAG_RpcDiscoverable(OAG_RootNode):
     @property
