@@ -99,13 +99,14 @@ def initenv(oag=None, on_demand_oags=False):
 
         # Create all OAGs if on demand oag creation is turned off
         if not p_env.on_demand_oags:
-            initoags()
 
-            # Force refresh of some class variables to ensure initoag
-            # didn't corrupt them
+            # Force refresh of some class variables to ensure previous
+            # runs of initoag didn't leave them corrupted
             if oag:
                 setattr(oag.__class__, '_dbtable_name',      None)
                 setattr(oag.__class__, '_stream_db_mapping', None)
+
+            initoags()
 
 def getenv():
     """Accessor method for global state"""

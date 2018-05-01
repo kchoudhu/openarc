@@ -13,6 +13,8 @@ class DbSchemaProxy(object):
         oag = dbp._oag
 
         if not oag.streamable:
+            if oag.logger.SQL:
+                print("[%s] is not streamable, not creating" % oag.dbtable)
             return oag
 
         with OADao(oag.context, cdict=False) as dao:
