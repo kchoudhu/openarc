@@ -221,9 +221,6 @@ class PropProxy(object):
             invalid_streams = []
             processed_streams = {}
 
-            for oagkey in self._oag.streams:
-                setattr(self._oag, oagkey, None)
-
             if len(userprms)>0:
                 invalid_streams = [ s for s in userprms if s not in self._oag.streams.keys() ]
                 if len(invalid_streams)>0:
@@ -287,7 +284,7 @@ class PropProxy(object):
                     if self._oag.streams[rms][1] is not None:
                         missing_streams.append(rms)
             if len(missing_streams)>0:
-                raise OAGraphIntegrityError("Missing streams detected %s" % missing_streams)
+                raise OAGraphIntegrityError("Missing streams detected on [%s]: %s" % (self._oag.dbtable, missing_streams))
 
         self._cframe = cframe_tmp
 
