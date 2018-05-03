@@ -59,6 +59,9 @@ class OALog(object):
             print(logstr)
 
 def initoags():
+
+    create_index = {}
+
     modules = sorted(sys.modules)
     for module in modules:
         fns = inspect.getmembers(sys.modules[module], inspect.isclass)
@@ -66,18 +69,18 @@ def initoags():
         # If classes are OAG_RootNodes, create their tables in the database
         for fn in fns:
             if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
-                try:
-                    fn[1]().db.schema.init()
-                except OAError:
-                    pass
+                if fn[1].__name__ not in create_index:
+                    try:
+                        create_index[fn[1].__name__] = fn[1]().db.schema.init()
+                    except OAError:
+                        pass
 
-        # Once all tables are materialized, we need to create foreign key relationships
-        for fn in fns:
-            if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
-                try:
-                    fn[1]().db.schema.init_fkeys()
-                except OAError:
-                    pass
+    # Once all tables are materialized, we need to create foreign key relationships
+    for fn in create_index:
+        try:
+            create_index[fn].db.schema.init_fkeys()
+        except OAError:
+            pass
 
 #This is where we hold library state.
 #You will get cut if you don't manipulate the p_* variables
