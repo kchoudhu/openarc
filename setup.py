@@ -20,6 +20,7 @@ setup(name='openarc',
           'inflection',
           'msgpack-python',
           'psycopg2',
+          'requests',
           'toml',
           'zmq'
       ],
