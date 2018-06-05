@@ -14,6 +14,7 @@ import os
 import secrets
 import socket
 import types
+import weakref
 
 from ._util            import oagprop
 
@@ -106,8 +107,12 @@ class OAGRPC(object):
     def __init__(self, zmqtype, oag):
         self.zmqtype  = zmqtype
         self._ctxsoc  = _zmqctx.socket(zmqtype)
-        self._oag     = oag
+        self._oag     = weakref.ref(oag)
         self._hash    = base64.b16encode(os.urandom(5))
+
+    def __getattribute__(self, attrname):
+        attr = object.__getattribute__(self, attrname)
+        return attr() if type(attr)==weakref.ref else attr
 
 class OAGRPC_RTR_Requests(OAGRPC):
     """Process all RPC calls from other OAGRPC_REQ_Requests"""
@@ -293,7 +298,7 @@ class RpcProxy(object):
                  heartbeat_enabled=True):
 
         ### Store reference to OAG
-        self._oag = oag
+        self._oag = weakref.ref(oag)
 
         # Greenlets spawned by RPC
         self._glets = []
@@ -375,7 +380,9 @@ class RpcProxy(object):
                 self._rpcrtr.start()
                 if self._rpc_async:
                     # Force execution of newly spawned greenlets
-                    self._glets.append(spawn(self.start))
+                    g = spawn(self.start)
+                    g.name = "%s/%s" % (str(self._rpcrtr.id), self._oag)
+                    self._glets.append(g)
                     gevent.sleep(0)
 
             # Avoid double RPC initialization
@@ -384,6 +391,10 @@ class RpcProxy(object):
         # Proxying
         if self._proxy_url:
             self._proxy_mode = True
+
+    def __getattribute__(self, attrname):
+        attr = object.__getattribute__(self, attrname)
+        return attr() if type(attr)==weakref.ref else attr
 
     def clone(self, src):
 
@@ -534,6 +545,10 @@ class RpcProxy(object):
         return self._rpc_async
 
     @property
+    def is_enabled(self):
+        return self._rpc_enabled
+
+    @property
     def is_init(self):
 
         return getattr(self, '_rpc_init_done', False)
@@ -586,9 +601,11 @@ class RpcProxy(object):
 
     def registration_add(self, registering_oag_addr, registering_stream):
         self._rpcreqs[registering_oag_addr] = registering_stream
+        getkeepalive().put(self._oag)
 
     def registration_invalidate(self, deregistering_oag_addr):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
+        getkeepalive().rm(self)
 
     def start(self):
 

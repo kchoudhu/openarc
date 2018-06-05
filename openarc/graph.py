@@ -94,10 +94,9 @@ class OAG_RootNode(object):
     def dbtable(cls):
         if not getattr(cls, '_dbtable_name', None):
             db_table_name = inflection.underscore(cls.__name__)[4:]
-            reverse_class_name = "OAG_"+inflection.camelize(db_table_name)
-            if reverse_class_name != cls.__name__:
-                raise OAError("This table name isn't reversible: [%s]->[%s]->[%s]" % (cls.__name__, db_table_name, reverse_class_name))
             setattr(cls, '_dbtable_name', db_table_name)
+            if not cls.is_reversible:
+                raise OAError("This table name isn't reversible: [%s]" % cls.__name__)
         return cls._dbtable_name
 
     @classmethod
@@ -110,6 +109,13 @@ class OAG_RootNode(object):
                 return False
         except KeyError:
             return False
+
+    @staticproperty
+    def is_reversible(cls):
+        if not getattr(cls, '_is_reversible', None):
+            reverse_class_name = "OAG_"+inflection.camelize(cls._dbtable_name)
+            setattr(cls, '_is_reversible', (reverse_class_name == cls.__name__))
+        return cls._is_reversible
 
     @staticproperty
     def stream_db_mapping(cls):
@@ -220,6 +226,19 @@ class OAG_RootNode(object):
     ##### Stream attributes
 
     ##### Internals
+    def __del__(self):
+
+        # If the table isn't reversible, OAG would never have been created
+        if not self.is_reversible:
+            return
+
+
+        if self.rpc.is_enabled:
+            # Tell subnodes we are going away
+            for stream, oag in self.cache.state.items():
+                if self.is_oagnode(stream):
+                    getkeepalive().rm(oag)
+
     def __enter__(self):
         self.rpc.discoverable = True
         return self
@@ -382,8 +401,6 @@ class OAG_RootNode(object):
                 raise OAGraphIntegrityError("Use direct attribute set")
         except OAGraphIntegrityError:
             super(OAG_RootNode, self).__setattr__(attr, newval)
-
-
 
 class OAG_RpcDiscoverable(OAG_RootNode):
     @property

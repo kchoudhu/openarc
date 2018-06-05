@@ -2,6 +2,7 @@
 
 import collections
 import inflection
+import weakref
 
 from ._util import oagprop
 
@@ -22,7 +23,7 @@ class CacheProxy(object):
         self._oagcache   = list(src.oagache._oagcache)
 
     def invalidate(self, invstream):
-        # - filter out all non-dbstream items: calcs can no longer be trusted as node as been invalidated
+        # - filter out calcs: they can no longer be trusted as node as been invalidated
         tmpoagcache = {oag:self._oagcache[oag] for oag in self._oagcache if oag in self._oag.streams.keys()}
         # - filter out invalidated downstream node
         tmpoagcache = {oag:tmpoagcache[oag] for oag in tmpoagcache if oag != invstream}
