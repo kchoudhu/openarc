@@ -192,9 +192,6 @@ class OAG_RootNode(object):
                 raise StopIteration()
 
     @property
-    def oagid(self): return self._oagid
-
-    @property
     def oagurl(self): return self.rpc.router.addr
 
     def clone(self):
@@ -324,7 +321,6 @@ class OAG_RootNode(object):
         # Alphabetize
         self._iteridx        = None
         self._logger         = logger
-        self._oagid          = hashlib.sha256(str(self).encode("utf-8")).hexdigest()
 
         #### Set up proxies
 
