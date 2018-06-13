@@ -5,6 +5,8 @@ monkey.patch_all()
 
 import atexit
 import base64
+import gevent
+import gevent.queue
 import inspect
 import os
 import sys
@@ -69,7 +71,11 @@ p_keepalive = None
 class OAKeepAlive(object):
 
     def __init__(self):
+        # Maintain references to OAGs in order to prevent GC
         self._keepalive = {}
+
+        # Queue delayed deregistration messages to other nodes
+        self._deferred_rm_queue = gevent.queue.Queue()
 
     def put(self, obj):
         try:
@@ -77,13 +83,29 @@ class OAKeepAlive(object):
         except KeyError:
             self._keepalive[obj] = 1
 
-    def rm(self, obj):
-        try:
-            self._keepalive[obj] -= 1
-            if self._keepalive[obj] == 0:
-                del(self._keepalive[obj])
-        except KeyError:
-            OAError("I don't think this should ever happen")
+    def rm(self, removee, notifyee=None, stream=None):
+        from openarc.graph import OAG_RootNode
+        if isinstance(removee, OAG_RootNode):
+            # We have been passed an OAG for direct removal
+            try:
+                self._keepalive[removee] -= 1
+                if self._keepalive[removee] == 0:
+                    del(self._keepalive[removee])
+            except KeyError:
+                OAError("I don't think this should ever happen")
+        else:
+            # We have been passed a URL for deferred removal
+            self._deferred_rm_queue.put((removee, notifyee, stream))
+
+    @property
+    def rm_queue(self):
+
+        return self._deferred_rm_queue
+
+    @property
+    def rm_queue_size(self):
+
+        return self._deferred_rm_queue.qsize()
 
     @property
     def state(self):
@@ -96,10 +118,8 @@ def getkeepalive():
 
 @atexit.register
 def goodbye_world():
-    # import objgraph
-    # obj = objgraph.by_type('OAG_AutoNode1a')[0]
-    # objgraph.show_backrefs([obj], filename='anode2.png', max_depth=100)
-    pass
+
+    global p_keepalive
 
 # Environment initialization
 #

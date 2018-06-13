@@ -229,12 +229,41 @@ class OAG_RootNode(object):
         if not self.is_reversible:
             return
 
+        if self.logger.GC:
+            print("GC=========>")
+            print("Deleting %s %s, %s, proxy: %s" % (self,
+                                                     self.rpc.router.id if self.rpc.is_enabled else str(),
+                                                     self.rpc.router.addr if self.rpc.is_enabled else str(),
+                                                     self.rpc.is_proxy))
 
         if self.rpc.is_enabled:
+
+            # Tell upstream proxies that we are going away
+            if self.logger.GC:
+                print("Delete: proxies")
+            if self.rpc.is_proxy:
+                if self.logger.GC:
+                    print("--> %s" % self.rpc.proxied_url)
+                getkeepalive().rm(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
+
+            # Tell upstream registrations that we are going away
+            if self.logger.GC:
+                print("Delete: registrations")
+                print("--> %s" % self.rpc.registrations)
+
             # Tell subnodes we are going away
             for stream, oag in self.cache.state.items():
                 if self.is_oagnode(stream):
                     getkeepalive().rm(oag)
+
+            if self.logger.GC:
+                print("Delete: queue size")
+                print("--> %d" % getkeepalive().rm_queue_size)
+
+            # print("Delete: stop router")
+            # self.rpc._glets[0].kill()
+            if self.logger.GC:
+                print("<=========GC")
 
     def __enter__(self):
         self.rpc.discoverable = True
@@ -360,6 +389,9 @@ class OAG_RootNode(object):
             self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
             if not self._rpc_proxy.is_async:
                 self.rpc.start()
+
+        if self.logger.GC:
+            print("Creating %s, %s" % (self, self.rpc.router.id if self.rpc.is_enabled else str()))
 
     def __iter__(self):
         if self.is_unique:

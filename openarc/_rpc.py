@@ -35,7 +35,19 @@ class OAGRPC(object):
 
     @staticmethod
     def rpcfn(fn):
-        def wrapfn(self, target, *args, **kwargs):
+        def wrapfn(self, target, *args, gc_run=True, **kwargs):
+
+            # Let's take a moment to process all garbage collected items
+            if gc_run:
+                try:
+                    while True:
+                        (removee, notifyee, stream) = getkeepalive().rm_queue.get_nowait()
+                        reqcls(self._oag).deregister(notifyee, removee, stream, gc_run=False)
+                except gevent.queue.Empty:
+                    # Nothing to be GC'd right now
+                    pass
+
+            # Back to business
             if isinstance(target, OAGRPC):
                 addr = target.addr
             else:
@@ -44,11 +56,14 @@ class OAGRPC(object):
             self._ctxsoc.connect(addr)
 
             payload = fn(self, args, kwargs)
-            payload['action']    = fn.__name__
+            payload['action'] = fn.__name__
 
             # This should eventually derive from the Auth mgmt object
             # used to initialize the OAGRPC
             payload['authtoken'] = getenv().envid
+
+            # An identifier for this conversation
+            payload['conv_id'] = base64.b16encode(os.urandom(5))
 
             if self._oag.logger.RPC:
                 print("========>")
@@ -56,22 +71,29 @@ class OAGRPC(object):
                     toaddr = addr
                 else:
                     toaddr = target.id
-                print("[%s:req] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload, toaddr))
+                print("[%s:req:%s] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload['conv_id'], payload, toaddr))
 
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
             rpcret = msgpack.loads(reply, raw=False)
+
             if self._oag.logger.RPC:
-                print("[%s:req] Received reply [%s]" % (self._oag.rpc.router.id, rpcret))
+                print("[%s:req:%s] Received reply [%s]" % (self._oag.rpc.router.id, rpcret['conv_id'], rpcret))
                 print("<======== ")
 
-            if rpcret['status'] != 'OK':
+            if rpcret['status'] == 'OK':
+                return rpcret
+            if rpcret['status'] == 'DEAD':
+                self._oag.rpc.registration_invalidate(self.addr)
+                return rpcret
+            if rpcret['status'] == 'FAIL':
                 raise OAError("[%s:req] Failed with status [%s] and message [%s]" % (self.id,
                                                                                      rpcret['status'],
                                                                                      rpcret['message']))
 
-            return rpcret
+            ### This should NEVER happen
+            raise OAError("This should never be triggered")
 
         return wrapfn
 
@@ -80,6 +102,7 @@ class OAGRPC(object):
         def wrapfn(self, *args, **kwargs):
             ret = {
                 'status'  : 'OK',
+                'conv_id' : args[0]['conv_id'],
                 'message' : None,
                 'payload' : {},
             }
@@ -133,14 +156,11 @@ class OAGRPC_RTR_Requests(OAGRPC):
         empty   = self._ctxsoc.recv()
         payload = msgpack.loads(self._ctxsoc.recv(), raw=False)
 
-        if self._oag.logger.RPC:
-            print("[%s:rtr] Received message [%s]" % (self.id, payload))
-
         return (sender, payload)
 
     @OAGRPC.rpcprocfn
     def proc_deregister(self, ret, args):
-        self._oag.rpc.registration_invalidate(args['addr'])
+        self._oag.rpc.registration_invalidate(args['deregister_addr'])
 
     @OAGRPC.rpcprocfn
     def proc_getstream(self, ret, args):
@@ -149,6 +169,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         if isinstance(attr, OAG_RootNode):
             ret['payload']['type']  = 'redirect'
             ret['payload']['value'] = attr.rpc.router.addr
+            ret['payload']['redir_id'] = attr.rpc.router.id
             ret['payload']['class'] = attr.__class__.__name__
         else:
             ret['payload']['type']  = 'value'
@@ -216,7 +237,8 @@ class OAGRPC_REQ_Requests(OAGRPC):
     def deregister(self, *args, **kwargs):
         return  {
             'args'      : {
-                'stream' : args[0][0],
+                'deregister_addr' : args[0][0],
+                'stream' : args[0][1],
                 'addr'   : self._oag.rpc.router.addr
             }
         }
@@ -287,7 +309,6 @@ class RpcTransaction(object):
 
 class RpcProxy(object):
     """Manipulates rpc functionality for OAG"""
-
     def __init__(self,
                  oag,
                  initurl=None,
@@ -519,7 +540,7 @@ class RpcProxy(object):
                                                                                currval.rpc.router.id,
                                                                                newval.rpc.router.id))
                         if currval:
-                            reqcls(self._oag).deregister(currval.rpc.router, stream)
+                            reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, stream)
                         reqcls(self._oag).register(newval.rpc.router, stream)
                         try:
                             self._oag.propmgr._cframe[self._oag.stream_db_mapping[stream]]=newval.id
@@ -605,7 +626,7 @@ class RpcProxy(object):
 
     def registration_invalidate(self, deregistering_oag_addr):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
-        getkeepalive().rm(self)
+        getkeepalive().rm(self._oag)
 
     def start(self):
 
@@ -623,9 +644,21 @@ class RpcProxy(object):
 
         while True:
             (sender, payload) = self._rpcrtr._recv()
-            self._rpcrtr._send(sender, rpc_dispatch[payload['action']](payload))
+            if self._oag is None:
+                rpcret = {
+                    'status'  : 'DEAD',
+                    'conv_id' : payload['conv_id'],
+                    'message' : None,
+                    'payload' : {},
+                }
+            else:
+                if self._oag.logger.RPC:
+                    print("[%s:rtr:%s] Received message [%s]" % (self._rpcrtr.id, payload['conv_id'], payload))
+                rpcret = rpc_dispatch[payload['action']](payload)
+
+            self._rpcrtr._send(sender, rpcret)
             if not self.is_async and self.is_proxy:
-                reqcls(self._oag).deregister(self.proxied_url, 'proxy')
+                reqcls(self._oag).deregister(self.proxied_url, self._oag.router.addr, 'proxy')
                 break
 
     @property
@@ -635,7 +668,6 @@ class RpcProxy(object):
     @property
     def transaction(self):
         return self._rpc_transaction
-
 
 class RestProxy(object):
     def __init__(self, oag, rest_enabled):
