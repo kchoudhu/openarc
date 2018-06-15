@@ -41,7 +41,7 @@ class OAGRPC(object):
             if gc_run:
                 try:
                     while True:
-                        (removee, notifyee, stream) = getkeepalive().rm_queue.get_nowait()
+                        (removee, notifyee, stream) = gctx().rm_queue.get_nowait()
                         reqcls(self._oag).deregister(notifyee, removee, stream, gc_run=False)
                 except gevent.queue.Empty:
                     # Nothing to be GC'd right now
@@ -321,9 +321,6 @@ class RpcProxy(object):
         ### Store reference to OAG
         self._oag = weakref.ref(oag)
 
-        # Greenlets spawned by RPC
-        self._glets = []
-
         ### Spin up rpc infrastructure
 
         # Imports
@@ -403,7 +400,7 @@ class RpcProxy(object):
                     # Force execution of newly spawned greenlets
                     g = spawn(self.start)
                     g.name = "%s/%s" % (str(self._rpcrtr.id), self._oag)
-                    self._glets.append(g)
+                    gctx().put_glet(self._oag, g)
                     gevent.sleep(0)
 
             # Avoid double RPC initialization
@@ -434,7 +431,7 @@ class RpcProxy(object):
         if not remote_oag[0].is_valid:
             raise OADiscoveryError("Stale discoverable detected")
 
-        return self._oag.__class__(initurl=remote_oag[0].url, rpc_acl=self._rpc_acl_policy)
+        return self._oag.__class__(initurl=remote_oag[0].url, rpc_acl=self._rpc_acl_policy, logger=self._oag.logger)
 
     @property
     def discoverable(self): return self._rpc_discovery is not None
@@ -446,13 +443,9 @@ class RpcProxy(object):
             return
 
         if value is False:
+            kill_count = gctx().kill_glet(self._rpc_discovery)
             if self._oag.logger.RPC:
-                print("[%s] Killing rpcdisc greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets)))
-            [glet.kill() for glet in self._rpc_discovery.rpc._glets]
-            if self._oag.logger.RPC:
-                print("[%s] Killing OAG greenlets [%d]" % (self.router.id, len(self._rpc_discovery.rpc._glets)))
-            [glet.kill() for glet in self._glets]
-            gevent.joinall(self._glets+self._rpc_discovery.rpc._glets)
+                print("[%s] Killing [%d] rpcdisc greenlets" % (self.router.id, kill_count))
             self._rpc_discovery.db.delete()
             self._rpc_discovery = None
         else:
@@ -622,11 +615,11 @@ class RpcProxy(object):
 
     def registration_add(self, registering_oag_addr, registering_stream):
         self._rpcreqs[registering_oag_addr] = registering_stream
-        getkeepalive().put(self._oag)
+        gctx().put(self._oag)
 
     def registration_invalidate(self, deregistering_oag_addr):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
-        getkeepalive().rm(self._oag)
+        gctx().rm(self._oag)
 
     def start(self):
 
@@ -674,9 +667,6 @@ class RestProxy(object):
 
         ### Store reference to OAG
         self._oag = oag
-
-        # Greenlets spawned by RPC
-        self._glets = []
 
         self._app = None
 

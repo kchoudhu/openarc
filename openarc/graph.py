@@ -244,7 +244,7 @@ class OAG_RootNode(object):
             if self.rpc.is_proxy:
                 if self.logger.GC:
                     print("--> %s" % self.rpc.proxied_url)
-                getkeepalive().rm(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
+                gctx().rm(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
 
             # Tell upstream registrations that we are going away
             if self.logger.GC:
@@ -254,16 +254,17 @@ class OAG_RootNode(object):
             # Tell subnodes we are going away
             for stream, oag in self.cache.state.items():
                 if self.is_oagnode(stream):
-                    getkeepalive().rm(oag)
+                    gctx().rm(oag)
 
             if self.logger.GC:
                 print("Delete: queue size")
-                print("--> %d" % getkeepalive().rm_queue_size)
+                print("--> %d" % gctx().rm_queue_size)
 
             # print("Delete: stop router")
             # self.rpc._glets[0].kill()
-            if self.logger.GC:
-                print("<=========GC")
+
+        if self.logger.GC:
+            print("<=========GC")
 
     def __enter__(self):
         self.rpc.discoverable = True
@@ -391,7 +392,9 @@ class OAG_RootNode(object):
                 self.rpc.start()
 
         if self.logger.GC:
-            print("Creating %s, %s" % (self, self.rpc.router.id if self.rpc.is_enabled else str()))
+            print("Creating %s, %s, %s" % (self,
+                                           self.rpc.router.id if self.rpc.is_enabled else str(),
+                                          'listening on %s' % self.rpc.router.addr if self.rpc.is_enabled else str()))
 
     def __iter__(self):
         if self.is_unique:
@@ -485,7 +488,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
         if self.rpc.is_heartbeat:
             if self.logger.RPC:
                 print("[%s] Starting heartbeat greenlet" % (self.id))
-            self.rpc._glets.append(spawn(self.__cb_heartbeat))
+            gctx().put_glet(self, spawn(self.__cb_heartbeat))
 
 class OAG_RootD(OAG_RootNode):
     @staticproperty

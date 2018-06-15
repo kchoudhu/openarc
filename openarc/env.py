@@ -12,6 +12,7 @@ import os
 import sys
 import toml
 import traceback
+import weakref
 
 from openarc.exception import *
 
@@ -60,19 +61,22 @@ def initoags():
         except OAError:
             pass
 
-# Keepalive
+# Global context
 #
 # This section allows the storage of references to objects so
 # that they are not garbage collected without our explicit say so.
 # This is relevant in distributed scenarios
 
-p_keepalive = None
+p_gctx = None
 
-class OAKeepAlive(object):
+class OAGlobalContext(object):
 
     def __init__(self):
         # Maintain references to OAGs in order to prevent GC
         self._keepalive = {}
+
+        # Maintain running greenlets here in set form:
+        self._glets = []
 
         # Queue delayed deregistration messages to other nodes
         self._deferred_rm_queue = gevent.queue.Queue()
@@ -107,19 +111,39 @@ class OAKeepAlive(object):
 
         return self._deferred_rm_queue.qsize()
 
+    # Greenlet put
+    def put_glet(self, oag, greenlet):
+        self._glets.append((weakref.ref(oag), greenlet))
+
+        # Do a quick sweep of greenlets that need to die
+        kill_glets = [g[1] for g in self._glets if g[0]() is None]
+        gevent.killall(kill_glets, block=True)
+        self._glets = [g for g in self._glets if g[0]() is not None]
+
+    def kill_glet(self, oag):
+        kill_glets = [g[1] for g in self._glets if g[0]()==oag]
+        self._glets = [g for g in self._glets if g[0]() != oag]
+        gevent.killall(kill_glets, block=True)
+        return len(kill_glets)
+
     @property
     def state(self):
 
         return self._keepalive
 
-def getkeepalive():
-    global p_keepalive
-    return p_keepalive
+    @property
+    def glets(self):
+
+        return self._glets
+
+def gctx():
+    global p_gctx
+    return p_gctx
 
 @atexit.register
 def goodbye_world():
 
-    global p_keepalive
+    global p_gctx
 
 # Environment initialization
 #
@@ -166,7 +190,7 @@ def initenv(oag=None, on_demand_oags=False):
     must call getenv"""
     global p_env
     global p_refcount_env
-    global p_keepalive
+    global p_gctx
 
     if p_refcount_env == 0:
 
@@ -175,7 +199,7 @@ def initenv(oag=None, on_demand_oags=False):
         p_refcount_env += 1
 
         # Intialize keepalive structure
-        p_keepalive = OAKeepAlive()
+        p_gctx = OAGlobalContext()
 
         # Create all OAGs if on demand oag creation is turned off
         if not p_env.on_demand_oags:
