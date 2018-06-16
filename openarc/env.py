@@ -68,6 +68,7 @@ def initoags():
 # This is relevant in distributed scenarios
 
 p_gctx = None
+p_rootnode_cls = None
 
 class OAGlobalContext(object):
 
@@ -88,8 +89,11 @@ class OAGlobalContext(object):
             self._keepalive[obj] = 1
 
     def rm(self, removee, notifyee=None, stream=None):
-        from openarc.graph import OAG_RootNode
-        if isinstance(removee, OAG_RootNode):
+        global p_rootnode_cls
+        if p_rootnode_cls is None:
+            from openarc.graph import OAG_RootNode
+            p_rootnode_cls = OAG_RootNode
+        if isinstance(removee, p_rootnode_cls):
             # We have been passed an OAG for direct removal
             try:
                 self._keepalive[removee] -= 1
