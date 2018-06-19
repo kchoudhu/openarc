@@ -316,6 +316,7 @@ class RpcProxy(object):
                  rpc_acl_policy=ACL.LOCAL_ALL,
                  rpc_async=True,
                  rpc_dbupdate_listen=False,
+                 rpc_discovery_timeout=0,
                  heartbeat_enabled=True):
 
         ### Store reference to OAG
@@ -350,6 +351,9 @@ class RpcProxy(object):
 
         # Holding spot for RPC discoverability - default off
         self._rpc_discovery = None
+
+        # How long to keep OAG discoverable. Default 0 = forever
+        self._rpc_discovery_timeout = rpc_discovery_timeout
 
         # Listen for dbupdates elsewhere
         self._rpc_dbupdate_listen = rpc_dbupdate_listen
@@ -438,19 +442,25 @@ class RpcProxy(object):
 
     @discoverable.setter
     def discoverable(self, value):
-        from .graph import OAG_RpcDiscoverable
+
         if self._rpc_discovery==value:
             return
 
+        from .graph import OAG_RpcDiscoverable
+
         if value is False:
-            kill_count = gctx().kill_glet(self._rpc_discovery)
+            kill_count = gctx().kill_glet(self, 'heartbeat')
             if self._oag.logger.RPC:
-                print("[%s] Killing [%d] rpcdisc greenlets" % (self.router.id, kill_count))
+                print("[%s] Killing [%d] heartbeat greenlets" % (self.router.id, kill_count))
+            kill_count = gctx().kill_glet(self, 'discovery')
+            if self._oag.logger.RPC:
+                print("[%s] Killing [%d] discovery greenlets" % (self.router.id, kill_count))
             self._rpc_discovery.db.delete()
             self._rpc_discovery = None
         else:
             # Cleanup previous messes
             try:
+
                 number_active = 0
                 prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, rpc=False, heartbeat=False)
                 for rpc in prevrpcs:
@@ -490,7 +500,9 @@ class RpcProxy(object):
                     'listen'     : self._rpc_dbupdate_listen,
                 }).next()
 
-            self._rpc_discovery.start_heartbeat()
+            # Spin off other threads as necessary
+            self.start_heartbeat()
+            self.start_discovery_timeout()
 
     @property
     def fanout(self): return False
@@ -571,6 +583,11 @@ class RpcProxy(object):
     def is_heartbeat(self):
 
         return self._rpc_heartbeat
+
+    @property
+    def is_timedout(self):
+
+        return False if self._rpc_discovery_timeout is 0 else True
 
     @property
     def is_proxy(self):
@@ -654,6 +671,18 @@ class RpcProxy(object):
                 reqcls(self._oag).deregister(self.proxied_url, self._oag.router.addr, 'proxy')
                 break
 
+    def start_discovery_timeout(self):
+        if self.is_timedout:
+            if self._oag.logger.RPC:
+                print("[%s] Starting timeout greenlet at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+            gctx().put_glet(self, gevent.spawn(self.__cb_discovery_timeout), glet_type='discovery')
+
+    def start_heartbeat(self):
+        if self.is_heartbeat:
+            if self._oag.logger.RPC:
+                print("[%s] Starting heartbeat greenlet at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+            gctx().put_glet(self, gevent.spawn(self.__cb_heartbeat), glet_type='heartbeat')
+
     @property
     def stoplist(self):
         return self._rpc_stop_list
@@ -661,6 +690,44 @@ class RpcProxy(object):
     @property
     def transaction(self):
         return self._rpc_transaction
+
+    def __cb_heartbeat(self):
+        while True:
+            # Did our underlying db control row evaporate? If so, holy shit.
+            try:
+                from .graph import OAG_RpcDiscoverable
+                rpcdisc = OAG_RpcDiscoverable(self._rpc_discovery.id, rpc=False)[0]
+            except OAGraphRetrieveError as e:
+                if self._oag.logger.RPC:
+                    print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting"
+                            % (self.router.id, self._rpc_discovery.rpcinfname, self._rpc_discovery.stripe))
+                sys.exit(1)
+
+            # Did environment change?
+            if self._rpc_discovery.envid != rpcdisc.envid:
+                if self._oag.logger.RPC:
+                    print("[%s] Environment changed from [%s] to [%s], exiting"
+                            % (self.router.id, self._rpc_discovery.envid, rpcdisc.envid))
+                sys.exit(1)
+
+            self._rpc_discovery.heartbeat = OATime().now
+            if self._oag.logger.RPC:
+                print("[%s] heartbeat %s" % (self.router.id, self._rpc_discovery.heartbeat))
+            self._rpc_discovery.db.update()
+
+            gevent.sleep(getenv().rpctimeout)
+
+    def __cb_discovery_timeout(self):
+        if self._oag.logger.RPC:
+            print("[%s] Starting discovery timeout at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+
+        gevent.sleep(self._rpc_discovery_timeout)
+
+        if len(self._rpcreqs)==0:
+            if self._oag.logger.RPC:
+                print("[%s] After [%d] second timeout, [%s] has no clients, making it undiscoverable at [%s]"
+                    % (self.router.id, self._rpc_discovery_timeout, self._oag, datetime.datetime.now().isoformat()))
+            self.discoverable = False
 
 class RestProxy(object):
     def __init__(self, oag, rest_enabled):

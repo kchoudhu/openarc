@@ -343,7 +343,8 @@ class OAG_RootNode(object):
                  rpc=True,
                  rpc_acl=ACL.LOCAL_ALL,
                  rpc_async=True,
-                 rpc_dbupdate_listen=False):
+                 rpc_dbupdate_listen=False,
+                 rpc_discovery_timeout=0):
 
         # Initialize environment
         initenv(oag=self)
@@ -373,6 +374,7 @@ class OAG_RootNode(object):
                                         rpc_acl_policy=rpc_acl,
                                         rpc_async=rpc_async,
                                         rpc_dbupdate_listen=rpc_dbupdate_listen,
+                                        rpc_discovery_timeout=rpc_discovery_timeout,
                                         heartbeat_enabled=heartbeat)
 
         # All REST operations
@@ -461,34 +463,6 @@ class OAG_RpcDiscoverable(OAG_RootNode):
     @property
     def is_valid(self):
         return OATime().now-self.heartbeat < datetime.timedelta(seconds=getenv().rpctimeout)
-
-    def __cb_heartbeat(self):
-        while True:
-            # Did our underlying db control row evaporate? If so, holy shit.
-            try:
-                rpcdisc = OAG_RpcDiscoverable([self.id], rpc=False)[0]
-            except OAGraphRetrieveError as e:
-                if self.logger.RPC:
-                    print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting" % (self.id, self.rpcinfname, self.stripe))
-                sys.exit(1)
-
-            # Did environment change?
-            if self.envid != rpcdisc.envid:
-                if self.logger.RPC:
-                    print("[%s] Environment changed from [%s] to [%s], exiting" % (self.id, self.envid, rpcdisc.envid))
-                sys.exit(1)
-
-            self.heartbeat = OATime().now
-            if self.logger.RPC:
-                print("[%s] heartbeat %s" % (self.id, self.heartbeat))
-            self.db.update()
-            sleep(getenv().rpctimeout)
-
-    def start_heartbeat(self):
-        if self.rpc.is_heartbeat:
-            if self.logger.RPC:
-                print("[%s] Starting heartbeat greenlet" % (self.id))
-            gctx().put_glet(self, spawn(self.__cb_heartbeat))
 
 class OAG_RootD(OAG_RootNode):
     @staticproperty

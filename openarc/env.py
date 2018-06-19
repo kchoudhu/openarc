@@ -116,18 +116,22 @@ class OAGlobalContext(object):
         return self._deferred_rm_queue.qsize()
 
     # Greenlet put
-    def put_glet(self, oag, greenlet):
-        self._glets.append((weakref.ref(oag), greenlet))
+    def put_glet(self, oag, glet, glet_type=None):
+        self._glets.append((weakref.ref(oag), glet, glet_type))
 
         # Do a quick sweep of greenlets that need to die
-        kill_glets = [g[1] for g in self._glets if g[0]() is None]
-        gevent.killall(kill_glets, block=True)
-        self._glets = [g for g in self._glets if g[0]() is not None]
+        kill_glets = [g for g in self._glets if g[0]() is None]
+        self._glets = [g for g in self._glets if g not in kill_glets]
+        gevent.killall([g[1] for g in kill_glets], block=True)
 
-    def kill_glet(self, oag):
-        kill_glets = [g[1] for g in self._glets if g[0]()==oag]
-        self._glets = [g for g in self._glets if g[0]() != oag]
-        gevent.killall(kill_glets, block=True)
+    def kill_glet(self, oag, glet_type=None):
+        if glet_type:
+            kill_glets = [g for g in self._glets if g[0]()==oag and g[2]==glet_type]
+        else:
+            kill_glets = [g for g in self._glets if g[0]()==oag]
+        self._glets = [g for g in self._glets if g not in kill_glets]
+
+        gevent.killall([g[1] for g in kill_glets], block=True)
         return len(kill_glets)
 
     @property
