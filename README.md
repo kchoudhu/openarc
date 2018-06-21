@@ -70,7 +70,7 @@ new_user =\
     OAG_User(initprms={
         'username' : 'kamil',
         'password' : 'hunter2'
-    }, logger=logger)
+    })
 
 print(new_user.username)
 
