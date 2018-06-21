@@ -428,14 +428,14 @@ class RpcProxy(object):
             remote_oag =\
                 OAG_RpcDiscoverable({
                     'rpcinfname' : self._oag.infname_semantic
-                }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+                }, 'by_rpcinfname_idx', rpc=False)
         except OAGraphRetrieveError:
             raise OADiscoveryError("Nothing to discover yet")
 
         if not remote_oag[0].is_valid:
             raise OADiscoveryError("Stale discoverable detected")
 
-        return self._oag.__class__(initurl=remote_oag[0].url, rpc_acl=self._rpc_acl_policy, logger=self._oag.logger)
+        return self._oag.__class__(initurl=remote_oag[0].url, rpc_acl=self._rpc_acl_policy)
 
     @property
     def discoverable(self): return self._rpc_discovery is not None
@@ -462,7 +462,7 @@ class RpcProxy(object):
             try:
 
                 number_active = 0
-                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', logger=self._oag.logger, rpc=False, heartbeat=False)
+                prevrpcs = OAG_RpcDiscoverable(self._oag.infname_semantic, 'by_rpcinfname_idx', rpc=False, heartbeat=False)
                 for rpc in prevrpcs:
                     if rpc.is_valid:
                         number_active += 1
@@ -487,8 +487,7 @@ class RpcProxy(object):
 
             # Create new database entry
             self._rpc_discovery =\
-                OAG_RpcDiscoverable(logger=self._oag.logger,
-                                    rpc=False,
+                OAG_RpcDiscoverable(rpc=False,
                                     heartbeat=self._rpc_heartbeat)\
                 .db.create({
                     'rpcinfname' : self._oag.infname_semantic,

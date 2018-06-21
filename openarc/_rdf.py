@@ -194,9 +194,8 @@ class PropProxy(object):
                     def fget(obj,
                              cls=cls,
                              searchprms=[getattr(self._oag, fk['points_to_id'], None)],
-                             searchidx='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']],
-                             logger=self._oag.logger):
-                        return cls(searchprms, searchidx, logger=self._oag.logger)
+                             searchidx='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']]):
+                        return cls(searchprms, searchidx)
                     fget.__name__ = stream
                     self.add(stream, oagprop(fget), fk=True)
 
@@ -308,7 +307,7 @@ class PropProxy(object):
                 currattr = getattr(self._oag, stream, None)
                 if currattr is None:
                     if self._oag.streams[stream][1] is False and cfval:
-                        currattr = self._oag.streams[stream][0](cfval, searchidx, logger=self._oag.logger)
+                        currattr = self._oag.streams[stream][0](cfval, searchidx)
                         if not currattr.is_unique:
                             currattr = currattr[-1]
             except OAGraphRetrieveError:
@@ -323,7 +322,6 @@ class PropProxy(object):
                      streaminfo=self._oag.streams[stream],
                      searchprms=[cfval],
                      searchidx=searchidx,
-                     logger=self._oag.logger,
                      currattr=currattr):
                 # Do not instantiate objects unnecessarily
                 if currattr:
@@ -338,11 +336,11 @@ class PropProxy(object):
                 elif streaminfo[1] is False:
                     return currattr
                 else:
-                    newattr = streaminfo[0](searchprms, searchidx, logger=logger)
+                    newattr = streaminfo[0](searchprms, searchidx)
                     if not newattr.is_unique:
                         newattr = newattr[-1]
                     return newattr
-                newattr = streaminfo[0](searchprms, searchidx, logger=logger)
+                newattr = streaminfo[0](searchprms, searchidx)
                 return newattr
             fget.__name__ = stream
             self.add(stream, oagprop(fget))

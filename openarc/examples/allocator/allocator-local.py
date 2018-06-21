@@ -4,17 +4,15 @@ from marketdata import *
 
 def main():
 
-    logger=OALog()
-
     # Create ticker objects from tickers in WsbBalancer
     ticker_oags = {
-        ticker: OAG_Ticker(logger=logger).db.create({
+        ticker: OAG_Ticker().db.create({
             'ticker' : ticker,
         })[0] for ticker in OAG_WsbBalancer.streams
     }
 
     # Assign tickers to WsbBalancer
-    wsb_index = OAG_WsbBalancer(logger=logger)
+    wsb_index = OAG_WsbBalancer()
     for ticker in OAG_WsbBalancer.streams:
         setattr(wsb_index, ticker, ticker_oags[ticker])
 

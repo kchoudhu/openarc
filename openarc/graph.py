@@ -294,7 +294,7 @@ class OAG_RootNode(object):
                         if payload['type'] == 'redirect':
                             for cls in OAG_RootNode.__subclasses__():
                                 if cls.__name__==payload['class']:
-                                    return cls(initurl=payload['value'], logger=logger)
+                                    return cls(initurl=payload['value'])
                         else:
                             return payload['value']
                 else:
@@ -338,7 +338,7 @@ class OAG_RootNode(object):
                  heartbeat=True,
                  initprms={},
                  initurl=None,
-                 logger=OALog(),
+                 logger=gctx().logger,
                  rest=False,
                  rpc=True,
                  rpc_acl=ACL.LOCAL_ALL,

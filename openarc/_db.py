@@ -56,7 +56,7 @@ class DbSchemaProxy(object):
                     for i, col in enumerate(oag_columns):
                         if db_columns_reqd[i] in add_cols:
                             if oag_columns[i] != db_columns_reqd[i]:
-                                subnode = oag.streams[col][0](logger=oag.logger, rpc=False).db.schema.init()
+                                subnode = oag.streams[col][0](rpc=False).db.schema.init()
                                 add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                              % (self._dbproxy._oag.stream_db_mapping[col],
                                                'NOT NULL' if oag.streams[col][1] else str(),
@@ -336,7 +336,7 @@ class DbProxy(object):
                 remote_oags =\
                     OAG_RpcDiscoverable({
                         'rpcinfname' : self._oag.infname_semantic
-                    }, 'by_rpcinfname_idx', rpc=False, logger=self._oag.logger)
+                    }, 'by_rpcinfname_idx', rpc=False)
 
                 listeners = [r.url for r in remote_oags if (r.listen is True and r.is_valid)]
 

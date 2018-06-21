@@ -82,6 +82,9 @@ class OAGlobalContext(object):
         # Queue delayed deregistration messages to other nodes
         self._deferred_rm_queue = gevent.queue.Queue()
 
+        # Global logger
+        self._logger = OALog()
+
     def put(self, obj):
         try:
             self._keepalive[obj] += 1
@@ -144,8 +147,15 @@ class OAGlobalContext(object):
 
         return self._glets
 
+    @property
+    def logger(self):
+
+        return self._logger
+
 def gctx():
     global p_gctx
+    if p_gctx is None:
+        p_gctx = OAGlobalContext()
     return p_gctx
 
 @atexit.register
@@ -198,16 +208,12 @@ def initenv(oag=None, on_demand_oags=False):
     must call getenv"""
     global p_env
     global p_refcount_env
-    global p_gctx
 
     if p_refcount_env == 0:
 
         # Initialize environment
         p_env = OAEnv(on_demand_oags)
         p_refcount_env += 1
-
-        # Intialize keepalive structure
-        p_gctx = OAGlobalContext()
 
         # Create all OAGs if on demand oag creation is turned off
         if not p_env.on_demand_oags:
