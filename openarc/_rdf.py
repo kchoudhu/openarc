@@ -4,6 +4,7 @@ import collections
 import inflection
 import weakref
 
+from ._rpc  import reqcls
 from ._util import oagprop
 
 from openarc.exception import *
@@ -156,7 +157,9 @@ class PropProxy(object):
 
                 # Return it
                 if type(self._oagprops[stream])==oagprop:
-                    return self._oagprops[stream].__get__(self._oag)
+                    subnode = self._oagprops[stream].__get__(self._oag)
+                    reqcls(self._oag).register(subnode.rpc.router, stream)
+                    return subnode
                 else:
                     return self._oagprops[stream]
             else:

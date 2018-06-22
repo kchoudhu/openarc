@@ -85,28 +85,22 @@ class OAGlobalContext(object):
         # Global logger
         self._logger = OALog()
 
-    def put(self, obj):
+    def put_ka(self, oag):
         try:
-            self._keepalive[obj] += 1
+            self._keepalive[oag] += 1
         except KeyError:
-            self._keepalive[obj] = 1
+            self._keepalive[oag] = 1
 
-    def rm(self, removee, notifyee=None, stream=None):
-        global p_rootnode_cls
-        if p_rootnode_cls is None:
-            from openarc.graph import OAG_RootNode
-            p_rootnode_cls = OAG_RootNode
-        if isinstance(removee, p_rootnode_cls):
-            # We have been passed an OAG for direct removal
-            try:
-                self._keepalive[removee] -= 1
-                if self._keepalive[removee] == 0:
-                    del(self._keepalive[removee])
-            except KeyError:
-                OAError("I don't think this should ever happen")
-        else:
-            # We have been passed a URL for deferred removal
-            self._deferred_rm_queue.put((removee, notifyee, stream))
+    def rm_ka(self, oag):
+        try:
+            self._keepalive[oag] -= 1
+            if self._keepalive[oag] == 0:
+                del(self._keepalive[oag])
+        except KeyError:
+            OAError("I don't think this should ever happen")
+
+    def rm_ka_via_rpc(self, removee_oag_addr, notifyee_oag_addr, stream):
+        self._deferred_rm_queue.put((removee_oag_addr, notifyee_oag_addr, stream))
 
     @property
     def rm_queue(self):

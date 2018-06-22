@@ -631,11 +631,11 @@ class RpcProxy(object):
 
     def registration_add(self, registering_oag_addr, registering_stream):
         self._rpcreqs[registering_oag_addr] = registering_stream
-        gctx().put(self._oag)
+        gctx().put_ka(self._oag)
 
     def registration_invalidate(self, deregistering_oag_addr):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
-        gctx().rm(self._oag)
+        gctx().rm_ka(self._oag)
 
     def start(self):
 

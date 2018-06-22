@@ -244,7 +244,7 @@ class OAG_RootNode(object):
             if self.rpc.is_proxy:
                 if self.logger.GC:
                     print("--> %s" % self.rpc.proxied_url)
-                gctx().rm(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
+                gctx().rm_ka_via_rpc(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
 
             # Tell upstream registrations that we are going away
             if self.logger.GC:
@@ -254,7 +254,7 @@ class OAG_RootNode(object):
             # Tell subnodes we are going away
             for stream, oag in self.cache.state.items():
                 if self.is_oagnode(stream):
-                    gctx().rm(oag)
+                    gctx().rm_ka_via_rpc(self.rpc.router.addr, oag.rpc.router.addr, stream)
 
             if self.logger.GC:
                 print("Delete: queue size")
