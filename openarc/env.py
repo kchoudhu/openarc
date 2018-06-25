@@ -25,7 +25,7 @@ class ACL(object):
 class OALog(object):
     SQL   = False
     Graph = False
-    RPC   = False
+    RPC   = True
     GC    = False
 
     def log(loginfo=None, ignore_exceptions=False):

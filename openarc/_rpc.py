@@ -181,7 +181,7 @@ class OAGRPC_RTR_Requests(OAGRPC):
         invstream = args['stream']
 
         if self._oag.logger.RPC:
-            print('[%s:rtr] invalidation signal received' % self._oag.rpc.router.id)
+            print('[%s:rtr:%s] invalidation signal received' % (self._oag.rpc.router.id, ret['conv_id']))
 
         self._oag.cache.invalidate(invstream)
 
@@ -216,12 +216,12 @@ class OAGRPC_RTR_Requests(OAGRPC):
     @OAGRPC.rpcprocfn
     def proc_update_broadcast(self, ret, args):
         if self._oag.logger.RPC:
-            print('[%s:rtr] update broadcast signal received from %s' % (self._oag.rpc.router.id, args['addr']))
+            print('[%s:rtr:%s] update broadcast signal received from %s' % (self._oag.rpc.router.id, ret['conv_id'], args['addr']))
         self._oag.db.search()
 
         # Tell upstream
         if self._oag.logger.RPC:
-            print('[%s:rtr] sending updates to %s' % (self._oag.rpc.router.id, self._oag.rpc.registrations))
+            print('[%s:rtr:%s] sending updates to %s' % (self._oag.rpc.router.id, ret['conv_id'], self._oag.rpc.registrations))
         for addr, stream in self._oag.rpc.registrations.items():
             OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
 
@@ -535,14 +535,15 @@ class RpcProxy(object):
                 # Regenerate connections to surrounding nodes
                 if currval is None:
                     if self._oag.logger.RPC:
-                        print("[%s] Connecting to new stream [%s] in non-initmode" % (stream, newval.rpc.router.id))
+                        print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, newval.rpc.router.id, stream))
                     reqcls(self._oag).register(newval.rpc.router, stream)
                 else:
                     if currval != newval:
                         if self._oag.logger.RPC:
-                            print("[%s] Detected changed stream [%s]->[%s]" % (stream,
-                                                                               currval.rpc.router.id,
-                                                                               newval.rpc.router.id))
+                            print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.router.id,
+                                                                                               stream,
+                                                                                               currval.rpc.router.id,
+                                                                                               newval.rpc.router.id))
                         if currval:
                             reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, stream)
                         reqcls(self._oag).register(newval.rpc.router, stream)
@@ -558,7 +559,7 @@ class RpcProxy(object):
         if invalidate_upstream:
             if len(self._rpcreqs)>0:
                 if self._oag.logger.RPC:
-                    print("[%s] Informing upstream of invalidation [%s]->[%s]" % (stream, currval, newval))
+                    print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.router.id, stream, currval, newval))
                 if self.transaction.is_active:
                     self.transaction.notify_upstream = True
                 else:
@@ -622,7 +623,7 @@ class RpcProxy(object):
             node = getattr(self._oag, stream, None)
             if node and self._oag.is_oagnode(stream):
                 if self._oag.logger.RPC:
-                    print("[%s] Connecting to new stream [%s] in initmode" % (stream, node.rpc.router.id))
+                    print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, node.rpc.router.id, stream))
                 reqcls(self._oag).register(node.rpc.router, stream)
 
     @property
