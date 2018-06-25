@@ -1518,6 +1518,51 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.__check_autonode_equivalence(a10_chk.subnode2, a3a)
         self.__check_autonode_equivalence(a10_chk.subnode1, a2)
 
+    def test_autonode_lifecycle_oagprop_registration(self):
+
+        a2 =\
+            OAG_AutoNode2().db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3().db.create({
+                'field7' : 8,
+                'field8' : 'this is an autonode3'
+            })
+
+        a1a =\
+            OAG_AutoNode1a().db.create({
+                'field2'   : 1,
+                'field3'   : 1,
+                'subnode1' : a2,
+                'subnode2' : a3
+            })
+
+        a1a_chk = OAG_AutoNode1a(a1a[0].id)
+
+        self.assertEqual(len(a1a_chk[0].cache.state), 0)
+
+        a2_chk = a1a_chk.subnode1
+        a3_chk = a1a_chk.subnode2
+
+        self.assertEqual(len(a1a_chk.cache.state), 2)
+
+        self.assertTrue(a1a_chk.oagurl in a2_chk.rpc.registrations)
+        self.assertTrue(a1a_chk.oagurl in a3_chk.rpc.registrations)
+
+        del(a1a_chk)
+
+        import gc
+        gc.collect()
+
+        # Invalidate to trigger gc queue flush
+        a2.field4 = 42
+
+        self.assertEqual(len(a2_chk.rpc.registrations), 0)
+        self.assertEqual(len(a3_chk.rpc.registrations), 0)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

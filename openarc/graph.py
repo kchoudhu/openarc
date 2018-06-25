@@ -252,9 +252,10 @@ class OAG_RootNode(object):
                 print("--> %s" % self.rpc.registrations)
 
             # Tell subnodes we are going away
-            for stream, oag in self.cache.state.items():
-                if self.is_oagnode(stream):
-                    gctx().rm_ka_via_rpc(self.rpc.router.addr, oag.rpc.router.addr, stream)
+            if self.logger.GC:
+                print("Delete: cache")
+                print("--> %s" % self.cache.state)
+            self.cache.clear()
 
             if self.logger.GC:
                 print("Delete: queue size")

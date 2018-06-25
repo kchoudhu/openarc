@@ -7,6 +7,7 @@ import weakref
 from ._rpc  import reqcls
 from ._util import oagprop
 
+from openarc.env       import gctx
 from openarc.exception import *
 
 class CacheProxy(object):
@@ -18,6 +19,9 @@ class CacheProxy(object):
         self._oagcache ={}
 
     def clear(self):
+        for stream, oag in self._oagcache.items():
+            if self._oag.is_oagnode(stream):
+                gctx().rm_ka_via_rpc(self._oag.rpc.router.addr, oag.rpc.router.addr, stream)
         self._oagcache = {}
 
     def clone(self, src):
