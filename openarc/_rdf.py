@@ -219,10 +219,8 @@ class PropProxy(object):
 
     def _set_cframe_from_userprms(self, userprms, force_attr_refresh=False, fullhouse=False):
 
-        setattrs = []
-
+        # Intialize OAG attributes from userprms if necessary
         attrinit = len(userprms)>0 or force_attr_refresh
-
         if attrinit:
 
             invalid_streams = []
@@ -236,12 +234,8 @@ class PropProxy(object):
                 processed_streams = { s:userprms[s] for s in userprms if s not in invalid_streams }
                 for stream, streaminfo in processed_streams.items():
                     setattr(self._oag, stream, streaminfo)
-                    self._set_oagprop(stream, streaminfo, cframe_form=False)
-                setattrs = processed_streams.keys()
 
-        self._set_cframe_from_attrs(setattrs, fullhouse=fullhouse)
-
-    def _set_cframe_from_attrs(self, attrs, fullhouse=False):
+        # Set cframe from attributes
         cframe_tmp = {}
         raw_missing_streams = []
 
