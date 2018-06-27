@@ -1300,7 +1300,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.__check_autonode_equivalence(a5d_chk.subnode2, a3)
 
-    def test_autonode_uniq_null_subnode(self):
+    def test_autonode_multi_null_subnode(self):
         a2 =\
             OAG_AutoNode2(initprms={
                 'field4' :  1,
