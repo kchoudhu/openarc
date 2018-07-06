@@ -287,7 +287,7 @@ class OAG_RootNode(object):
             logger  = object.__getattribute__(self, '_logger')
             rpc     = object.__getattribute__(self, '_rpc_proxy')
             if rpc.is_proxy:
-                if attr in rpc.proxied_oags:
+                if attr in rpc.proxied_streams:
                     if logger.RPC:
                         print("[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url))
                     payload = reqcls(self).getstream(rpc.proxied_url, attr)['payload']
@@ -311,13 +311,14 @@ class OAG_RootNode(object):
 
         return object.__getattribute__(self, attr)
 
-    def __getitem__(self, indexinfo):
+    def __getitem__(self, indexinfo, preserve_cache=True):
         self.rdf._rdf_window_index = indexinfo
 
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
 
-        self.cache.clear()
+        if not preserve_cache:
+            self.cache.clear()
 
         if type(self.rdf._rdf_window_index)==int:
             self.propmgr._cframe = self.rdf._rdf_window[self.rdf._rdf_window_index]
@@ -390,7 +391,7 @@ class OAG_RootNode(object):
 
             self._rpc_proxy.register_with_surrounding_nodes()
         else:
-            self._rpc_proxy.proxied_oags = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
+            self._rpc_proxy.proxied_streams = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
             if not self._rpc_proxy.is_async:
                 self.rpc.start()
 
@@ -412,28 +413,21 @@ class OAG_RootNode(object):
             return self.next()
 
     def __setattr__(self, attr, newval):
-
-        # Setting values on a proxy OAG is nonsensical
-        rpc = getattr(self, '_rpc_proxy', None)
-        if rpc\
-            and rpc.is_proxy\
-            and attr in rpc.proxied_oags:
-            raise OAError("Cannot set value on a proxy OAG")
-
-        # Stash existing value, set new value, distribute notifications
-        currval = getattr(self, attr, None)
-
         try:
-            propmgr = getattr(self, '_prop_proxy', None)
-            if propmgr:
-                propmgr.add(attr, newval)
-                if rpc\
-                    and rpc.is_init is True\
-                    and attr not in rpc.stoplist:
-                    rpc.distribute_stream_change(attr, currval, newval)
-            else:
-                raise OAGraphIntegrityError("Use direct attribute set")
-        except OAGraphIntegrityError:
+            # Sanity check
+            if self.rpc.is_proxy and attr in self.rpc.proxied_streams:
+                raise OAError("Cannot set value on a proxy OAG")
+
+            # Set new value
+            currval = self.propmgr.add(attr, newval, None, None, False, False)
+
+        except (AttributeError, OAGraphIntegrityError):
+            # Attribute errors means object has not been completely
+            # initialized yet; graph integrity errors mean we used
+            # property manager to manage property on the stoplist.
+            #
+            # In either case, default to using the default __setattr__
+
             super(OAG_RootNode, self).__setattr__(attr, newval)
 
 class OAG_RpcDiscoverable(OAG_RootNode):

@@ -7,6 +7,7 @@ import atexit
 import base64
 import gevent
 import gevent.queue
+import inflection
 import inspect
 import os
 import sys
@@ -84,6 +85,18 @@ class OAGlobalContext(object):
 
         # Global logger
         self._logger = OALog()
+
+        # Cache database-to-class mappings
+        self._db_class_mapping = {}
+
+    def db_class_mapping(self, db_table_name):
+        try:
+            class_name = self._db_class_mapping[db_table_name]
+        except KeyError:
+            class_name = 'OAG_' + inflection.camelize(db_table_name)
+            self._db_class_mapping[db_table_name] = class_name
+
+        return class_name
 
     def put_ka(self, oag):
         try:

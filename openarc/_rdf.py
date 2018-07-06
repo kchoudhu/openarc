@@ -1,7 +1,6 @@
 #!/usr/local/env python3
 
 import collections
-import inflection
 import weakref
 
 from ._rpc  import reqcls
@@ -39,6 +38,8 @@ class CacheProxy(object):
         return self._oagcache[stream]
 
     def put(self, stream, new_value):
+        if not new_value:
+            return
         self._oagcache[stream] = new_value
 
     @property
@@ -137,11 +138,162 @@ class PropProxy(object):
         # Used to store properties for __getattribute__ calls
         self._oagprops      = {}
 
-    def add(self, stream, oagprop, fk=False):
-        if fk or self.is_managed_oagprop(stream):
-            self._oagprops[stream] = oagprop
-        else:
-            raise OAGraphIntegrityError("This [%s] is not a managed oagprop" % stream)
+    def add(self, stream, cfval, cfcls, searchidx, from_cframe, from_foreign_key):
+        """Add new cfval to the property management dict. If cfval is an
+        oagprop or a non-OAG stream, add it directly. If cfval is a subnode
+        wrap it in an oagprop and then add it to the dict."""
+        from .graph import OAG_RootNode
+
+        if not (from_foreign_key or self.is_managed_oagprop(stream)):
+            raise OAGraphIntegrityError("Stream [%s] is not a managed oagprop" % stream)
+
+        #
+        # Access current value of the stream.
+        #
+        try:
+            # If stream is an oagprop, check cache to see whether it is set. If it is, it
+            # is safe to getattr the stream. The overarching objective here is to avoid
+            # unnecessary oagprop dereferences.
+            currval = self._oagprops[stream]
+            if type(currval)==oagprop:
+                if self._oag.cache.match(stream):
+                    currval = getattr(self._oag, stream, None)
+        except KeyError:
+            # Either stream was not set on oagprop, or having been set there, it was
+            # not subsequently deferenced and cached. Either way, it's time for a
+            # fresh start: set currval to None
+            currval = None
+
+        #
+        # Maintain cache coherence for oagprops
+        #
+        if from_foreign_key or self._oag.is_oagnode(stream):
+            if from_cframe:
+                # if cframe values are the same as current value, refresh
+                # cache. This is to handle the case where user sets subnode
+                # on an uninitialized OAG, which is subsequently persisted
+                # and then refreshed from the underlying datastore.
+                try:
+                    if currval.id == cfval:
+                        self._oag.cache.put(stream, currval)
+                except AttributeError:
+                    pass
+            else:
+                # non-cframe values are OAGs, put them in cache immediately
+                self._oag.cache.put(stream, cfval)
+
+        #
+        # Package cframe cfvals as oagprops
+        #
+        if from_foreign_key or self._oag.is_oagnode(stream):
+
+            # Sanity checks
+            if from_cframe and cfcls is None:
+                raise OAError("Cannot create OAG from cframe without class definition")
+
+            def fget(obj,
+                     stream=stream,
+                     streaminfo=cfcls,
+                     searchprms=[cfval],
+                     searchidx=searchidx,
+                     currval=currval,
+                     from_cframe=from_cframe,
+                     from_foreign_key=from_foreign_key):
+
+                newval = searchprms[0]
+
+                if from_cframe:
+                    # cframe values come in as fk references; they must
+                    # be converted to OAGs before they can be returned. If
+                    # object conversion cannot happen (i.e. gen_retval is
+                    # is False), return currval
+                    gen_retval = False
+
+                    if from_foreign_key:
+                        gen_retval = True
+                    else:
+                        if currval:
+                            try:
+                                # New cframe value is different from current one,
+                                # regenerate object
+                                if newval != currval.id:
+                                    gen_retval = True
+                            except KeyError:
+                                # ID not found in _cframe, we are dealing with
+                                # in-memory OAG. Generate a new ID
+                                gen_retval = True
+                        else:
+                            gen_retval = True
+
+                    if gen_retval:
+                        try:
+                            attr = streaminfo(searchprms, searchidx)
+                            retval = attr[-1] if not attr.is_unique else attr
+                        except OAGraphRetrieveError:
+                            retval  = None
+                    else:
+                        retval = currval
+
+                    return retval
+                else:
+                    # raw values come in as OAGs. Return one of
+                    # newval or currval depending on whether things
+                    # have changed
+                    retval = currval
+                    if newval != currval:
+                        retval = newval
+
+                    return retval
+
+                raise OAError("This should never happen")
+
+            fget.__name__ = stream
+            cfval = oagprop(fget)
+
+        self._oagprops[stream] = cfval
+
+        #
+        # Carry out inter-OAG signalling
+        #
+        if self._oag.rpc.is_enabled and self._oag.rpc.is_init and stream not in self._oag.rpc.stoplist:
+
+            if not from_cframe:
+
+                # Flag driving whether or not to invalidate upstream nodes
+                invalidate_upstream = False
+
+                # Handle oagprops
+                if isinstance(cfval, OAG_RootNode):
+                    # Regenerate connections to surrounding nodes
+                    if currval is None:
+                        if self._oag.logger.RPC:
+                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, cfval.rpc.router.id, attr))
+                        reqcls(self._oag).register(cfval.rpc.router, attr)
+                    else:
+                        if currval != cfval:
+                            if self._oaglogger.RPC:
+                                print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.router.id,
+                                                                                                   stream,
+                                                                                                   currval.rpc.router.id,
+                                                                                                   cfval.rpc.router.id))
+                            if currval:
+                                reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, attr)
+                            reqcls(self._oag).register(cfval.rpc.router, attr)
+
+                            invalidate_upstream = True
+                else:
+                    if currval and currval != cfval:
+                        invalidate_upstream  = True
+
+                if invalidate_upstream:
+                    if len(self._oag.rpc.registrations)>0:
+                        if self._oag.logger.RPC:
+                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.router.id, stream, currval, newval))
+                        if self._oag.rpc.transaction.is_active:
+                            self._oag.rpc.transaction.notify_upstream = True
+                        else:
+                            for addr, stream_to_invalidate in self._oag.rpc.registrations.items():
+                                reqcls(self._oag).invalidate(addr, stream_to_invalidate)
 
     def clear(self):
         for stream in self._oagprops:
@@ -183,28 +335,37 @@ class PropProxy(object):
     def _set_attrs_from_cframe(self):
         from .graph import OAG_RootNode
 
+        # Preparatory: creating db->stream mapping
+        db_stream_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
+
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
             self.clear()
             return
 
         # Set dbstream attributes
-        for stream, streaminfo in self._cframe.items():
-            self._set_oagprop(stream, streaminfo)
+        for stream, cfval in self._cframe.items():
+
+            # primary key: set directly
+            if stream[0] == '_':
+                setattr(self._oag, stream, self._cframe[stream])
+                continue
+
+            # Translate stream name and add to propmgr
+            stream = db_stream_mapping[stream]
+            self.add(stream, cfval, self._oag.streams[stream][0], 'id', True, False)
 
         # Set forward lookup attributes
-        for fk in self._oag.__class__._fkframe:
-            classname = "OAG_"+inflection.camelize(fk['table'])
-            for cls in OAG_RootNode.__subclasses__():
-                if cls.__name__==classname:
+        for i, fk in enumerate(self._oag.__class__._fkframe):
+            classname = gctx().db_class_mapping(fk['table'])
+            for cfcls in OAG_RootNode.__subclasses__():
+
+                if cfcls.__name__==classname:
+                    # print(i, self._oag.__class__.__name__, '->', cfcls.__name__, fk)
                     stream = fk['table']
-                    def fget(obj,
-                             cls=cls,
-                             searchprms=[getattr(self._oag, fk['points_to_id'], None)],
-                             searchidx='by_'+{cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}[fk['id']]):
-                        return cls(searchprms, searchidx)
-                    fget.__name__ = stream
-                    self.add(stream, oagprop(fget), fk=True)
+                    cfval = getattr(self._oag, fk['points_to_id'], None)
+                    searchidx = 'by_'+{cfcls.stream_db_mapping[k]:k for k in cfcls.stream_db_mapping}[fk['id']]
+                    self.add(stream, cfval, cfcls, searchidx, True, True)
 
     def _set_attrs_from_cframe_uniq(self):
         if len(self._oag.rdf._rdf_window) > 1:
@@ -243,31 +404,31 @@ class PropProxy(object):
         if len(self._cframe) > 0:
             all_streams.append(self._oag.dbpkname)
 
-        for oagkey in all_streams:
+        for stream in all_streams:
 
             # Special handling for indices
-            if oagkey[0] == '_':
-                cframe_tmp[oagkey] = getattr(self._oag, oagkey, None)
+            if stream[0] == '_':
+                cframe_tmp[stream] = getattr(self._oag, stream, None)
                 continue
 
-            cfkey = oagkey
-            if self._oag.is_oagnode(oagkey):
-                cfkey = self._oag.stream_db_mapping[oagkey]
-            cfval = getattr(self._oag, oagkey, None)
+            cfkey = stream
+            if self._oag.is_oagnode(stream):
+                cfkey = self._oag.stream_db_mapping[stream]
+            cfval = getattr(self._oag, stream, None)
 
             # Special handling for nullable items
-            if type(self._oag.streams[oagkey][0])!=str\
-                and self._oag.streams[oagkey][1] is False:
+            if type(self._oag.streams[stream][0])!=str\
+                and self._oag.streams[stream][1] is False:
                 cframe_tmp[cfkey] = cfval.id if cfval else None
                 continue
 
             # Is a value missing for this stream?
             if cfval is None:
-                raw_missing_streams.append(oagkey)
+                raw_missing_streams.append(stream)
                 continue
 
             # Ok, actualy set cframe
-            if self._oag.is_oagnode(oagkey):
+            if self._oag.is_oagnode(stream):
                 # this only works if we're in dbpersist mode
                 # if there's a key error, we're working in-memory
                 try:
@@ -288,62 +449,3 @@ class PropProxy(object):
                 raise OAGraphIntegrityError("Missing streams detected on [%s]: %s" % (self._oag.dbtable, missing_streams))
 
         self._cframe = cframe_tmp
-
-    def _set_oagprop(self, stream, cfval, searchidx='id', cframe_form=True):
-
-        # primary key: set directly
-        if stream[0] == '_':
-            setattr(self._oag, stream, self._cframe[stream])
-            return
-
-        # Normalize stream name to OAG form
-        if cframe_form:
-            db_stream_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
-            stream = db_stream_mapping[stream]
-
-        if self._oag.is_oagnode(stream):
-
-            # oagprop: update cache if necessary
-            try:
-                currattr = getattr(self._oag, stream, None)
-                if currattr is None:
-                    if self._oag.streams[stream][1] is False and cfval:
-                        currattr = self._oag.streams[stream][0](cfval, searchidx)
-                        if not currattr.is_unique:
-                            currattr = currattr[-1]
-            except OAGraphRetrieveError:
-                currattr = None
-
-            if currattr:
-                self._oag.cache.put(stream, currattr)
-
-            # oagprop: actually set it
-            def fget(obj,
-                     stream=stream,
-                     streaminfo=self._oag.streams[stream],
-                     searchprms=[cfval],
-                     searchidx=searchidx,
-                     currattr=currattr):
-                # Do not instantiate objects unnecessarily
-                if currattr:
-                    try:
-                        if currattr == searchprms[0]:
-                            return currattr
-                        if currattr.id == searchprms[0]:
-                            return currattr
-                    except KeyError:
-                        # We're dealing with in-memory OAGs, just return
-                        return currattr
-                elif streaminfo[1] is False:
-                    return currattr
-                else:
-                    newattr = streaminfo[0](searchprms, searchidx)
-                    if not newattr.is_unique:
-                        newattr = newattr[-1]
-                    return newattr
-                newattr = streaminfo[0](searchprms, searchidx)
-                return newattr
-            fget.__name__ = stream
-            self.add(stream, oagprop(fget))
-        else:
-            setattr(self._oag, stream, cfval)

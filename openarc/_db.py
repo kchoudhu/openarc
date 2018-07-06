@@ -231,9 +231,11 @@ class DbProxy(object):
         # Autosetting a multinode is ok here, because it is technically
         # only restoring properties that were originally set before the
         # call to the database.
+        #
+        # DO preserve cache though, we don't want to kill OAGs that were
+        # set as part of the initialization process.
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
-
-            self._oag[self._oag.rdf._rdf_window_index]
+            self._oag.__getitem__(self._oag.rdf._rdf_window_index, preserve_cache=True)
         else:
             self._oag.propmgr._set_attrs_from_cframe_uniq()
 
