@@ -18,10 +18,14 @@ class oagprop(object):
         try:
             return obj.cache.match(self.fget.__name__)
         except:
-            oagprop = self.fget(obj)
-            if oagprop is not None:
-                obj.cache.put(self.fget.__name__, oagprop)
-            return oagprop
+            subnode = self.fget(obj)
+            if subnode is not None:
+                from .graph import OAG_RootNode
+                if isinstance(subnode, OAG_RootNode):
+                    from ._rpc import reqcls
+                    reqcls(obj).register(subnode.rpc.router, self.fget.__name__)
+                obj.cache.put(self.fget.__name__, subnode)
+            return subnode
 
     def __set__(self, obj, value):
         pass

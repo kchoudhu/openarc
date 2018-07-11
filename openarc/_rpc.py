@@ -555,17 +555,6 @@ class RpcProxy(object):
             raise OAError("This OAG is not RPC enabled")
         return self._rpcrtr
 
-    def register_with_surrounding_nodes(self):
-        if not self._rpc_enabled:
-            return
-
-        for stream in self._oag.streams:
-            node = getattr(self._oag, stream, None)
-            if node and self._oag.is_oagnode(stream):
-                if self._oag.logger.RPC:
-                    print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, node.rpc.router.id, stream))
-                reqcls(self._oag).register(node.rpc.router, stream)
-
     @property
     def registrations(self):
         return self._rpcreqs

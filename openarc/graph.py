@@ -388,8 +388,6 @@ class OAG_RootNode(object):
                 self.db.search()
                 if self.is_unique:
                     self.propmgr._set_attrs_from_cframe_uniq()
-
-            self._rpc_proxy.register_with_surrounding_nodes()
         else:
             self._rpc_proxy.proxied_streams = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
             if not self._rpc_proxy.is_async:

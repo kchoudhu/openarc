@@ -138,6 +138,9 @@ class PropProxy(object):
         # Used to store properties for __getattribute__ calls
         self._oagprops      = {}
 
+        # Streams that are managed by this property manager
+        self._managed_oagprops = []
+
     def add(self, stream, cfval, cfcls, searchidx, from_cframe, from_foreign_key):
         """Add new cfval to the property management dict. If cfval is an
         oagprop or a non-OAG stream, add it directly. If cfval is a subnode
@@ -185,6 +188,7 @@ class PropProxy(object):
         #
         # Package cframe cfvals as oagprops
         #
+        cfval_prop = cfval
         if from_foreign_key or self._oag.is_oagnode(stream):
 
             # Sanity checks
@@ -248,9 +252,12 @@ class PropProxy(object):
                 raise OAError("This should never happen")
 
             fget.__name__ = stream
-            cfval = oagprop(fget)
+            cfval_prop = oagprop(fget)
 
-        self._oagprops[stream] = cfval
+        self._oagprops[stream] = cfval_prop
+
+        if from_foreign_key and not self.is_managed_oagprop(stream):
+            self.register_managed_oagprop(stream)
 
         #
         # Carry out inter-OAG signalling
@@ -267,19 +274,18 @@ class PropProxy(object):
                     # Regenerate connections to surrounding nodes
                     if currval is None:
                         if self._oag.logger.RPC:
-                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, cfval.rpc.router.id, attr))
-                        reqcls(self._oag).register(cfval.rpc.router, attr)
+                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, cfval.rpc.router.id, stream))
+                        reqcls(self._oag).register(cfval.rpc.router, stream)
                     else:
                         if currval != cfval:
-                            if self._oaglogger.RPC:
+                            if self._oag.logger.RPC:
                                 print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.router.id,
                                                                                                    stream,
                                                                                                    currval.rpc.router.id,
                                                                                                    cfval.rpc.router.id))
                             if currval:
-                                reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, attr)
-                            reqcls(self._oag).register(cfval.rpc.router, attr)
-
+                                reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, stream)
+                            reqcls(self._oag).register(cfval.rpc.router, stream)
                             invalidate_upstream = True
                 else:
                     if currval and currval != cfval:
@@ -288,7 +294,7 @@ class PropProxy(object):
                 if invalidate_upstream:
                     if len(self._oag.rpc.registrations)>0:
                         if self._oag.logger.RPC:
-                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.router.id, stream, currval, newval))
+                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.router.id, stream, currval, cfval))
                         if self._oag.rpc.transaction.is_active:
                             self._oag.rpc.transaction.notify_upstream = True
                         else:
@@ -314,7 +320,6 @@ class PropProxy(object):
                 # Return it
                 if type(self._oagprops[stream])==oagprop:
                     subnode = self._oagprops[stream].__get__(self._oag)
-                    reqcls(self._oag).register(subnode.rpc.router, stream)
                     return subnode
                 else:
                     return self._oagprops[stream]
@@ -325,12 +330,16 @@ class PropProxy(object):
 
     def is_managed_oagprop(self, stream):
         """Takes requested attribute and returns True or false"""
-        allowed_streams = list(set(
-            [object.__getattribute__(self._oag, 'dbpkname')] +\
-            list(object.__getattribute__(self._oag, 'streams').keys()) +\
-            list(self._oagprops.keys())
-        ))
-        return stream in allowed_streams
+        if len(self._managed_oagprops)==0:
+            self._managed_oagprops = list(set(
+                [object.__getattribute__(self._oag, 'dbpkname')] +\
+                list(object.__getattribute__(self._oag, 'streams').keys())
+            ))
+        return stream in self._managed_oagprops
+
+    def register_managed_oagprop(self, stream):
+        self._managed_oagprops.append(stream)
+        list(set(self._managed_oagprops))
 
     def _set_attrs_from_cframe(self):
         from .graph import OAG_RootNode

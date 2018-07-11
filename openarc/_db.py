@@ -493,7 +493,7 @@ class DbProxy(object):
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
-        return td(SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname))
+        return SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
 
     @property
     def transaction(self):
