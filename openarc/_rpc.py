@@ -711,8 +711,8 @@ class RestProxy(object):
             rootfn = getattr(self._oag, details[0], None)
             self._app.route(endpoint, methods=details[1])(rootfn)
 
-        from socket      import gethostname
-        from gevent.wsgi import WSGIServer
+        from socket        import gethostname
+        from gevent.pywsgi import WSGIServer
 
         http_server = WSGIServer(('0.0.0.0', port), self._app)
         self._rest_addr = "%s:%d" % (gethostname(), port)
