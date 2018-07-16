@@ -44,7 +44,10 @@ def initoags():
 
     modules = sorted(sys.modules)
     for module in modules:
-        fns = inspect.getmembers(sys.modules[module], inspect.isclass)
+        try:
+            fns = inspect.getmembers(sys.modules[module], inspect.isclass)
+        except:
+            continue
 
         # If classes are OAG_RootNodes, create their tables in the database
         for fn in fns:
