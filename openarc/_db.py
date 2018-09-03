@@ -453,7 +453,7 @@ class DbProxy(object):
         # Add in user defined SQL
         for action, sqlinfo in self._oag.dblocalsql.items():
             for index, sql in sqlinfo.items():
-                default_sql[action][index] = sql
+                default_sql[action]['by_'+index] = sql.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
 
         return default_sql
 
