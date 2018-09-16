@@ -9,6 +9,7 @@ import gevent
 import gevent.queue
 import inflection
 import inspect
+import locale
 import os
 import sys
 import toml
@@ -216,6 +217,8 @@ def initenv(oag=None, on_demand_oags=False):
     """envstr: one of local, dev, qa, prod.
     Does not return OAEnv variable; for that, you
     must call getenv"""
+    locale.setlocale(locale.LC_ALL, "")
+
     global p_env
     global p_refcount_env
 
