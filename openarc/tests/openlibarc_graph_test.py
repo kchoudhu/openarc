@@ -271,7 +271,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a2.field5, 'this is an autonode2')
 
         with self.assertRaises(OAGraphRetrieveError):
-            OAG_AutoNode2((a2.field4,), "id_2")
+            OAG_AutoNode2((a2.field4,), "by_id_2")
 
     def test_autonode_create_with_null_userprms(self):
         a1 = OAG_AutoNode1a()
