@@ -284,9 +284,15 @@ class OAG_RootNode(object):
 
         Failure at each step is denoted by the generation of an AttributeError"""
         try:
-            logger  = object.__getattribute__(self, '_logger')
-            rpc     = object.__getattribute__(self, '_rpc_proxy')
-            if rpc.is_proxy:
+            propmgr = object.__getattribute__(self, '_prop_proxy')
+            return propmgr.get(attr)
+        except AttributeError as e:
+            pass
+
+        try:
+            if object.__getattribute__(self, 'is_proxy'):
+                logger  = object.__getattribute__(self, '_logger')
+                rpc     = object.__getattribute__(self, '_rpc_proxy')
                 if attr in rpc.proxied_streams:
                     if logger.RPC:
                         print("[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url))
@@ -301,12 +307,6 @@ class OAG_RootNode(object):
                 else:
                     raise AttributeError("[%s] does not exist at [%s]" % (attr, rpc.proxied_url))
         except AttributeError:
-            pass
-
-        try:
-            propmgr = object.__getattribute__(self, '_prop_proxy')
-            return propmgr.get(attr)
-        except AttributeError as e:
             pass
 
         return object.__getattribute__(self, attr)
@@ -354,6 +354,7 @@ class OAG_RootNode(object):
         # Alphabetize
         self._iteridx        = None
         self._logger         = logger
+        self.is_proxy        = not initurl is None
 
         #### Set up proxies
 
