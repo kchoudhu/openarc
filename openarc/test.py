@@ -15,7 +15,8 @@ class TestOABase(object):
         dbinfo = getenv().dbinfo
         self.dbconn = psycopg2.connect(dbname='openarc',
                                        user=dbinfo['user'],
-                                       host=dbinfo['host'])
+                                       host=dbinfo['host'],
+                                       port=dbinfo['port'])
         with self.dbconn.cursor() as cur:
             cur.execute(self.SQL.drop_test_schema)
             cur.execute(self.SQL.create_test_schema)
@@ -25,7 +26,6 @@ class TestOABase(object):
         with self.dbconn.cursor() as cur:
             cur.execute(self.SQL.drop_test_schema)
             self.dbconn.commit()
-        self.dbconn.close()
 
     def nuke_database(self):
         self.clear_openarc_schema()

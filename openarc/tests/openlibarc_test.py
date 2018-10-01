@@ -24,30 +24,21 @@ class TestOADao(unittest.TestCase, TestOABase):
         # Constructor based lifecycle
         # 1) __init__ returns valid dao
         dao_init = OADao("test")
-        self.assertEqual(type(dao_init).__name__, "OADao")
-        # 2) Explicit close results in unusable dao
-        dao_init.close()
-        with self.assertRaises(psycopg2.InterfaceError):
-            dao_init.cur
+        self.assertEqual(type(dao_init), OADao)
 
         # Ctxmgr based lifecyle
         # 1) ctxmgr returns valid dao
         with OADao("test") as dao_ctx:
-            self.assertEqual(type(dao_ctx).__name__, "OADao")
-        # 2) Leave "with" block results in unusable dao
-        with self.assertRaises(psycopg2.InterfaceError):
-            dao_ctx.cur
+            self.assertEqual(type(dao_ctx), OADao)
 
     def test_cursor_generation(self):
         """Property cur on OADao should return cursor with correct search_path"""
         with OADao("test") as dao:
-            with dao.cur as cur:
-                # Cursor generation returns dicts
-                self.assertEqual(type(cur).__name__, "RealDictCursor")
-                # Cursor points to correct search_path
-                cur.execute(self.SQL.get_search_path)
-                ret = cur.fetchall()
-                self.assertEqual(ret[0]['search_path'], 'test')
+            # Cursor generation returns dicts
+            self.assertEqual(type(dao.cur).__name__, "RealDictCursor")
+            # Cursor points to correct search_path
+            ret = dao.execute(self.SQL.get_search_path)
+            self.assertEqual(ret[0]['search_path'], 'test')
 
     def test_dao_commit(self):
         """Uncommitted transactions should not show up in database"""
@@ -55,24 +46,47 @@ class TestOADao(unittest.TestCase, TestOABase):
             testcur.execute(self.SQL.create_sample_table)
             self.dbconn.commit()
 
-        # Nothing committed if commit() method is not called
-        with OADao("test") as dao:
-            with dao.cur as cur:
+        # Nothing committed if exception is raised in ctxmgr
+        try:
+            with OADao("test", hold_commit=True) as dao:
                 for i in range(10):
-                    cur.execute(self.SQL.insert_sample_row, [i])
-            with self.dbconn.cursor() as testcur:
-                testcur.execute(self.SQL.get_rows_from_sample_table)
-                self.assertEqual(testcur.rowcount, 0)
+                    dao.execute(self.SQL.insert_sample_row, [i])
+                raise Exception()
+        except:
+            pass
+
+        with self.dbconn.cursor() as testcur:
+            testcur.execute(self.SQL.get_rows_from_sample_table)
+            self.assertEqual(testcur.rowcount, 0)
+
+        # Nothing committed if rollback explicitly called
+        with OADao("test", hold_commit=True) as dao:
+            for i in range(10):
+                dao.execute(self.SQL.insert_sample_row, [i])
+            dao.rollback()
+
+        with self.dbconn.cursor() as testcur:
+            testcur.execute(self.SQL.get_rows_from_sample_table)
+            self.assertEqual(testcur.rowcount, 0)
 
         # Data committed if commit() method is called
+        with OADao("test", hold_commit=True) as dao:
+            for i in range(10):
+                dao.execute(self.SQL.insert_sample_row, [i])
+            dao.commit()
+
+        with self.dbconn.cursor() as testcur:
+            testcur.execute(self.SQL.get_rows_from_sample_table)
+            self.assertEqual(testcur.rowcount, 10)
+
+        # Data committed even if commit is not called
         with OADao("test") as dao:
-            with dao.cur as cur:
-                for i in range(10):
-                    cur.execute(self.SQL.insert_sample_row, [i])
-                dao.commit()
-            with self.dbconn.cursor() as testcur:
-                testcur.execute(self.SQL.get_rows_from_sample_table)
-                self.assertEqual(testcur.rowcount, 10)
+            for i in range(10):
+                dao.execute(self.SQL.insert_sample_row, [i])
+
+        with self.dbconn.cursor() as testcur:
+            testcur.execute(self.SQL.get_rows_from_sample_table)
+            self.assertEqual(testcur.rowcount, 20)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""

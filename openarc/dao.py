@@ -7,39 +7,38 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
 
+from   textwrap    import dedent as td
 from   openarc.env import *
+
 
 ## Exportable classes
 
 class OADao(object):
     """Wrapper around psycopg2 with additional functionality
     for logging, connection management and sql execution"""
-    def __init__(self, schema, cdict=True):
+    def __init__(self, schema, cdict=True, hold_commit=False):
         """Schema refers to the api entity we're referring
         to: auth, trading etc"""
-        self.cdict  = cdict
-        self.schema = schema
-        self.__dbinfo = getenv().dbinfo
-        self.dbinfo = self.__dbinfo
+        self.cdict   = cdict
+        self.dbconn  = gctx().db_conn
+        self.schema  = schema
+        self._cursor = None
+        self._hold_commit = hold_commit
         self.__enter__()
 
     def __enter__(self):
-        self.dbconn = psycopg2.connect(dbname=self.__dbinfo['dbname'],
-                                       user=self.__dbinfo['user'],
-                                       host=self.__dbinfo['host'],
-                                       port=self.__dbinfo['port'])
         return self
 
-    def __exit__(self, type, value, traceback):
-        self.close()
+    def __exit__(self, exc, value, traceback):
+        if exc:
+            self.rollback()
+        else:
+            self.commit()
+        self._cursor = None
 
     def commit(self):
         """Proxy method for committing dbconnection actions"""
         self.dbconn.commit()
-
-    def close(self):
-        """Proxy method for closing dbconnection"""
-        self.dbconn.close()
 
     def rollback(self):
         """Proxy method for rolling back any existing action"""
@@ -47,12 +46,35 @@ class OADao(object):
 
     @property
     def cur(self):
-        if self.cdict:
-            cursor = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        else:
-            cursor = self.dbconn.cursor()
-        cursor.execute("SET search_path TO %s", [self.schema])
-        return cursor
+        if not self._cursor:
+            if self.cdict:
+                self._cursor = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            else:
+                self._cursor = self.dbconn.cursor()
+            self._cursor.execute("SET search_path TO %s", [self.schema])
+        return self._cursor
+
+    @property
+    def description(self):
+        return self.cur.description
+
+    def execute(self, query, params=[]):
+        results = None
+        if gctx().logger.SQL:
+            print(td(self.cur.mogrify(query, params).decode('utf-8')))
+        try:
+            self.cur.execute(query, params)
+            try:
+                results = self.cur.fetchall()
+            except:
+                pass
+            if not self._hold_commit:
+                self.commit()
+        except:
+            if not self._hold_commit:
+                self.rollback()
+            raise
+        return results
 
     @property
     def isolation(self):

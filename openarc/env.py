@@ -73,7 +73,6 @@ def initoags():
 # This is relevant in distributed scenarios
 
 p_gctx = None
-p_rootnode_cls = None
 
 class OAGlobalContext(object):
 
@@ -93,6 +92,10 @@ class OAGlobalContext(object):
         # Cache database-to-class mappings
         self._db_class_mapping = {}
 
+        # Database connection for this context
+        self.__dbconn = None
+
+
     def db_class_mapping(self, db_table_name):
         try:
             class_name = self._db_class_mapping[db_table_name]
@@ -101,6 +104,19 @@ class OAGlobalContext(object):
             self._db_class_mapping[db_table_name] = class_name
 
         return class_name
+
+    @property
+    def db_conn(self):
+        if self.__dbconn is None:
+            import psycopg2
+            dbinfo = getenv().dbinfo
+            print("intializing database connection")
+            self.__dbconn = psycopg2.connect(dbname=dbinfo['dbname'],
+                                             user=dbinfo['user'],
+                                             host=dbinfo['host'],
+                                             port=dbinfo['port'])
+        return self.__dbconn
+
 
     def put_ka(self, oag):
         try:
