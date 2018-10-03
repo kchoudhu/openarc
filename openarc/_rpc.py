@@ -87,7 +87,11 @@ class OARpc(object):
 
             (protocol, tcpaddr, oagbang) = [c for c in addr.split('/') if len(c)>0]
 
-            self._ctxsoc.connect(protocol+'//'+tcpaddr)
+            to = protocol+'//'+tcpaddr
+
+            if gctx().logger.TRANSPORT:
+                print('Connecting %s' % to)
+            self._ctxsoc.connect(to)
 
             payload = fn(self, args, kwargs)
             payload['action'] = fn.__name__
@@ -113,6 +117,10 @@ class OARpc(object):
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
+            if gctx().logger.TRANSPORT:
+                print('Disconnecting from %s' % to)
+            self._ctxsoc.disconnect(to)
+
             rpcret = msgpack.loads(reply, raw=False)
 
             if self._oag.logger.RPC:
@@ -136,6 +144,8 @@ class OARpc(object):
 
 class OARpc_RTR_Requests(OARpc):
     """Process all RPC calls from other OARpc_REQ_Request"""
+    cxncount = 0
+
     def __init__(self):
 
         self._ctxsoc  = _zmqctx.socket(zmq.ROUTER)
@@ -145,17 +155,31 @@ class OARpc_RTR_Requests(OARpc):
     def __repr__(self):
         return "<%s on %s>" % (self.__class__.__name__, self.addr)
 
-    def _send(self, sender, payload):
-        self._ctxsoc.send(sender, zmq.SNDMORE)
-        self._ctxsoc.send(str().encode('ascii'), zmq.SNDMORE)
-        self._ctxsoc.send(msgpack.dumps(payload))
-
     def _recv(self):
+
+        self.__class__.cxncount += 1
         sender  = self._ctxsoc.recv()
         empty   = self._ctxsoc.recv()
         payload = msgpack.loads(self._ctxsoc.recv(), raw=False)
 
+        if gctx().logger.TRANSPORT:
+            print("=======>")
+            print('rtrrecv [conns]  : ', self.__class__.cxncount)
+            print('rtrrecv [sender] : ', sender)
+            print('rtrrecv [payload]: ', payload)
+
         return (sender, payload)
+
+    def _send(self, sender, payload):
+
+        if gctx().logger.TRANSPORT:
+            print('rtrsend [sender] : ', sender)
+            print('rtrsend [payload]: ', payload)
+            print("<=======")
+
+        self._ctxsoc.send(sender, zmq.SNDMORE)
+        self._ctxsoc.send(str().encode('utf-8'), zmq.SNDMORE)
+        self._ctxsoc.send(msgpack.dumps(payload))
 
     @OARpc.rpcprocfn
     def proc_deregister(self, oag, ret, args):
@@ -271,7 +295,7 @@ class OARpc_RTR_Requests(OARpc):
 class OARpc_REQ_Request(OARpc):
     """Make RPC calls to another node's OARpc_RTR_Requests"""
     def __init__(self, oag):
-        self._ctxsoc  = _zmqctx.socket(zmq.REQ)
+        self._ctxsoc = _zmqctx.socket(zmq.REQ)
         self._oag = weakref.ref(oag)
 
     @OARpc.rpcfn

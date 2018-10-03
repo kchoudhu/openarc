@@ -26,10 +26,11 @@ class ACL(object):
     REMOTE_ALL = 2
 
 class OALog(object):
-    SQL   = False
-    Graph = False
-    RPC   = False
-    GC    = False
+    SQL       = False
+    Graph     = False
+    RPC       = False
+    TRANSPORT = False
+    GC        = False
 
     def log(loginfo=None, ignore_exceptions=False):
         # Information about run env: hostname, pid, time
