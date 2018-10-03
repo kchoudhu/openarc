@@ -44,6 +44,11 @@ class OARpc(object):
             }
 
             try:
+                # Quick cleanup
+                self._routing_table = {k:v for k,v in self._routing_table.items() if v() is not None}
+                if gctx().logger.RPC:
+                    print("rtr: %d items in routing table" % len(self._routing_table))
+
                 # Find OAG request relates
                 oag = self._routing_table[args[0]['to']]()
 
@@ -57,6 +62,9 @@ class OARpc(object):
 
 
                 fn(self, oag, ret, args[0]['args'])
+            except KeyError as ke:
+                ret['status'] = 'DEAD'
+                ret['message'] = "%s is not present on this host" % args[0]['to']
             except OAError as e:
                 ret['status'] = 'FAIL'
                 ret['message'] = e.message
@@ -119,7 +127,7 @@ class OARpc(object):
 
             if gctx().logger.TRANSPORT:
                 print('Disconnecting from %s' % to)
-            self._ctxsoc.disconnect(to)
+            self._ctxsoc.close()
 
             rpcret = msgpack.loads(reply, raw=False)
 
@@ -130,7 +138,7 @@ class OARpc(object):
             if rpcret['status'] == 'OK':
                 return rpcret
             if rpcret['status'] == 'DEAD':
-                self._oag.rpc.registration_invalidate(self.addr)
+                self._oag.rpc.registration_invalidate(self._oag.url)
                 return rpcret
             if rpcret['status'] == 'FAIL':
                 raise OAError("[%s:req] Failed with status [%s] and message [%s]" % (self.id,
