@@ -23,7 +23,7 @@ class oagprop(object):
                 from .graph import OAG_RootNode
                 if isinstance(subnode, OAG_RootNode):
                     from ._rpc import reqcls
-                    reqcls(obj).register(subnode.rpc.router, self.fget.__name__)
+                    reqcls(obj).register(subnode.rpc.url, self.fget.__name__)
                 obj.cache.put(self.fget.__name__, subnode)
             return subnode
 

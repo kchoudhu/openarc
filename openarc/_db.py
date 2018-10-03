@@ -44,7 +44,6 @@ class DbSchemaProxy(object):
 
             dropped_cols = [ dbc for dbc in db_columns_ext if dbc not in db_columns_reqd ]
             if len(dropped_cols)>0:
-                import pdb; pdb.set_trace()
                 raise OAGraphIntegrityError("Dropped columns %s detected, cannot initialize" % dropped_cols)
 
             add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
@@ -279,9 +278,9 @@ class DbProxy(object):
                 listeners = [r.url for r in remote_oags if (r.listen is True and r.is_valid)]
 
                 print('sending mesages to: %s' % listeners)
-                from openarc._rpc import OAGRPC_REQ_Requests
+                from openarc._rpc import OARpc_REQ_Request
                 for listener in listeners:
-                    OAGRPC_REQ_Requests(self._oag).update_broadcast(listener)
+                    OARpc_REQ_Request(self._oag).update_broadcast(listener)
 
         except psycopg2.ProgrammingError:
             raise OAGraphRetrieveError("Missing database table")

@@ -20,7 +20,7 @@ class CacheProxy(object):
     def clear(self):
         for stream, oag in self._oagcache.items():
             if self._oag.is_oagnode(stream):
-                gctx().rm_ka_via_rpc(self._oag.rpc.router.addr, oag.rpc.router.addr, stream)
+                gctx().rm_ka_via_rpc(self._oag.rpc.url, oag.rpc.url, stream)
         self._oagcache = {}
 
     def clone(self, src):
@@ -274,18 +274,18 @@ class PropProxy(object):
                     # Regenerate connections to surrounding nodes
                     if currval is None:
                         if self._oag.logger.RPC:
-                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.router.id, cfval.rpc.router.id, stream))
-                        reqcls(self._oag).register(cfval.rpc.router, stream)
+                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.id, cfval.rpc.id, stream))
+                        reqcls(self._oag).register(cfval.rpc.url, stream)
                     else:
                         if currval != cfval:
                             if self._oag.logger.RPC:
-                                print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.router.id,
+                                print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.id,
                                                                                                    stream,
-                                                                                                   currval.rpc.router.id,
-                                                                                                   cfval.rpc.router.id))
+                                                                                                   currval.rpc.id,
+                                                                                                   cfval.rpc.id))
                             if currval:
-                                reqcls(self._oag).deregister(currval.rpc.router, self._oag.rpc.router.addr, stream)
-                            reqcls(self._oag).register(cfval.rpc.router, stream)
+                                reqcls(self._oag).deregister(currval.rpc.url, self._oag.rpc.url, stream)
+                            reqcls(self._oag).register(cfval.rpc.url, stream)
                             invalidate_upstream = True
                 else:
                     if currval and currval != cfval:
@@ -294,7 +294,7 @@ class PropProxy(object):
                 if invalidate_upstream:
                     if len(self._oag.rpc.registrations)>0:
                         if self._oag.logger.RPC:
-                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.router.id, stream, currval, cfval))
+                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.id, stream, currval, cfval))
                         if self._oag.rpc.transaction.is_active:
                             self._oag.rpc.transaction.notify_upstream = True
                         else:

@@ -22,16 +22,48 @@ from openarc.exception import *
 from openarc.oatime    import *
 from openarc.env       import *
 
-class OAGRPC(object):
+class OARpc(object):
 
     @property
     def addr(self): return "tcp://%s:%s" % (self.runhost, self.port)
 
     @property
-    def id(self): return self._hash
+    def port(self): return self._ctxsoc.LAST_ENDPOINT.decode().split(":")[-1]
 
     @property
-    def port(self): return self._ctxsoc.LAST_ENDPOINT.decode().split(":")[-1]
+    def runhost(self): return socket.gethostname()
+
+    @staticmethod
+    def rpcprocfn(fn):
+        def wrapfn(self, *args, **kwargs):
+            ret = {
+                'status'  : 'OK',
+                'conv_id' : args[0]['conv_id'],
+                'message' : None,
+                'payload' : {},
+            }
+
+            try:
+                # Find OAG request relates
+                oag = self._routing_table[args[0]['to']]()
+
+                # Check ACL
+                acl_policy = oag._rpc_proxy._rpc_acl_policy
+                if acl_policy == ACL.LOCAL_ALL:
+                    if args[0]['authtoken'] != getenv().envid:
+                        raise OAError("Client unauthorized")
+                elif acl_policy == ACL.REMOTE_ALL:
+                    pass
+
+
+                fn(self, oag, ret, args[0]['args'])
+            except OAError as e:
+                ret['status'] = 'FAIL'
+                ret['message'] = e.message
+
+            return ret
+
+        return wrapfn
 
     @staticmethod
     def rpcfn(fn):
@@ -48,22 +80,27 @@ class OAGRPC(object):
                     pass
 
             # Back to business
-            if isinstance(target, OAGRPC):
+            if isinstance(target, OARpc):
                 addr = target.addr
             else:
                 addr = target
 
-            self._ctxsoc.connect(addr)
+            (protocol, tcpaddr, oagbang) = [c for c in addr.split('/') if len(c)>0]
+
+            self._ctxsoc.connect(protocol+'//'+tcpaddr)
 
             payload = fn(self, args, kwargs)
             payload['action'] = fn.__name__
 
+            # Let router know who this refers to
+            payload['to'] = oagbang
+
             # This should eventually derive from the Auth mgmt object
-            # used to initialize the OAGRPC
+            # used to initialize the OARpc
             payload['authtoken'] = getenv().envid
 
             # An identifier for this conversation
-            payload['conv_id'] = base64.b16encode(os.urandom(5))
+            payload['conv_id'] = base64.b16encode(os.urandom(5)).decode('utf-8')
 
             if self._oag.logger.RPC:
                 print("========>")
@@ -71,7 +108,7 @@ class OAGRPC(object):
                     toaddr = addr
                 else:
                     toaddr = target.id
-                print("[%s:req:%s] Sending RPC request with payload [%s] to [%s]" % (self._oag.rpc.router.id, payload['conv_id'], payload, toaddr))
+                print("[%s:req:%s] Sending RPC request with payload [%s] to [%s]" % (payload['conv_id'], self._oag.rpc.id, payload, toaddr))
 
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
@@ -79,7 +116,7 @@ class OAGRPC(object):
             rpcret = msgpack.loads(reply, raw=False)
 
             if self._oag.logger.RPC:
-                print("[%s:req:%s] Received reply [%s]" % (self._oag.rpc.router.id, rpcret['conv_id'], rpcret))
+                print("[%s:req:%s] Received reply [%s]" % (rpcret['conv_id'], self._oag.rpc.id, rpcret))
                 print("<======== ")
 
             if rpcret['status'] == 'OK':
@@ -97,54 +134,16 @@ class OAGRPC(object):
 
         return wrapfn
 
-    @staticmethod
-    def rpcprocfn(fn):
-        def wrapfn(self, *args, **kwargs):
-            ret = {
-                'status'  : 'OK',
-                'conv_id' : args[0]['conv_id'],
-                'message' : None,
-                'payload' : {},
-            }
+class OARpc_RTR_Requests(OARpc):
+    """Process all RPC calls from other OARpc_REQ_Request"""
+    def __init__(self):
 
-            try:
-                acl_policy = self._oag._rpc_proxy._rpc_acl_policy
-                if acl_policy == ACL.LOCAL_ALL:
-                    if args[0]['authtoken'] != getenv().envid:
-                        raise OAError("Client unauthorized")
-                elif acl_policy == ACL.REMOTE_ALL:
-                    pass
+        self._ctxsoc  = _zmqctx.socket(zmq.ROUTER)
+        self._routing_table = {}
+        self.procglet = None
 
-                fn(self, ret, args[0]['args'])
-            except OAError as e:
-                ret['status'] = 'FAIL'
-                ret['message'] = e.message
-
-            return ret
-
-        return wrapfn
-
-    @property
-    def runhost(self): return socket.gethostname()
-
-    def __init__(self, zmqtype, oag):
-        self.zmqtype  = zmqtype
-        self._ctxsoc  = _zmqctx.socket(zmqtype)
-        self._oag     = weakref.ref(oag)
-        self._hash    = base64.b16encode(os.urandom(5))
-
-    def __getattribute__(self, attrname):
-        attr = object.__getattribute__(self, attrname)
-        return attr() if type(attr)==weakref.ref else attr
-
-class OAGRPC_RTR_Requests(OAGRPC):
-    """Process all RPC calls from other OAGRPC_REQ_Requests"""
-    def __init__(self, oag):
-
-        super(OAGRPC_RTR_Requests, self).__init__(zmq.ROUTER, oag)
-
-    def start(self):
-        self._ctxsoc.bind("tcp://*:0")
+    def __repr__(self):
+        return "<%s on %s>" % (self.__class__.__name__, self.addr)
 
     def _send(self, sender, payload):
         self._ctxsoc.send(sender, zmq.SNDMORE)
@@ -158,92 +157,134 @@ class OAGRPC_RTR_Requests(OAGRPC):
 
         return (sender, payload)
 
-    @OAGRPC.rpcprocfn
-    def proc_deregister(self, ret, args):
-        self._oag.rpc.registration_invalidate(args['deregister_addr'])
+    @OARpc.rpcprocfn
+    def proc_deregister(self, oag, ret, args):
+        oag.rpc.registration_invalidate(args['deregister_addr'])
 
-    @OAGRPC.rpcprocfn
-    def proc_getstream(self, ret, args):
+    @OARpc.rpcprocfn
+    def proc_getstream(self, oag, ret, args):
         from .graph import OAG_RootNode
-        attr = getattr(self._oag, args['stream'], None)
+        attr = getattr(oag, args['stream'], None)
         if isinstance(attr, OAG_RootNode):
             ret['payload']['type']  = 'redirect'
-            ret['payload']['value'] = attr.rpc.router.addr
-            ret['payload']['redir_id'] = attr.rpc.router.id
+            ret['payload']['value'] = attr.rpc.url
+            ret['payload']['redir_id'] = attr.rpc.id
             ret['payload']['class'] = attr.__class__.__name__
         else:
             ret['payload']['type']  = 'value'
             ret['payload']['value'] = attr
 
-    @OAGRPC.rpcprocfn
-    def proc_invalidate(self, ret, args):
+    @OARpc.rpcprocfn
+    def proc_invalidate(self, oag, ret, args):
 
         invstream = args['stream']
 
-        if self._oag.logger.RPC:
-            print('[%s:rtr:%s] invalidation signal received' % (self._oag.rpc.router.id, ret['conv_id']))
+        if oag.logger.RPC:
+            print('[%s:rtr] invalidation signal received' % (ret['conv_id']))
 
-        self._oag.cache.invalidate(invstream)
+        oag.cache.invalidate(invstream)
 
         # Inform upstream
-        for addr, stream in self._oag.rpc.registrations.items():
-            OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
+        for addr, stream in oag.rpc.registrations.items():
+            OARpc_REQ_Request(oag).invalidate(addr, stream)
 
         # Execute any event handlers
         try:
-            if invstream in self._oag.streams.keys():
-                evhdlr = self._oag.streams[invstream][2]
+            if invstream in oag.streams.keys():
+                evhdlr = oag.streams[invstream][2]
                 if evhdlr:
-                    getattr(self._oag, evhdlr, None)()
+                    getattr(oag, evhdlr, None)()
         except KeyError as e:
             pass
 
-    @OAGRPC.rpcprocfn
-    def proc_register(self, ret, args):
-        self._oag.rpc.registration_add(args['addr'], args['stream'])
+    @OARpc.rpcprocfn
+    def proc_register(self, oag, ret, args):
+        oag.rpc.registration_add(args['addr'], args['stream'])
 
-    @OAGRPC.rpcprocfn
-    def proc_register_proxy(self, ret, args):
-        self._oag.rpc.registration_add(args['addr'], args['stream'])
+    @OARpc.rpcprocfn
+    def proc_register_proxy(self, oag, ret, args):
+        oag.rpc.registration_add(args['addr'], args['stream'])
 
-        rawprops = list(self._oag.streams.keys())\
-                   + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), property)]\
-                   + [p for p in dir(self._oag.__class__) if isinstance(getattr(self._oag.__class__, p), oagprop)]\
-                   + list(self._oag.propmgr._oagprops.keys())
+        rawprops = list(oag.streams.keys())\
+                   + [p for p in dir(oag.__class__) if isinstance(getattr(oag.__class__, p), property)]\
+                   + [p for p in dir(oag.__class__) if isinstance(getattr(oag.__class__, p), oagprop)]\
+                   + list(oag.propmgr._oagprops.keys())
 
-        ret['payload'] = [p for p in list(set(rawprops)) if p not in self._oag.rpc.stoplist]
+        ret['payload'] = [p for p in list(set(rawprops)) if p not in oag.rpc.stoplist]
 
-    @OAGRPC.rpcprocfn
-    def proc_update_broadcast(self, ret, args):
-        if self._oag.logger.RPC:
-            print('[%s:rtr:%s] update broadcast signal received from %s' % (self._oag.rpc.router.id, ret['conv_id'], args['addr']))
-        self._oag.db.search()
+    @OARpc.rpcprocfn
+    def proc_update_broadcast(self, oag, ret, args):
+        if oag.logger.RPC:
+            print('[%s:rtr:%s] update broadcast signal received from %s' % (oag.rpc.id, ret['conv_id'], args['addr']))
+        oag.db.search()
 
         # Tell upstream
-        if self._oag.logger.RPC:
-            print('[%s:rtr:%s] sending updates to %s' % (self._oag.rpc.router.id, ret['conv_id'], self._oag.rpc.registrations))
-        for addr, stream in self._oag.rpc.registrations.items():
-            OAGRPC_REQ_Requests(self._oag).invalidate(addr, stream)
+        if oag.logger.RPC:
+            print('[%s:rtr:%s] sending updates to %s' % (oag.rpc.id, ret['conv_id'], oag.rpc.registrations))
+        for addr, stream in oag.rpc.registrations.items():
+            OARpc_REQ_Request(oag).invalidate(addr, stream)
+
+    def register_oag(self, oagbang, oag):
+
+        self._routing_table[oagbang] = weakref.ref(oag)
+
+        # To do: prune routing table
+        return True
+
+    @property
+    def ctxsoc(self):
+        return self._ctxsoc
+
+    def start(self):
+
+        def rpcproc(sender, payload):
+            rpcret = {
+                'deregister'       : self.proc_deregister,
+                'getstream'        : self.proc_getstream,
+                'invalidate'       : self.proc_invalidate,
+                'register'         : self.proc_register,
+                'register_proxy'   : self.proc_register_proxy,
+                'update_broadcast' : self.proc_update_broadcast,
+            }[payload['action']](payload)
+
+            self._send(sender, rpcret)
+
+        # Prep gevent
+        from gevent import monkey
+        monkey.patch_all()
+
+        # Bind to incoming port
+        self._ctxsoc.bind("tcp://*:0")
+
+        if gctx().logger.RPC:
+            print("[rtr] Listening for RPC requests")
+
+        while True:
+            (sender, payload) = self._recv()
+
+            if gctx().logger.RPC:
+                print("[%s:rtr] Received message [%s]" % (payload['conv_id'], payload))
+
+            gevent.spawn(rpcproc, sender, payload)
 
 
-rtrcls = OAGRPC_RTR_Requests
-
-class OAGRPC_REQ_Requests(OAGRPC):
-    """Make RPC calls to another node's OAGRPC_RTR_Requests"""
+class OARpc_REQ_Request(OARpc):
+    """Make RPC calls to another node's OARpc_RTR_Requests"""
     def __init__(self, oag):
-        super(OAGRPC_REQ_Requests, self).__init__(zmq.REQ, oag)
+        self._ctxsoc  = _zmqctx.socket(zmq.REQ)
+        self._oag = weakref.ref(oag)
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def deregister(self, *args, **kwargs):
         return  {
             'args'      : {
                 'deregister_addr' : args[0][0],
                 'stream' : args[0][1],
-                'addr'   : self._oag.rpc.router.addr
+                'addr'   : self._oag.rpc.url
             }
         }
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def getstream(self, *args, **kwargs):
         return {
             'args'      : {
@@ -251,7 +292,7 @@ class OAGRPC_REQ_Requests(OAGRPC):
             }
         }
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def invalidate(self, *args, **kwargs):
         return {
             'args'      : {
@@ -259,33 +300,37 @@ class OAGRPC_REQ_Requests(OAGRPC):
             }
         }
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def register(self, *args, **kwargs):
         return {
             'args'      : {
                 'stream' : args[0][0],
-                'addr'   : self._oag.rpc.router.addr
+                'addr'   : self._oag.rpc.url
             }
         }
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def register_proxy(self, *args, **kwargs):
         return {
             'args'      : {
                 'stream' : args[0][0],
-                'addr'   : self._oag.rpc.router.addr
+                'addr'   : self._oag.rpc.url
             }
         }
 
-    @OAGRPC.rpcfn
+    @OARpc.rpcfn
     def update_broadcast(self, *args, **kwargs):
         return {
             'args' : {
-                'addr'   : self._oag.rpc.router.addr
+                'addr'   : self._oag.rpc.url
             }
         }
 
-reqcls = OAGRPC_REQ_Requests
+    def __getattribute__(self, attrname):
+        attr = object.__getattribute__(self, attrname)
+        return attr() if type(attr)==weakref.ref else attr
+
+reqcls = OARpc_REQ_Request
 
 class RpcTransaction(object):
     def __init__(self, rpc_proxy):
@@ -303,7 +348,7 @@ class RpcTransaction(object):
 
         if self.notify_upstream:
             for addr, stream_to_invalidate in self._rpc_proxy._rpcreqs.items():
-                reqcls(self._rpc_proxy._oag).invalidate(addr, stream_to_invalidate)
+                reqcls(self.rpc._oag).invalidate(addr, stream_to_invalidate)
 
         self.is_active = False
 
@@ -314,7 +359,6 @@ class RpcProxy(object):
                  initurl=None,
                  rpc_enabled=True,
                  rpc_acl_policy=ACL.LOCAL_ALL,
-                 rpc_async=True,
                  rpc_dbupdate_listen=False,
                  rpc_discovery_timeout=0,
                  heartbeat_enabled=True):
@@ -324,9 +368,8 @@ class RpcProxy(object):
 
         ### Spin up rpc infrastructure
 
-        # Imports
-        from gevent import spawn, monkey
-        from gevent.lock import BoundedSemaphore
+        # A unique identifier for this OAG's rpc infra
+        self._rpc_id = base64.b16encode(os.urandom(5)).decode('utf-8')
 
         # Is RPC initialization complete?
         self._rpc_init_done = False
@@ -337,17 +380,8 @@ class RpcProxy(object):
         # Who's allowed to access this node?
         self._rpc_acl_policy = rpc_acl_policy
 
-        # Serialize access to RPC
-        self._rpcsem = BoundedSemaphore(1)
-
-        # Routes all incoming RPC requests (dead to start with)
-        self._rpcrtr = None
-
         # Registrations received from other OAGs
         self._rpcreqs = {}
-
-        # Async
-        self._rpc_async = rpc_async
 
         # Holding spot for RPC discoverability - default off
         self._rpc_discovery = None
@@ -392,27 +426,12 @@ class RpcProxy(object):
         if not self._rpc_enabled:
             return
 
-        # RPC routing
-        if not self._rpc_init_done:
-
-            monkey.patch_all()
-
-            with self._rpcsem:
-                self._rpcrtr = OAGRPC_RTR_Requests(self._oag)
-                self._rpcrtr.start()
-                if self._rpc_async:
-                    # Force execution of newly spawned greenlets
-                    g = spawn(self.start)
-                    g.name = "%s/%s" % (str(self._rpcrtr.id), self._oag)
-                    gctx().put_glet(self._oag, g)
-                    gevent.sleep(0)
-
-            # Avoid double RPC initialization
-            self._rpc_init_done = True
-
         # Proxying
         if self._proxy_url:
             self._proxy_mode = True
+
+        # Register OAG with router
+        self._rpc_init_done = gctx().rpcrtr.register_oag(self._rpc_id, self._oag)
 
     def __getattribute__(self, attrname):
         attr = object.__getattribute__(self, attrname)
@@ -451,10 +470,10 @@ class RpcProxy(object):
         if value is False:
             kill_count = gctx().kill_glet(self, 'heartbeat')
             if self._oag.logger.RPC:
-                print("[%s] Killing [%d] heartbeat greenlets" % (self.router.id, kill_count))
+                print("[%s] Killing [%d] heartbeat greenlets" % (self.id, kill_count))
             kill_count = gctx().kill_glet(self, 'discovery')
             if self._oag.logger.RPC:
-                print("[%s] Killing [%d] discovery greenlets" % (self.router.id, kill_count))
+                print("[%s] Killing [%d] discovery greenlets" % (self.id, kill_count))
             self._rpc_discovery.db.delete()
             self._rpc_discovery = None
         else:
@@ -469,14 +488,14 @@ class RpcProxy(object):
                     else:
                         if self._oag.logger.RPC:
                             print("[%s] Removing stale discoverable [%s]-[%d], last HA at [%s]"
-                                   % (self.router.id, rpc.type, rpc.stripe, rpc.heartbeat))
+                                   % (self.id, rpc.type, rpc.stripe, rpc.heartbeat))
                         rpc.db.delete()
 
                 # Is there already an active subscription there?
                 if number_active > 0:
                     if not self.fanout:
                         message = "[%s] Active OAG already on inferred name [%s], last HA at [%s]"\
-                                   % (self.router.id, rpc.rpcinfname, rpc.heartbeat)
+                                   % (self.id, rpc.rpcinfname, rpc.heartbeat)
                         if self._oag.logger.RPC:
                             print(message)
                         raise OAError(message)
@@ -492,7 +511,7 @@ class RpcProxy(object):
                 .db.create({
                     'rpcinfname' : self._oag.infname_semantic,
                     'stripe'     : 0,
-                    'url'        : self._oag.oagurl,
+                    'url'        : self._oag.rpc.url,
                     'type'       : self._oag.__class__.__name__,
                     'envid'      : getenv().envid,
                     'heartbeat'  : OATime().now,
@@ -507,8 +526,7 @@ class RpcProxy(object):
     def fanout(self): return False
 
     @property
-    def is_async(self):
-        return self._rpc_async
+    def id(self): return self._rpc_id
 
     @property
     def is_enabled(self):
@@ -550,12 +568,6 @@ class RpcProxy(object):
         self._proxy_oags = oag_array
 
     @property
-    def router(self):
-        if not self._rpc_enabled:
-            raise OAError("This OAG is not RPC enabled")
-        return self._rpcrtr
-
-    @property
     def registrations(self):
         return self._rpcreqs
 
@@ -567,49 +579,16 @@ class RpcProxy(object):
         self._rpcreqs = {rpcreq:self._rpcreqs[rpcreq] for rpcreq in self._rpcreqs if rpcreq != deregistering_oag_addr}
         gctx().rm_ka(self._oag)
 
-    def start(self):
-
-        rpc_dispatch = {
-            'deregister'       : self._rpcrtr.proc_deregister,
-            'getstream'        : self._rpcrtr.proc_getstream,
-            'invalidate'       : self._rpcrtr.proc_invalidate,
-            'register'         : self._rpcrtr.proc_register,
-            'register_proxy'   : self._rpcrtr.proc_register_proxy,
-            'update_broadcast' : self._rpcrtr.proc_update_broadcast,
-        }
-
-        if self._oag.logger.RPC:
-            print("[%s:rtr] Listening for RPC requests [%s]" % (self._rpcrtr.id, self._oag.__class__.__name__))
-
-        while True:
-            (sender, payload) = self._rpcrtr._recv()
-            if self._oag is None:
-                rpcret = {
-                    'status'  : 'DEAD',
-                    'conv_id' : payload['conv_id'],
-                    'message' : None,
-                    'payload' : {},
-                }
-            else:
-                if self._oag.logger.RPC:
-                    print("[%s:rtr:%s] Received message [%s]" % (self._rpcrtr.id, payload['conv_id'], payload))
-                rpcret = rpc_dispatch[payload['action']](payload)
-
-            self._rpcrtr._send(sender, rpcret)
-            if not self.is_async and self.is_proxy:
-                reqcls(self._oag).deregister(self.proxied_url, self._oag.router.addr, 'proxy')
-                break
-
     def start_discovery_timeout(self):
         if self.is_timedout:
             if self._oag.logger.RPC:
-                print("[%s] Starting timeout greenlet at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+                print("[%s] Starting timeout greenlet at [%s]" % (self.id, datetime.datetime.now().isoformat()))
             gctx().put_glet(self, gevent.spawn(self.__cb_discovery_timeout), glet_type='discovery')
 
     def start_heartbeat(self):
         if self.is_heartbeat:
             if self._oag.logger.RPC:
-                print("[%s] Starting heartbeat greenlet at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+                print("[%s] Starting heartbeat greenlet at [%s]" % (self.id, datetime.datetime.now().isoformat()))
             gctx().put_glet(self, gevent.spawn(self.__cb_heartbeat), glet_type='heartbeat')
 
     @property
@@ -620,6 +599,10 @@ class RpcProxy(object):
     def transaction(self):
         return self._rpc_transaction
 
+    @property
+    def url(self):
+        return '%s/%s' % (gctx().rpcrtr.addr, self.id)
+
     def __cb_heartbeat(self):
         while True:
             # Did our underlying db control row evaporate? If so, holy shit.
@@ -629,33 +612,33 @@ class RpcProxy(object):
             except OAGraphRetrieveError as e:
                 if self._oag.logger.RPC:
                     print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting"
-                            % (self.router.id, self._rpc_discovery.rpcinfname, self._rpc_discovery.stripe))
+                            % (self.id, self._rpc_discovery.rpcinfname, self._rpc_discovery.stripe))
                 sys.exit(1)
 
             # Did environment change?
             if self._rpc_discovery.envid != rpcdisc.envid:
                 if self._oag.logger.RPC:
                     print("[%s] Environment changed from [%s] to [%s], exiting"
-                            % (self.router.id, self._rpc_discovery.envid, rpcdisc.envid))
+                            % (self.id, self._rpc_discovery.envid, rpcdisc.envid))
                 sys.exit(1)
 
             self._rpc_discovery.heartbeat = OATime().now
             if self._oag.logger.RPC:
-                print("[%s] heartbeat %s" % (self.router.id, self._rpc_discovery.heartbeat))
+                print("[%s] heartbeat %s" % (self.id, self._rpc_discovery.heartbeat))
             self._rpc_discovery.db.update()
 
             gevent.sleep(getenv().rpctimeout)
 
     def __cb_discovery_timeout(self):
         if self._oag.logger.RPC:
-            print("[%s] Starting discovery timeout at [%s]" % (self.router.id, datetime.datetime.now().isoformat()))
+            print("[%s] Starting discovery timeout at [%s]" % (self.id, datetime.datetime.now().isoformat()))
 
         gevent.sleep(self._rpc_discovery_timeout)
 
         if len(self._rpcreqs)==0:
             if self._oag.logger.RPC:
                 print("[%s] After [%d] second timeout, [%s] has no clients, making it undiscoverable at [%s]"
-                    % (self.router.id, self._rpc_discovery_timeout, self._oag, datetime.datetime.now().isoformat()))
+                    % (self.id, self._rpc_discovery_timeout, self._oag, datetime.datetime.now().isoformat()))
             self.discoverable = False
 
 class RestProxy(object):

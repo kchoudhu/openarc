@@ -12,6 +12,7 @@ import inspect
 import locale
 import os
 import sys
+import time
 import toml
 import traceback
 import weakref
@@ -95,6 +96,8 @@ class OAGlobalContext(object):
         # Database connection for this context
         self.__dbconn = None
 
+        # Rpc Router
+        self._rpcrtr = None
 
     def db_class_mapping(self, db_table_name):
         try:
@@ -116,7 +119,6 @@ class OAGlobalContext(object):
                                              host=dbinfo['host'],
                                              port=dbinfo['port'])
         return self.__dbconn
-
 
     def put_ka(self, oag):
         try:
@@ -144,6 +146,28 @@ class OAGlobalContext(object):
     def rm_queue_size(self):
 
         return self._deferred_rm_queue.qsize()
+
+    @property
+    def rpcrtr(self):
+        if not self._rpcrtr:
+
+            # Start router
+            from ._rpc import OARpc_RTR_Requests
+            self._rpcrtr = OARpc_RTR_Requests()
+
+            # Force execution of newly spawned greenlets
+            from gevent import spawn, sleep
+            self.rpcrtr.procglet = spawn(self.rpcrtr.start)
+
+            # Busy wait until router is up and running.
+            while not self.rpcrtr.port:
+                time.sleep(0.1)
+
+            self.rpcrtr.procglet.name = "%s" % (self.rpcrtr)
+            print(self.rpcrtr)
+            sleep(0)
+
+        return self._rpcrtr
 
     # Greenlet put
     def put_glet(self, oag, glet, glet_type=None):

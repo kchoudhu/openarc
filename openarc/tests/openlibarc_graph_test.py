@@ -636,7 +636,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
 
 
-        a1_prox = OAG_AutoNode1a(initurl=a1.oagurl)
+        a1_prox = OAG_AutoNode1a(initurl=a1.url)
 
         with self.assertRaises(OAError):
             a1_prox.field2 = 32
@@ -674,8 +674,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                     'subnode2' : a3
                 })
 
-        a2_proxy = OAG_AutoNode2(initurl=a2.oagurl)
-        a3_proxy = OAG_AutoNode3(initurl=a3.oagurl)
+        a2_proxy = OAG_AutoNode2(initurl=a2.url)
+        a3_proxy = OAG_AutoNode3(initurl=a3.url)
 
         self.assertEqual(a2_proxy.auto_node1a.size, 10)
         self.assertEqual(a2_proxy.auto_node1b.size, 10)
@@ -710,7 +710,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : a3a
             })
 
-        a1a_proxy = OAG_AutoNode1a(initurl=a1a.oagurl)
+        a1a_proxy = OAG_AutoNode1a(initurl=a1a.url)
 
         a4 =\
             OAG_AutoNode4().db.create({
@@ -721,15 +721,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Cache state
         self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
         self.assertEqual(a1a_proxy.cache.state, {})
-        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.oagurl)
+        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.url)
         self.assertEqual(a1a.cache.state['subnode1'], a2)
         self.assertEqual(a1a.cache.state['subnode2'], a3a)
         self.assertEqual(a1a.subnode1.cache.state, {})
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3a.url)
 
         # Change subnode's oag: a4's oagcache should be blown
         with self.assertRaises(OAError):
@@ -745,8 +745,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3b.url)
 
         # Change sub-subnode's dbstream
         with self.assertRaises(OAError):
@@ -770,8 +770,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3b.url)
 
         # Change subnode back
         with self.assertRaises(OAError):
@@ -785,8 +785,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3a.url)
 
     def test_oag_remote_proxy_invalidation_in_memory(self):
 
@@ -816,7 +816,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : a3a
             })
 
-        a1a_proxy = OAG_AutoNode1a(initurl=a1a.oagurl)
+        a1a_proxy = OAG_AutoNode1a(initurl=a1a.url)
 
         a4 =\
             OAG_AutoNode4(initprms={
@@ -827,15 +827,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # Cache state
         self.assertEqual(a4.cache.state['subnode1'], a1a_proxy)
         self.assertEqual(a1a_proxy.cache.state, {})
-        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.oagurl)
+        self.assertEqual(a1a_proxy.rpc.proxied_url, a1a.url)
         self.assertEqual(a1a.cache.state['subnode1'], a2)
         self.assertEqual(a1a.cache.state['subnode2'], a3a)
         self.assertEqual(a1a.subnode1.cache.state, {})
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3a.url)
 
         # Change subnode's oag: a4's oagcache should be blown
         with self.assertRaises(OAError):
@@ -850,8 +850,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3b.url)
 
         # Change sub-subnode's dbstream
         with self.assertRaises(OAError):
@@ -875,8 +875,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3b.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3b.url)
 
         # Change subnode back
         with self.assertRaises(OAError):
@@ -890,8 +890,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a1a.subnode2.cache.state, {})
         # Actual return
         self.assertEqual(a4.subnode1, a1a_proxy)
-        self.assertEqual(a4.subnode1.subnode1.oagurl, a2.oagurl)
-        self.assertEqual(a4.subnode1.subnode2.oagurl, a3a.oagurl)
+        self.assertEqual(a4.subnode1.subnode1.url, a2.url)
+        self.assertEqual(a4.subnode1.subnode2.url, a3a.url)
 
     def test_uniquenode_deletion(self):
 
@@ -1549,8 +1549,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(len(a1a_chk.cache.state), 2)
 
-        self.assertTrue(a1a_chk.oagurl in a2_chk.rpc.registrations)
-        self.assertTrue(a1a_chk.oagurl in a3_chk.rpc.registrations)
+        self.assertTrue(a1a_chk.url in a2_chk.rpc.registrations)
+        self.assertTrue(a1a_chk.url in a3_chk.rpc.registrations)
 
         del(a1a_chk)
 

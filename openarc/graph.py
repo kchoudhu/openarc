@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gevent import monkey, sleep, spawn
+from gevent import monkey
 monkey.patch_all()
 
 import datetime
@@ -12,7 +12,7 @@ import sys
 
 from ._db   import *
 from ._rdf  import *
-from ._rpc  import rtrcls, reqcls, RpcTransaction, RpcProxy, RestProxy
+from ._rpc  import reqcls, RpcTransaction, RpcProxy, RestProxy
 from ._util import oagprop, staticproperty
 
 from openarc.env       import *
@@ -191,9 +191,6 @@ class OAG_RootNode(object):
                 self._iteridx = 0
                 raise StopIteration()
 
-    @property
-    def oagurl(self): return self.rpc.router.addr
-
     def clone(self):
         oagcopy = self.__class__()
 
@@ -220,6 +217,10 @@ class OAG_RootNode(object):
         else:
             return len(self.rdf._rdf_window)
 
+    @property
+    def url(self):
+        return self.rpc.url
+
     ##### Stream attributes
 
     ##### Internals
@@ -232,8 +233,8 @@ class OAG_RootNode(object):
         if self.logger.GC:
             print("GC=========>")
             print("Deleting %s %s, %s, proxy: %s" % (self,
-                                                     self.rpc.router.id if self.rpc.is_enabled else str(),
-                                                     self.rpc.router.addr if self.rpc.is_enabled else str(),
+                                                     self.rpc.id if self.rpc.is_enabled else str(),
+                                                     self.rpc.url if self.rpc.is_enabled else str(),
                                                      self.rpc.is_proxy))
 
         if self.rpc.is_enabled:
@@ -244,7 +245,7 @@ class OAG_RootNode(object):
             if self.rpc.is_proxy:
                 if self.logger.GC:
                     print("--> %s" % self.rpc.proxied_url)
-                gctx().rm_ka_via_rpc(self.rpc.router.addr, self.rpc.proxied_url, 'proxy')
+                gctx().rm_ka_via_rpc(self.rpc.url, self.rpc.proxied_url, 'proxy')
 
             # Tell upstream registrations that we are going away
             if self.logger.GC:
@@ -295,7 +296,7 @@ class OAG_RootNode(object):
                 rpc     = object.__getattribute__(self, '_rpc_proxy')
                 if attr in rpc.proxied_streams:
                     if logger.RPC:
-                        print("[%s] proxying request for [%s] to [%s]" % (rpc.router.id, attr, rpc.proxied_url))
+                        print("[%s] proxying request for [%s] to [%s]" % (rpc.id, attr, rpc.proxied_url))
                     payload = reqcls(self).getstream(rpc.proxied_url, attr)['payload']
                     if payload['value']:
                         if payload['type'] == 'redirect':
@@ -343,7 +344,6 @@ class OAG_RootNode(object):
                  rest=False,
                  rpc=True,
                  rpc_acl=ACL.LOCAL_ALL,
-                 rpc_async=True,
                  rpc_dbupdate_listen=False,
                  rpc_discovery_timeout=0):
 
@@ -374,7 +374,6 @@ class OAG_RootNode(object):
                                         initurl=initurl,
                                         rpc_enabled=rpc,
                                         rpc_acl_policy=rpc_acl,
-                                        rpc_async=rpc_async,
                                         rpc_dbupdate_listen=rpc_dbupdate_listen,
                                         rpc_discovery_timeout=rpc_discovery_timeout,
                                         heartbeat_enabled=heartbeat)
@@ -390,13 +389,11 @@ class OAG_RootNode(object):
                     self.propmgr._set_attrs_from_cframe_uniq()
         else:
             self._rpc_proxy.proxied_streams = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
-            if not self._rpc_proxy.is_async:
-                self.rpc.start()
 
         if self.logger.GC:
             print("Creating %s, %s, %s" % (self,
-                                           self.rpc.router.id if self.rpc.is_enabled else str(),
-                                          'listening on %s' % self.rpc.router.addr if self.rpc.is_enabled else str()))
+                                           self.rpc.id if self.rpc.is_enabled else str(),
+                                          'listening on %s' % self.rpc.url if self.rpc.is_enabled else str()))
 
     def __iter__(self):
         if self.is_unique:
