@@ -95,7 +95,10 @@ class OAGlobalContext(object):
         self._db_class_mapping = {}
 
         # Database connection for this context
-        self.__dbconn = None
+        self._db_conn = None
+
+        # Global transaction
+        self._db_txn = None
 
         # Rpc Router
         self._rpcrtr = None
@@ -111,15 +114,26 @@ class OAGlobalContext(object):
 
     @property
     def db_conn(self):
-        if self.__dbconn is None:
+        if self._db_conn is None:
             import psycopg2
             dbinfo = getenv().dbinfo
             print("intializing database connection")
-            self.__dbconn = psycopg2.connect(dbname=dbinfo['dbname'],
+            self._db_conn = psycopg2.connect(dbname=dbinfo['dbname'],
                                              user=dbinfo['user'],
                                              host=dbinfo['host'],
                                              port=dbinfo['port'])
-        return self.__dbconn
+        return self._db_conn
+
+    @property
+    def db_txndao(self):
+
+        return self._db_txn
+
+    @db_txndao.setter
+    def db_txndao(self, newtxn):
+
+        self._db_txn = newtxn
+
 
     def put_ka(self, oag):
         try:
@@ -209,11 +223,6 @@ def gctx():
     if p_gctx is None:
         p_gctx = OAGlobalContext()
     return p_gctx
-
-@atexit.register
-def goodbye_world():
-
-    global p_gctx
 
 # Environment initialization
 #

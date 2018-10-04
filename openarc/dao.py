@@ -30,11 +30,7 @@ class OADao(object):
         return self
 
     def __exit__(self, exc, value, traceback):
-        if exc:
-            self.rollback()
-        else:
-            self.commit()
-        self._cursor = None
+        self.cur_finalize(exc)
 
     def commit(self):
         """Proxy method for committing dbconnection actions"""
@@ -53,6 +49,13 @@ class OADao(object):
                 self._cursor = self.dbconn.cursor()
             self._cursor.execute("SET search_path TO %s", [self.schema])
         return self._cursor
+
+    def cur_finalize(self, exc):
+        if exc:
+            self.rollback()
+        else:
+            self.commit()
+        self._cursor = None
 
     @property
     def description(self):
@@ -88,3 +91,22 @@ class OADao(object):
         READRPT = psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ
         SERIAL  = psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE
 
+class OADbTransaction(object):
+    """Manipulates the global dbconn object so that all OAGs see the same
+    cursor. This is the functional equivalent of a semantic transaction. Captures
+    non-OAG database transactions, but only as an unintended side effect."""
+    def __init__(self, transname):
+        self.dao = None
+
+    def __enter__(self):
+
+        if not self.dao:
+            gctx().db_txndao = OADao("openarc", hold_commit=True)
+            self.dao = gctx().db_txndao
+            self.dao.cur
+        return self
+
+    def __exit__(self, exc, value, traceback):
+        self.dao.cur_finalize(exc)
+        gctx().db_txndao = None
+        self.dao = None

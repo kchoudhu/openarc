@@ -117,9 +117,6 @@ class DbProxy(object):
         # Schema is unknown right now
         self._schema = None
 
-        # This node's DAO
-        self._dao = OADao(self._oag.context)
-
         # Intialize search parameters, if any
         if searchprms:
             if type(searchprms).__name__ in ['dict']:
@@ -133,6 +130,10 @@ class DbProxy(object):
 
         self._searchprms     = list(searchprms) if searchprms else list()
         self._searchidx      = searchidx
+
+    @property
+    def __dao(self):
+        return OADao(self._oag.context) if not gctx().db_txndao else gctx().db_txndao
 
     def clone(self, src):
         self._schema     = src.db.schema
@@ -156,7 +157,7 @@ class DbProxy(object):
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
 
-        results = self._dao.execute(insert_sql, vals)
+        results = self.__dao.execute(insert_sql, vals)
         if self._searchidx=='id':
             index_val = results
             self._searchprms = list(index_val[0].values())
@@ -185,7 +186,7 @@ class DbProxy(object):
 
         delete_sql = self.SQL['delete']['id']
 
-        self._dao.execute(delete_sql, [self._oag.id])
+        self.__dao.execute(delete_sql, [self._oag.id])
         self.search(throw_on_empty=False, broadcast=broadcast)
 
         if self._oag.is_unique:
@@ -232,7 +233,7 @@ class DbProxy(object):
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag.propmgr._cframe[attr] for attr in member_attrs]
 
-        self._dao.execute(update_sql, update_values)
+        self.__dao.execute(update_sql, update_values)
         if not norefresh:
             self.__refresh_from_cursor(broadcast=broadcast)
 
@@ -262,7 +263,7 @@ class DbProxy(object):
 
     def __refresh_from_cursor(self, broadcast=False):
         try:
-            self._oag.rdf._rdf = self._dao.execute(self.SQL['read'][self._searchidx], self._searchprms)
+            self._oag.rdf._rdf = self.__dao.execute(self.SQL['read'][self._searchidx], self._searchprms)
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
