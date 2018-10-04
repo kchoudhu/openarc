@@ -242,6 +242,21 @@ class DbProxy(object):
 
         return self._oag
 
+    def update_many(self, updparms, norefresh=False, broadcast=False):
+        update_clause = ', '.join(["%s=%%s" % attr
+                                   for attr in updparms.keys()])
+        update_sql    = self.SQL['update'][self._searchidx] % (update_clause, '%s')
+
+        self.__dao.execute(update_sql, list(updparms.values())+self._searchprms)
+
+        if not norefresh:
+            self.__refresh_from_cursor(broadcast=broadcast)
+
+        if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
+            self._oag[self._oag.rdf._rdf_window_index]
+
+        return self._oag
+
     def update_searchprms(self):
         # Update search parameteres from prop manager
         index = self._searchidx[3:]
@@ -366,17 +381,26 @@ class DbProxy(object):
                 ORDER BY {3}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:]+'_'+stream, self._oag.dbpkname)
                 default_sql['read'][stream_sql_key] = stream_sql
 
-        # Add in other indices
+        # Add in update/delegate by indices
         for index, idxinfo in self._oag.dbindices.items():
-            index_sql = td("""
+            select_sql = td("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE %s
                 ORDER BY {2}""").format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
+
+            update_sql = td("""
+                  UPDATE {0}.{1}
+                     SET %%s
+                   WHERE %s""").format(self._oag.context, self._oag.dbtable)
+
+            # Genrate where clauses
             where_clauses = []
             for f in idxinfo[0]:
                 where_clauses.append("{0}=%s".format(self._oag.stream_db_mapping[f] if self._oag.is_oagnode(f) else f))
-            default_sql['read']['by_'+index] = index_sql % ' AND '.join(where_clauses)
+
+            default_sql['read']['by_'+index] = select_sql % ' AND '.join(where_clauses)
+            default_sql['update']['by_'+index] = update_sql % ' AND '.join(where_clauses)
 
         # Add in "all" search
         all_sql = td("""
