@@ -203,6 +203,7 @@ class PropProxy(object):
                      searchidx=searchidx,
                      searchwin=None,
                      searchoffset=None,
+                     searchdesc=False,
                      currval=currval,
                      from_cframe=from_cframe,
                      from_foreign_key=from_foreign_key):
@@ -234,7 +235,7 @@ class PropProxy(object):
 
                     if gen_retval:
                         try:
-                            attr = streaminfo(searchprms, searchidx, searchwin, searchoffset)
+                            attr = streaminfo(searchprms, searchidx, searchwin, searchoffset, searchdesc)
                             retval = attr[-1] if not attr.is_unique else attr
                         except OAGraphRetrieveError:
                             retval  = None
@@ -311,7 +312,7 @@ class PropProxy(object):
     def clone(self, src):
         self._cframe = dict(src.props._cframe)
 
-    def get(self, stream, searchwin=None, searchoffset=None, internal_call=False):
+    def get(self, stream, searchwin=None, searchoffset=None, searchdesc=False, internal_call=False):
         try:
             if self.is_managed_oagprop(stream):
                 # Set default value on class
@@ -326,7 +327,7 @@ class PropProxy(object):
                     # poison the original version which should always return the original, non-windowed
                     # dataset. Instead deepcopy the original, and intialize *that*.
                     oag = copy.deepcopy(self._oagprops[stream]) if (searchwin or searchoffset) else self._oagprops[stream]
-                    subnode = oag.__get__(self._oag, searchwin=searchwin, searchoffset=searchoffset, cache=internal_call)
+                    subnode = oag.__get__(self._oag, searchwin=searchwin, searchoffset=searchoffset, searchdesc=searchdesc, cache=internal_call)
                     return subnode
                 else:
                     return self._oagprops[stream]

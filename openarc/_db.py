@@ -108,7 +108,7 @@ class DbSchemaProxy(object):
 
 class DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset):
+    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc):
         from .graph import OAG_RootNode
 
         # Store reference to outer object
@@ -132,6 +132,7 @@ class DbProxy(object):
         self._searchidx      = searchidx
         self._searchwin      = searchwin
         self._searchoffset   = searchoffset
+        self._searchdesc     = searchdesc
 
     @property
     def __dao(self):
@@ -322,6 +323,10 @@ class DbProxy(object):
         return self._schema
 
     @property
+    def SQLorderdir(self):
+        return 'DESC' if self._searchdesc else 'ASC'
+
+    @property
     def SQL(self):
 
         # Default SQL defined for all tables
@@ -331,7 +336,7 @@ class DbProxy(object):
                   SELECT *
                     FROM {0}.{1}
                    WHERE {2}=%s
-                ORDER BY {2}"""),
+                ORDER BY {2} {3}"""),
             },
             "update" : {
               "id"       : self.SQLpp("""
@@ -392,21 +397,21 @@ class DbProxy(object):
                   SELECT *
                     FROM {0}.{1}
                    WHERE {2}=%s
-                ORDER BY {3}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:]+'_'+stream, self._oag.dbpkname)
+                ORDER BY {3} {4}""").format(self._oag.context, self._oag.dbtable, streaminfo[0].dbpkname[1:]+'_'+stream, self._oag.dbpkname, self.SQLorderdir)
                 default_sql['read'][stream_sql_key] = stream_sql
 
         # Add in update/delegate by indices
         for index, idxinfo in self._oag.dbindices.items():
-            select_sql = td("""
+            select_sql = self.SQLpp("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE %s
-                ORDER BY {2}""").format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
+                ORDER BY {2} {3}""")
 
-            update_sql = td("""
+            update_sql = self.SQLpp("""
                   UPDATE {0}.{1}
                      SET %%s
-                   WHERE %s""").format(self._oag.context, self._oag.dbtable)
+                   WHERE %s""")
 
             # Genrate where clauses
             where_clauses = []
@@ -417,12 +422,11 @@ class DbProxy(object):
             default_sql['update']['by_'+index] = update_sql % ' AND '.join(where_clauses)
 
         # Add in "all" search
-        all_sql = td("""
+        default_sql['read']['by_all'] = self.SQLpp("""
                   SELECT *
                     FROM {0}.{1}
                    WHERE 1=1
                 ORDER BY {2}""")
-        default_sql['read']['by_all'] = all_sql.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
 
         # Add in user defined SQL
         for action, sqlinfo in self._oag.dblocalsql.items():
@@ -434,4 +438,4 @@ class DbProxy(object):
     def SQLpp(self, SQL):
         """Pretty prints SQL and populates schema{0}.table{1} and its primary
         key{2} in given SQL string"""
-        return SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname)
+        return SQL.format(self._oag.context, self._oag.dbtable, self._oag.dbpkname, self.SQLorderdir)

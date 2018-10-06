@@ -338,6 +338,7 @@ class OAG_RootNode(object):
                  searchidx='id',
                  searchwin=None,
                  searchoffset=None,
+                 searchdesc=False,
                  # Actual Named args
                  heartbeat=True,
                  initprms={},
@@ -360,7 +361,7 @@ class OAG_RootNode(object):
         #### Set up proxies
 
         # Database API
-        self._db_proxy       = DbProxy(self, searchprms, searchidx, searchwin, searchoffset)
+        self._db_proxy       = DbProxy(self, searchprms, searchidx, searchwin, searchoffset, searchdesc)
 
         # Relational Dataframe manipulation
         self._rdf_proxy      = RdfProxy(self)
