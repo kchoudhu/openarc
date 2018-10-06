@@ -86,18 +86,18 @@ class RdfProxy(object):
 
         self._rdf_window = []
         for i, frame in enumerate(self._rdf):
-            self._oag.propmgr._cframe = frame
-            self._oag.propmgr._set_attrs_from_cframe()
+            self._oag.props._cframe = frame
+            self._oag.props._set_attrs_from_cframe()
             if predicate(self._oag):
                 self._rdf_window.append(self._rdf[i])
 
         if len(self._rdf_window)>0:
-            self._oag.propmgr._cframe = self._rdf_window[0]
+            self._oag.props._cframe = self._rdf_window[0]
         else:
             self._rdf_window = []
-            self._oag.propmgr._cframe = {}
+            self._oag.props._cframe = {}
 
-        self._oag.propmgr._set_attrs_from_cframe()
+        self._oag.props._set_attrs_from_cframe()
 
         return self._oag
 
@@ -113,7 +113,7 @@ class RdfProxy(object):
         self._oag.cache.clear()
 
         # Clear cframe
-        self._oag.propmgr._cframe = {}
+        self._oag.props._cframe = {}
 
         return self._oag
 
@@ -122,7 +122,7 @@ class RdfProxy(object):
         self._rdf.sort(key=lambda x: x[key])
         self._rdf_window = self._rdf
         self._rdf_window_index = None
-        self._oag.propmgr._cframe = {}
+        self._oag.props._cframe = {}
 
         return self._oag
 
@@ -309,7 +309,7 @@ class PropProxy(object):
             self._oagprops[stream] = None
 
     def clone(self, src):
-        self._cframe = dict(src.propmgr._cframe)
+        self._cframe = dict(src.props._cframe)
 
     def get(self, stream, searchwin=None, searchoffset=None, internal_call=False):
         try:
@@ -367,7 +367,7 @@ class PropProxy(object):
                 setattr(self._oag, stream, self._cframe[stream])
                 continue
 
-            # Translate stream name and add to propmgr
+            # Translate stream name and add to prop proxy
             stream = db_stream_mapping[stream]
             self.add(stream, cfval, self._oag.streams[stream][0], 'id', True, False)
 

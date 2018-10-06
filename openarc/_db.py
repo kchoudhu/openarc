@@ -147,12 +147,12 @@ class DbProxy(object):
         if getenv().on_demand_oags:
             self.schema.init()
 
-        self._oag.propmgr._set_cframe_from_userprms(initprms, fullhouse=True)
+        self._oag.props._set_cframe_from_userprms(initprms, fullhouse=True)
 
         if self._oag.rdf._rdf is not None:
             raise OAError("Cannot create item that has already been initiated")
 
-        filtered_cframe = {k:self._oag.propmgr._cframe[k] for k in self._oag.propmgr._cframe if k[0] != '_'}
+        filtered_cframe = {k:self._oag.props._cframe[k] for k in self._oag.props._cframe if k[0] != '_'}
         attrstr    = ', '.join([k for k in filtered_cframe])
         vals       = [filtered_cframe[k] for k in filtered_cframe]
         formatstrs = ', '.join(['%s' for v in vals])
@@ -180,7 +180,7 @@ class DbProxy(object):
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
             self._oag.__getitem__(self._oag.rdf._rdf_window_index, preserve_cache=True)
         else:
-            self._oag.propmgr._set_attrs_from_cframe_uniq()
+            self._oag.props._set_attrs_from_cframe_uniq()
 
         return self._oag
 
@@ -192,7 +192,7 @@ class DbProxy(object):
         self.search(throw_on_empty=False, broadcast=broadcast)
 
         if self._oag.is_unique:
-            self._oag.propmgr._set_attrs_from_cframe_uniq()
+            self._oag.props._set_attrs_from_cframe_uniq()
 
         return self
 
@@ -223,17 +223,17 @@ class DbProxy(object):
 
     def update(self, updparms={}, norefresh=False, broadcast=False):
 
-        self._oag.propmgr._set_cframe_from_userprms(updparms)
+        self._oag.props._set_cframe_from_userprms(updparms)
 
         self.update_searchprms()
 
-        member_attrs  = [k for k in self._oag.propmgr._cframe if k[0] != '_']
-        index_key     = [k for k in self._oag.propmgr._cframe if k[0] == '_'][0]
+        member_attrs  = [k for k in self._oag.props._cframe if k[0] != '_']
+        index_key     = [k for k in self._oag.props._cframe if k[0] == '_'][0]
         update_clause = ', '.join(["%s=" % attr + "%s"
                                     for attr in member_attrs])
         update_sql    = self.SQL['update']['id']\
                         % (update_clause, getattr(self._oag, index_key, ""))
-        update_values = [self._oag.propmgr._cframe[attr] for attr in member_attrs]
+        update_values = [self._oag.props._cframe[attr] for attr in member_attrs]
 
         self.__dao.execute(update_sql, update_values)
         if not norefresh:
@@ -272,7 +272,7 @@ class DbProxy(object):
             for i, key in enumerate(keys):
                 key = self._oag.stream_db_mapping[key]
                 try:
-                    new_searchprms.append(self._oag.propmgr._cframe[key])
+                    new_searchprms.append(self._oag.props._cframe[key])
                 except KeyError:
                     new_searchprms.append(self._searchprms[i])
 

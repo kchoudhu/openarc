@@ -240,7 +240,7 @@ class OARpc_RTR_Requests(OARpc):
         rawprops = list(oag.streams.keys())\
                    + [p for p in dir(oag.__class__) if isinstance(getattr(oag.__class__, p), property)]\
                    + [p for p in dir(oag.__class__) if isinstance(getattr(oag.__class__, p), oagprop)]\
-                   + list(oag.propmgr._oagprops.keys())
+                   + list(oag.props._oagprops.keys())
 
         ret['payload'] = [p for p in list(set(rawprops)) if p not in oag.rpc.stoplist]
 
@@ -436,7 +436,7 @@ class RpcProxy(object):
             'db',
             'discoverable',
             'logger',
-            'propmgr',
+            'props',
             'rdf',
             'rpc',
         ] + [attr for attr in dir(self._oag) if attr[0]=='_']

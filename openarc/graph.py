@@ -41,7 +41,7 @@ class OAG_RootNode(object):
         return self._rdf_proxy
 
     @property
-    def propmgr(self):
+    def props(self):
 
         return self._prop_proxy
 
@@ -133,13 +133,13 @@ class OAG_RootNode(object):
     @property
     def id(self):
         try:
-            return self.propmgr._cframe[self.dbpkname]
+            return self.props._cframe[self.dbpkname]
         except:
             return None
 
     @property
     def infname(self):
-        if len(self.propmgr._cframe)==0:
+        if len(self.props._cframe)==0:
             raise OAError("Cannot calculate infname if OAG attributes have not set")
 
         hashstr = str()
@@ -173,16 +173,16 @@ class OAG_RootNode(object):
             if self._iteridx < self.size:
 
                 # Clear propcache
-                self.propmgr.clear()
+                self.props.clear()
 
                 # Clear oagcache
                 self.cache.clear()
 
                 # Set cframe according to rdf
-                self.propmgr._cframe = self.rdf._rdf_window[self._iteridx]
+                self.props._cframe = self.rdf._rdf_window[self._iteridx]
 
                 # Set attributes from cframe
-                self.propmgr._set_attrs_from_cframe()
+                self.props._set_attrs_from_cframe()
 
                 # Set up next iteration
                 self._iteridx += 1
@@ -207,7 +207,7 @@ class OAG_RootNode(object):
         self.rdf._rdf_window = self.rdf._rdf
         if idxreset:
             self._iteridx = 0
-        self.propmgr._set_attrs_from_cframe()
+        self.props._set_attrs_from_cframe()
         return self
 
     @property
@@ -279,14 +279,14 @@ class OAG_RootNode(object):
     def __getattribute__(self, attr):
         """Cascade through the following lookups:
 
-        1. Attempt to retrieve via RPC if applicable.
-        2. Attempt a lookup via the propmgr.
+        1. Attempt a lookup via the prop proxy
+        2. Attempt to retrieve via RPC if applicable.
         3. Attempt a regular attribute lookup.
 
         Failure at each step is denoted by the generation of an AttributeError"""
         try:
-            propmgr = object.__getattribute__(self, '_prop_proxy')
-            return propmgr.get(attr, internal_call=True)
+            props = object.__getattribute__(self, '_prop_proxy')
+            return props.get(attr, internal_call=True)
         except AttributeError as e:
             pass
 
@@ -322,12 +322,12 @@ class OAG_RootNode(object):
             self.cache.clear()
 
         if type(self.rdf._rdf_window_index)==int:
-            self.propmgr._cframe = self.rdf._rdf_window[self.rdf._rdf_window_index]
+            self.props._cframe = self.rdf._rdf_window[self.rdf._rdf_window_index]
         elif type(self.rdf._rdf_window_index)==slice:
             self.rdf._rdf_window = self.rdf._rdf_window[self.rdf._rdf_window_index]
-            self.propmgr._cframe = self.rdf._rdf_window[0]
+            self.props._cframe = self.rdf._rdf_window[0]
 
-        self.propmgr._set_attrs_from_cframe()
+        self.props._set_attrs_from_cframe()
 
         return self
 
@@ -388,7 +388,7 @@ class OAG_RootNode(object):
             if self.db.searchprms:
                 self.db.search()
                 if self.is_unique:
-                    self.propmgr._set_attrs_from_cframe_uniq()
+                    self.props._set_attrs_from_cframe_uniq()
         else:
             self._rpc_proxy.proxied_streams = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
 
@@ -416,7 +416,7 @@ class OAG_RootNode(object):
                 raise OAError("Cannot set value on a proxy OAG")
 
             # Set new value
-            currval = self.propmgr.add(attr, newval, None, None, False, False)
+            currval = self.props.add(attr, newval, None, None, False, False)
 
         except (AttributeError, OAGraphIntegrityError):
             # Attribute errors means object has not been completely
