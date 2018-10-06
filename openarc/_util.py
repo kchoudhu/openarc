@@ -10,21 +10,24 @@ class oagprop(object):
             doc = fget.__doc__
         self.__doc__ = doc
 
-    def __get__(self, obj, objtype=None):
+    def __get__(self, obj, searchwin=None, searchoffset=None, cache=True):
         if obj is None:
             return self
         if self.fget is None:
             raise AttributeError("unreadable attribute")
         try:
+            if not cache:
+                raise Exception("No cache check")
             return obj.cache.match(self.fget.__name__)
         except:
-            subnode = self.fget(obj)
+            subnode = self.fget(obj, searchwin=searchwin, searchoffset=searchoffset)
             if subnode is not None:
                 from .graph import OAG_RootNode
                 if isinstance(subnode, OAG_RootNode):
                     from ._rpc import reqcls
                     reqcls(obj).register(subnode.rpc.url, self.fget.__name__)
-                obj.cache.put(self.fget.__name__, subnode)
+                if cache:
+                     obj.cache.put(self.fget.__name__, subnode)
             return subnode
 
     def __set__(self, obj, value):

@@ -1,6 +1,7 @@
 #!/usr/local/env python3
 
 import collections
+import copy
 import weakref
 
 from ._rpc  import reqcls
@@ -200,6 +201,8 @@ class PropProxy(object):
                      streaminfo=cfcls,
                      searchprms=[cfval],
                      searchidx=searchidx,
+                     searchwin=None,
+                     searchoffset=None,
                      currval=currval,
                      from_cframe=from_cframe,
                      from_foreign_key=from_foreign_key):
@@ -231,7 +234,7 @@ class PropProxy(object):
 
                     if gen_retval:
                         try:
-                            attr = streaminfo(searchprms, searchidx)
+                            attr = streaminfo(searchprms, searchidx, searchwin, searchoffset)
                             retval = attr[-1] if not attr.is_unique else attr
                         except OAGraphRetrieveError:
                             retval  = None
@@ -308,7 +311,7 @@ class PropProxy(object):
     def clone(self, src):
         self._cframe = dict(src.propmgr._cframe)
 
-    def get(self, stream):
+    def get(self, stream, searchwin=None, searchoffset=None, internal_call=False):
         try:
             if self.is_managed_oagprop(stream):
                 # Set default value on class
@@ -319,7 +322,11 @@ class PropProxy(object):
 
                 # Return it
                 if type(self._oagprops[stream])==oagprop:
-                    subnode = self._oagprops[stream].__get__(self._oag)
+                    # Ok, a bit of fuckery here: if there is a searchwin/offset defined, we don't want to
+                    # poison the original version which should always return the original, non-windowed
+                    # dataset. Instead deepcopy the original, and intialize *that*.
+                    oag = copy.deepcopy(self._oagprops[stream]) if (searchwin or searchoffset) else self._oagprops[stream]
+                    subnode = oag.__get__(self._oag, searchwin=searchwin, searchoffset=searchoffset, cache=internal_call)
                     return subnode
                 else:
                     return self._oagprops[stream]

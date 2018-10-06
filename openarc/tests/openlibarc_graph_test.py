@@ -1659,7 +1659,7 @@ class OAG_AutoNode4(OAG_RootNode):
     }
 
     @oagprop
-    def cacheable_deriv_prop(self):
+    def cacheable_deriv_prop(self, **kwargs):
         return self.subnode1.field2 + self.subnode1.subnode1.field4 + self.subnode1.subnode2.field7
 
     invcount = 0

@@ -286,7 +286,7 @@ class OAG_RootNode(object):
         Failure at each step is denoted by the generation of an AttributeError"""
         try:
             propmgr = object.__getattribute__(self, '_prop_proxy')
-            return propmgr.get(attr)
+            return propmgr.get(attr, internal_call=True)
         except AttributeError as e:
             pass
 
@@ -336,6 +336,8 @@ class OAG_RootNode(object):
                  # Implied positional args
                  searchprms=[],
                  searchidx='id',
+                 searchwin=None,
+                 searchoffset=None,
                  # Actual Named args
                  heartbeat=True,
                  initprms={},
@@ -358,7 +360,7 @@ class OAG_RootNode(object):
         #### Set up proxies
 
         # Database API
-        self._db_proxy       = DbProxy(self, searchprms, searchidx)
+        self._db_proxy       = DbProxy(self, searchprms, searchidx, searchwin, searchoffset)
 
         # Relational Dataframe manipulation
         self._rdf_proxy      = RdfProxy(self)

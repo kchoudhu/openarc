@@ -108,7 +108,7 @@ class DbSchemaProxy(object):
 
 class DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, searchprms, searchidx):
+    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset):
         from .graph import OAG_RootNode
 
         # Store reference to outer object
@@ -130,6 +130,8 @@ class DbProxy(object):
 
         self._searchprms     = list(searchprms) if searchprms else list()
         self._searchidx      = searchidx
+        self._searchwin      = searchwin
+        self._searchoffset   = searchoffset
 
     @property
     def __dao(self):
@@ -278,7 +280,19 @@ class DbProxy(object):
 
     def __refresh_from_cursor(self, broadcast=False):
         try:
-            self._oag.rdf._rdf = self.__dao.execute(self.SQL['read'][self._searchidx], self._searchprms)
+            select_sql = self.SQL['read'][self._searchidx]
+
+            modified_searchprms = list(self._searchprms)
+
+            if self._searchwin:
+                select_sql += ' LIMIT %s'
+                modified_searchprms = modified_searchprms + [self._searchwin]
+
+            if self._searchoffset:
+                select_sql += ' OFFSET %s'
+                modified_searchprms = modified_searchprms + [self._searchoffset]
+
+            self._oag.rdf._rdf = self.__dao.execute(select_sql, modified_searchprms)
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
