@@ -129,6 +129,12 @@ class OAG_RootNode(object):
             setattr(cls, '_stream_db_mapping', schema)
         return cls._stream_db_mapping
 
+    @staticproperty
+    def db_stream_mapping(cls):
+        if not getattr(cls, '_db_stream_mapping', None):
+            setattr(cls, '_db_stream_mapping', {cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping})
+        return cls._db_stream_mapping
+
     ##### User API
     @property
     def id(self):

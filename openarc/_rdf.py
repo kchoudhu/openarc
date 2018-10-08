@@ -349,11 +349,8 @@ class PropProxy(object):
         self._managed_oagprops.append(stream)
         list(set(self._managed_oagprops))
 
-    def _set_attrs_from_cframe(self):
+    def _set_attrs_from_cframe(self, fastiter=False):
         from .graph import OAG_RootNode
-
-        # Preparatory: creating db->stream mapping
-        db_stream_mapping = {self._oag.stream_db_mapping[k]:k for k in self._oag.stream_db_mapping}
 
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
@@ -369,7 +366,7 @@ class PropProxy(object):
                 continue
 
             # Translate stream name and add to prop proxy
-            stream = db_stream_mapping[stream]
+            stream = self._oag.db_stream_mapping[stream]
             self.add(stream, cfval, self._oag.streams[stream][0], 'id', True, False)
 
         # Set forward lookup attributes
@@ -381,7 +378,7 @@ class PropProxy(object):
                     # print(i, self._oag.__class__.__name__, '->', cfcls.__name__, fk)
                     stream = fk['table']
                     cfval = getattr(self._oag, fk['points_to_id'], None)
-                    searchidx = 'by_'+{cfcls.stream_db_mapping[k]:k for k in cfcls.stream_db_mapping}[fk['id']]
+                    searchidx = 'by_'+cfcls.db_stream_mapping[fk['id']]
                     self.add(stream, cfval, cfcls, searchidx, True, True)
 
     def _set_attrs_from_cframe_uniq(self):
