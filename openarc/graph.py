@@ -416,14 +416,14 @@ class OAG_RootNode(object):
         else:
             return self.next()
 
-    def __setattr__(self, attr, newval):
+    def __setattr__(self, attr, newval, fastiter=False):
         try:
             # Sanity check
             if self.rpc.is_proxy and attr in self.rpc.proxied_streams:
                 raise OAError("Cannot set value on a proxy OAG")
 
             # Set new value
-            currval = self.props.add(attr, newval, None, None, False, False)
+            currval = self.props.add(attr, newval, None, None, False, False, fastiter)
 
         except (AttributeError, OAGraphIntegrityError):
             # Attribute errors means object has not been completely

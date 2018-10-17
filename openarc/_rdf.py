@@ -87,7 +87,7 @@ class RdfProxy(object):
         self._rdf_window = []
         for i, frame in enumerate(self._rdf):
             self._oag.props._cframe = frame
-            self._oag.props._set_attrs_from_cframe()
+            self._oag.props._set_attrs_from_cframe(fastiter=True, nofk=True)
             if predicate(self._oag):
                 self._rdf_window.append(self._rdf[i])
 
@@ -100,6 +100,21 @@ class RdfProxy(object):
         self._oag.props._set_attrs_from_cframe()
 
         return self._oag
+
+    def map(self, predicate, rerun=False):
+        if self._oag.is_unique:
+            raise OAError("Cannot filter OAG that is marked unique")
+
+        ret_list = []
+
+        oagcpy = self._oag.__class__(rpc=False)
+
+        for i, frame in enumerate(self._rdf_window):
+            oagcpy.props._cframe = frame
+            oagcpy.props._set_attrs_from_cframe(fastiter=True, nofk=True)
+            ret_list.append(predicate(oagcpy))
+
+        return ret_list
 
     def reset(self):
 
@@ -142,36 +157,50 @@ class PropProxy(object):
         # Streams that are managed by this property manager
         self._managed_oagprops = []
 
-    def add(self, stream, cfval, cfcls, searchidx, from_cframe, from_foreign_key):
+    def add(self, stream, cfval, cfcls, searchidx, from_cframe, from_foreign_key, fastiter):
         """Add new cfval to the property management dict. If cfval is an
         oagprop or a non-OAG stream, add it directly. If cfval is a subnode
         wrap it in an oagprop and then add it to the dict."""
         from .graph import OAG_RootNode
 
-        if not (from_foreign_key or self.is_managed_oagprop(stream)):
+        # Cache a few values
+        is_oagnode = self._oag.is_oagnode(stream)
+        is_managed_oagprop = self.is_managed_oagprop(stream)
+
+        if not (from_foreign_key or is_managed_oagprop):
             raise OAGraphIntegrityError("Stream [%s] is not a managed oagprop" % stream)
 
         #
-        # Access current value of the stream.
+        # Register foreign key as managed oagprop
         #
-        try:
-            # If stream is an oagprop, check cache to see whether it is set. If it is, it
-            # is safe to getattr the stream. The overarching objective here is to avoid
-            # unnecessary oagprop dereferences.
-            currval = self._oagprops[stream]
-            if type(currval)==oagprop:
-                if self._oag.cache.match(stream):
-                    currval = getattr(self._oag, stream, None)
-        except KeyError:
-            # Either stream was not set on oagprop, or having been set there, it was
-            # not subsequently deferenced and cached. Either way, it's time for a
-            # fresh start: set currval to None
+        if from_foreign_key and not is_managed_oagprop:
+            self.register_managed_oagprop(stream)
+
+        #
+        # Access current value of the stream. Don't bother if we are in fast
+        # iteration mode.
+        #
+        if fastiter:
             currval = None
+        else:
+            try:
+                # If stream is an oagprop, check cache to see whether it is set. If it is, it
+                # is safe to getattr the stream. The overarching objective here is to avoid
+                # unnecessary oagprop dereferences.
+                currval = self._oagprops[stream]
+                if type(currval)==oagprop:
+                    if self._oag.cache.match(stream):
+                        currval = getattr(self._oag, stream, None)
+            except KeyError:
+                # Either stream was not set on oagprop, or having been set there, it was
+                # not subsequently deferenced and cached. Either way, it's time for a
+                # fresh start: set currval to None
+                currval = None
 
         #
         # Maintain cache coherence for oagprops
         #
-        if from_foreign_key or self._oag.is_oagnode(stream):
+        if from_foreign_key or is_oagnode:
             if from_cframe:
                 # if cframe values are the same as current value, refresh
                 # cache. This is to handle the case where user sets subnode
@@ -189,8 +218,7 @@ class PropProxy(object):
         #
         # Package cframe cfvals as oagprops
         #
-        cfval_prop = cfval
-        if from_foreign_key or self._oag.is_oagnode(stream):
+        if from_foreign_key or is_oagnode:
 
             # Sanity checks
             if from_cframe and cfcls is None:
@@ -257,16 +285,16 @@ class PropProxy(object):
 
             fget.__name__ = stream
             cfval_prop = oagprop(fget)
+        else:
+            cfval_prop = cfval
 
         self._oagprops[stream] = cfval_prop
 
-        if from_foreign_key and not self.is_managed_oagprop(stream):
-            self.register_managed_oagprop(stream)
-
         #
-        # Carry out inter-OAG signalling
+        # Carry out inter-OAG signalling, but only if we are not in fast iteration
+        # mode
         #
-        if self._oag.rpc.is_enabled and self._oag.rpc.is_init and stream not in self._oag.rpc.stoplist:
+        if not fastiter and self._oag.rpc.is_enabled and self._oag.rpc.is_init and stream not in self._oag.rpc.stoplist:
 
             if not from_cframe:
 
@@ -349,7 +377,7 @@ class PropProxy(object):
         self._managed_oagprops.append(stream)
         list(set(self._managed_oagprops))
 
-    def _set_attrs_from_cframe(self, fastiter=False):
+    def _set_attrs_from_cframe(self, fastiter=False, nofk=False):
         from .graph import OAG_RootNode
 
         # Blank everything if _cframe isn't set
@@ -362,24 +390,25 @@ class PropProxy(object):
 
             # primary key: set directly
             if stream[0] == '_':
-                setattr(self._oag, stream, self._cframe[stream])
+                self._oag.__setattr__(stream, self._cframe[stream], fastiter=fastiter)
                 continue
 
             # Translate stream name and add to prop proxy
             stream = self._oag.db_stream_mapping[stream]
-            self.add(stream, cfval, self._oag.streams[stream][0], 'id', True, False)
+            self.add(stream, cfval, self._oag.streams[stream][0], 'id', True, False, fastiter)
 
-        # Set forward lookup attributes
+        # Set forward lookup attributes -- but only if nofk flag is set
+        if nofk:
+            return
         for i, fk in enumerate(self._oag.__class__._fkframe):
             classname = gctx().db_class_mapping(fk['table'])
             for cfcls in OAG_RootNode.__subclasses__():
 
                 if cfcls.__name__==classname:
-                    # print(i, self._oag.__class__.__name__, '->', cfcls.__name__, fk)
                     stream = fk['table']
                     cfval = getattr(self._oag, fk['points_to_id'], None)
                     searchidx = 'by_'+cfcls.db_stream_mapping[fk['id']]
-                    self.add(stream, cfval, cfcls, searchidx, True, True)
+                    self.add(stream, cfval, cfcls, searchidx, True, True, fastiter)
 
     def _set_attrs_from_cframe_uniq(self):
         if len(self._oag.rdf._rdf_window) > 1:
