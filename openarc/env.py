@@ -238,8 +238,36 @@ class OAEnv(object):
         self.envid = base64.b16encode(os.urandom(16)).decode('ascii')
         self.on_demand_oags = on_demand_oags
         self.rpctimeout = 5
-        cfg_dir = os.environ.get("OPENARC_CFG_DIR") if os.environ.get("OPENARC_CFG_DIR") else '.'
-        cfg_file_path = "%s/%s" % ( cfg_dir, cfgfile )
+
+        def get_cfg_file_path():
+            # Figure out configuration load information
+
+            cfg_dir = os.environ.get("OPENARC_CFG_DIR")
+            if not cfg_dir:
+                # Look in the following locations, in order of preference:
+                try:
+                    cfg_file_path = "./%s" % cfgfile
+                    with open(cfg_file_path, 'r'):
+                        return cfg_file_path
+                except IOError:
+                    pass
+
+                try:
+                    cfg_file_path = os.path.expanduser("~/.%s" % cfgfile)
+                    with open(cfg_file_path, 'r'):
+                        return cfg_file_path
+                except IOError:
+                    pass
+
+                cfg_file_path = "/usr/local/etc/%s" % cfgfile
+            else:
+                cfg_file_path = "%s/%s" % ( cfg_dir, cfgfile )
+
+            return cfg_file_path
+
+        cfg_file_path = get_cfg_file_path()
+        print("Loading OPENARC config: %s" % cfg_file_path)
+
         try:
             with open( cfg_file_path ) as f:
                 envcfg = toml.loads( f.read() )
