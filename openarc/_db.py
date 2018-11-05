@@ -8,7 +8,7 @@ class DbSchemaProxy(object):
     def __init__(self, dbproxy):
         self._dbproxy = dbproxy
 
-    def init(self):
+    def init(self, crstack=[]):
         dbp = self._dbproxy
         oag = dbp._oag
 
@@ -16,6 +16,13 @@ class DbSchemaProxy(object):
             if oag.logger.SQL:
                 print("[%s] is not streamable, not creating" % oag.dbtable)
             return oag
+
+        if oag.__class__ in crstack:
+            if oag.logger.SQL:
+                print("Class %s is already in the process of being creating, not recursing" % oag.__class__)
+            return oag
+        else:
+            crstack.append(oag.__class__)
 
         with OADao(oag.context, cdict=False) as dao:
             # Check that context schema exists
@@ -54,7 +61,7 @@ class DbSchemaProxy(object):
                 for i, col in enumerate(oag_columns):
                     if db_columns_reqd[i] in add_cols:
                         if oag_columns[i] != db_columns_reqd[i]:
-                            subnode = oag.streams[col][0](rpc=False).db.schema.init()
+                            subnode = oag.streams[col][0](rpc=False).db.schema.init(crstack=crstack)
                             add_clause = "ADD COLUMN %s int %s references %s.%s(%s)"\
                                          % (self._dbproxy._oag.stream_db_mapping[col],
                                            'NOT NULL' if oag.streams[col][1] else str(),
@@ -85,7 +92,9 @@ class DbSchemaProxy(object):
                     exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
                     dao.execute(exec_sql)
 
-            return oag
+        crstack.pop()
+
+        return oag
 
     def init_fkeys(self):
         dbp = self._dbproxy

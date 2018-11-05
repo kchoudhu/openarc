@@ -24,7 +24,15 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def __check_autonode_equivalence(self, oag1, oag2):
         for oagkey in oag1.streams.keys():
             if oag1.is_oagnode(oagkey):
-                self.assertEqual(getattr(oag1, oagkey, "").id, getattr(oag2, oagkey, "").id)
+                oag1_node = getattr(oag1, oagkey, None)
+                oag2_node = getattr(oag2, oagkey, None)
+                if oag1.streams[oagkey][1] is True:
+                    self.assertEqual(oag1_node.id, oag2_node.id)
+                else:
+                    if oag1_node is None:
+                        self.assertEqual(oag1_node, oag2_node)
+                    else:
+                        self.assertEqual(oag1_node.id, oag2_node.id)
             else:
                 self.assertEqual(getattr(oag1, oagkey, ""), getattr(oag2, oagkey, ""))
 
@@ -1563,6 +1571,16 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(len(a2_chk.rpc.registrations), 0)
         self.assertEqual(len(a3_chk.rpc.registrations), 0)
 
+    def test_autonode_self_reference(self):
+
+        a11a = OAG_AutoNode11().db.create({})
+
+        a11b = OAG_AutoNode11().db.create({
+            'selfref' : a11a
+        })
+
+        self.__check_autonode_equivalence(a11a, a11b.selfref[-1])
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1733,6 +1751,18 @@ class OAG_AutoNode10(OAG_RootNode):
         'subnode1' : [ OAG_AutoNode2, True,  None ],
         'subnode2' : [ OAG_AutoNode3, True, None ],
         'subnode3' : [ OAG_AutoNode3, True, None ]
+    }
+
+class OAG_AutoNode11(OAG_RootNode):
+    @staticproperty
+    def is_unique(cls): return False
+
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'selfref'  : [ OAG_AutoNode11, False,  None ],
     }
 
 class OAG_AUTONodeNonReversible(OAG_RootNode):
