@@ -1581,6 +1581,27 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.__check_autonode_equivalence(a11a, a11b.selfref[-1])
 
+    def test_autonode_with_many_subnodes_of_same_type_fwdoag_effects(self):
+
+        """If we are expecting multiple backreferences from another OAG,
+        make sure that they are striped by name so that they don't overwrite
+        each other"""
+
+        a11a = OAG_AutoNode11().db.create()
+        a11b = OAG_AutoNode11().db.create()
+
+        for i in range(10):
+            a12c =\
+                OAG_AutoNode12().db.create({
+                    'selfref1' : a11a,
+                    'selfref2' : a11b
+                })
+
+        self.assertEqual(a11a.auto_node12_selfref1.size, 10)
+        self.assertEqual(a11a.auto_node12_selfref2, None)
+        self.assertEqual(a11b.auto_node12_selfref2.size, 10)
+        self.assertEqual(a11b.auto_node12_selfref1, None)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1763,6 +1784,19 @@ class OAG_AutoNode11(OAG_RootNode):
     @staticproperty
     def streams(cls): return {
         'selfref'  : [ OAG_AutoNode11, False,  None ],
+    }
+
+class OAG_AutoNode12(OAG_RootNode):
+    @staticproperty
+    def is_unique(cls): return False
+
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'selfref1'  : [ OAG_AutoNode11, True,  None ],
+        'selfref2'  : [ OAG_AutoNode11, True,  None ],
     }
 
 class OAG_AUTONodeNonReversible(OAG_RootNode):

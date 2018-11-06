@@ -405,7 +405,12 @@ class PropProxy(object):
             for cfcls in OAG_RootNode.__subclasses__():
 
                 if cfcls.__name__==classname:
+
+                    # Generate name of new stream
                     stream = fk['table']
+                    if len([f for f in self._oag.__class__._fkframe if f['table']==fk['table']])>1:
+                        stream+='_'+cfcls.db_stream_mapping[fk['id']]
+
                     cfval = getattr(self._oag, fk['points_to_id'], None)
                     searchidx = 'by_'+cfcls.db_stream_mapping[fk['id']]
                     self.add(stream, cfval, cfcls, searchidx, True, True, fastiter)
