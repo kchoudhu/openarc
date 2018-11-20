@@ -151,7 +151,7 @@ class OAG_RootNode(object):
         hashstr = str()
         for stream in self.infname_fields:
             node = getattr(self, stream, None)
-            hashstr += node.infname if self.is_oagnode(stream) else str(node)
+            hashstr += node.infname if self.is_oagnode(stream) and node else str(node)
 
         return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
 
