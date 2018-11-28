@@ -431,6 +431,32 @@ class PropProxy(object):
         attrinit = len(userprms)>0 or force_attr_refresh
         if attrinit:
 
+            # Do some preprocessing if necessary: if userprms are a table,
+            # this is a bulk initialization. The first row of the table is the
+            # set of streams being defined, and the subsequent rows are the
+            # values for each row in the initialization.
+            if type(userprms) == list:
+                r_userprms = list(userprms)
+
+                # Extract streams we are setting
+                streams = r_userprms[0]
+
+                # Set properties to those in the first row
+                userprms = {}
+                for i, stream in enumerate(streams):
+                    userprms[stream] = r_userprms[1][i]
+
+                # Create bogus rdf and stuff it into the RDF
+                #
+                # Remember to blow the cache.
+                rdf = []
+                for data in r_userprms[1:]:
+                    datarow = {self._oag.stream_db_mapping[streams[i]]:elem.id if self._oag.is_oagnode(streams[i]) else elem for i, elem in enumerate(data)}
+                    rdf.append(datarow)
+                self._oag.rdf._rdf = rdf
+                self._oag.rdf._rdf_window = self._oag.rdf._rdf
+                self._oag.reset()
+
             invalid_streams = []
             processed_streams = {}
 
