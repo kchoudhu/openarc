@@ -172,31 +172,6 @@ class OAG_RootNode(object):
     @property
     def logger(self): return self._logger
 
-    def next(self):
-        if self.is_unique:
-            raise OAError("next: Unique OAGraph object is not iterable")
-        else:
-            if self._iteridx < self.size:
-
-                # Clear propcache
-                self.props.clear()
-
-                # Clear oagcache
-                self.cache.clear()
-
-                # Set cframe according to rdf
-                self.props._cframe = self.rdf._rdf_window[self._iteridx]
-
-                # Set attributes from cframe
-                self.props._set_attrs_from_cframe()
-
-                # Set up next iteration
-                self._iteridx += 1
-                return self
-            else:
-                self._iteridx = 0
-                raise StopIteration()
-
     def clone(self):
         oagcopy = self.__class__()
 
@@ -318,13 +293,13 @@ class OAG_RootNode(object):
 
         return object.__getattribute__(self, attr)
 
-    def __getitem__(self, indexinfo, preserve_cache=True):
+    def __getitem__(self, indexinfo, preserve_cache=False):
         self.rdf._rdf_window_index = indexinfo
 
         if self.is_unique:
             raise OAError("Cannot index OAG that is marked unique")
 
-        if not preserve_cache:
+        if not preserve_cache and self._iteridx != self.rdf._rdf_window_index:
             self.cache.clear()
 
         if type(self.rdf._rdf_window_index)==int:
@@ -414,7 +389,27 @@ class OAG_RootNode(object):
         if self.is_unique:
             raise OAError("__next__: Unique OAGraph object is not iterable")
         else:
-            return self.next()
+            if self._iteridx < self.size:
+
+                # Clear propcache
+                self.props.clear()
+
+                # Clear oagcache
+                self.cache.clear()
+
+                # Set cframe according to rdf
+                self.props._cframe = self.rdf._rdf_window[self._iteridx]
+
+                # Set attributes from cframe
+                self.props._set_attrs_from_cframe()
+
+                # Set up next iteration
+                self._iteridx += 1
+                return self
+            else:
+                self._iteridx = 0
+                self.cache.clear()
+                raise StopIteration()
 
     def __setattr__(self, attr, newval, fastiter=False):
         try:

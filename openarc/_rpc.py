@@ -548,7 +548,7 @@ class RpcProxy(object):
                     'envid'      : getenv().envid,
                     'heartbeat'  : OATime().now,
                     'listen'     : self._rpc_dbupdate_listen,
-                }).next()
+                })[0]
 
             # Spin off other threads as necessary
             self.start_heartbeat()

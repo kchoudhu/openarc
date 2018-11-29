@@ -250,7 +250,7 @@ class DbProxy(object):
             self.__refresh_from_cursor(broadcast=broadcast)
 
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
-            self._oag[self._oag.rdf._rdf_window_index]
+            self._oag.__getitem__(self._oag.rdf._rdf_window_index, preserve_cache=True)
 
         return self._oag
 

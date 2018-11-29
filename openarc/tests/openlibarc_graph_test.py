@@ -332,8 +332,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     def test_autonode_create_nested(self):
         (a1, a2, a3) = self.__generate_autonode_system()
-        a1_chk = OAG_AutoNode1a(a1[0].id)
-        self.__check_autonode_equivalence(next(a1), next(a1_chk))
+        a1_chk = OAG_AutoNode1a(a1.id)[0]
+        self.__check_autonode_equivalence(a1, a1_chk)
 
     def test_autonode_create_with_properties(self):
         (a1, a2, a3) = self.__generate_autonode_system()
@@ -348,10 +348,10 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a1a.subnode1 = a2
         a1a.subnode2 = a3
 
-        a1a.db.create().next()
+        a1a.db.create()
 
-        a1a_chk = OAG_AutoNode1a((a1a.id,))
-        self.__check_autonode_equivalence(a1a, next(a1a_chk))
+        a1a_chk = OAG_AutoNode1a(a1a.id)[0]
+        self.__check_autonode_equivalence(a1a, a1a_chk)
 
         # oag dbstream missing, should throw
         a1b = OAG_AutoNode1a()
@@ -417,7 +417,6 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # self.__check_autonode_equivalence(a1a[1].subnode1, a2b)
         self.__check_autonode_equivalence(a1a[1].subnode2, a3)
 
-
     def test_autonode_update_with_userprms(self):
         (a1,   a2,   a3)   = self.__generate_autonode_system()
         (a1_b, a2_b, a3_b) = self.__generate_autonode_system()
@@ -428,14 +427,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         a3_chk = OAG_AutoNode3((a3.id,))
         self.assertEqual(a3.field8, a3_chk.field8)
 
-        a1.next().db.update({
+        a1.db.update({
             'subnode1' : a2_b
         })
 
-
         self.assertEqual(a1.subnode1, a2_b)
 
-        a1_chk = next(OAG_AutoNode1a((a1.id,)))
+        a1_chk = OAG_AutoNode1a(a1.id)[0]
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
 
     def test_autonode_update_with_properties(self):
@@ -452,7 +450,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(a1.subnode1, a2_b)
 
-        a1_chk =next(OAG_AutoNode1a((a1.id,)))
+        a1_chk =OAG_AutoNode1a(a1.id)[0]
         self.__check_autonode_equivalence(a1_chk.subnode1, a2_b)
 
     def test_autonode_fwdoag_creation(self):
@@ -683,16 +681,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         (a1, a2, a3) = self.__generate_autonode_system()
 
-        next(a1)
-
-
-
         a1_prox = OAG_AutoNode1a(initurl=a1.url)
 
         with self.assertRaises(OAError):
             a1_prox.field2 = 32
 
-        self.__check_autonode_equivalence(a1, a1_prox)
+        self.__check_autonode_equivalence(a1[0], a1_prox)
 
     def test_oag_remote_proxy_fwdoag_functionality(self):
 
@@ -1370,13 +1364,13 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : None
             }).db.create()
 
-        self.assertEqual(a6a[-1].subnode2, None)
+        self.assertEqual(a6a.subnode2, None)
 
         a6a.db.update({
             'subnode2' : a3
         })
 
-        self.assertEqual(a6a[-1].subnode2, a3)
+        self.assertEqual(a6a.subnode2, a3)
 
         a6a_chk = OAG_AutoNode6(a6a.id)[-1]
         self.__check_autonode_equivalence(a6a_chk.subnode1, a2)
@@ -1644,6 +1638,42 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a11a.auto_node12_selfref2, None)
         self.assertEqual(a11b.auto_node12_selfref2.size, 10)
         self.assertEqual(a11b.auto_node12_selfref1, None)
+
+    def test_multinode_indexing_equivalence(self):
+
+        a2a =\
+            OAG_AutoNode2(initprms={
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            }).db.create()
+
+        a2b =\
+            OAG_AutoNode2(initprms={
+                'field4' :  22,
+                'field5' : 'this is an autonode2'
+            }).db.create()
+
+        a2as = [ a2a, a2b ]
+
+        a3 =\
+            OAG_AutoNode3(initprms={
+                'field7' :  9,
+                'field8' : 'this is an autonode3'
+            }).db.create()
+
+        # Attempting to set to a bulk table. Materialized subnodes ONLY.
+        a1as =\
+            OAG_AutoNode1a(initprms=[
+                ['field2', 'field3', 'subnode1', 'subnode2'],
+                [ 1,        2,        a2a,        a3 ],
+                [ 2,        3,        a2b,        a3 ]
+            ])
+
+        for i, a1a in enumerate(a1as):
+            self.__check_autonode_equivalence(a1a.subnode1, a2as[i])
+
+        for i in range(a1as.size):
+            self.__check_autonode_equivalence(a1as[i].subnode1, a2as[i])
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
