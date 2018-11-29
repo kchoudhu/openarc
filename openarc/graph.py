@@ -180,7 +180,10 @@ class OAG_RootNode(object):
         # Clone proxies
         oagcopy.rdf.clone(self)
         oagcopy.db.clone(self)
-        oagcopy._prop_proxy.clone(self)
+        oagcopy.props.clone(self)
+
+        if oagcopy.is_unique:
+            oagcopy.props._set_attrs_from_cframe_uniq()
 
         return oagcopy
 

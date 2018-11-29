@@ -1419,8 +1419,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'subnode2' : a3a
             }).db.create()
 
-        a1a_copy = a1a.clone()
+        # Check uniqnode cloning
+        a2_copy = a2.clone()
+        self.__check_autonode_equivalence(a2_copy, a2)
 
+        # Check multinode cloning
+        a1a_copy = a1a.clone()
         self.__check_autonode_equivalence(a1a_copy[0], a1a[0])
 
     def test_multinode_iteration_behavior_cache(self):
