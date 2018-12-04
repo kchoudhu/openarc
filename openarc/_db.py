@@ -69,9 +69,18 @@ class DbSchemaProxy(object):
                                             subnode.dbtable,
                                             subnode.dbpkname)
                         else:
-                            add_clause = "ADD COLUMN %s %s" % (col, oag.streams[col][0])
-                            if oag.streams[col][1] is not None:
-                                add_clause = "%s NOT NULL" % add_clause
+                            # Could be straight definition of database type, or enum. If enum,
+                            # force column type to int. Optionality is determined by true/false
+                            # on the second field of the declaration for enums.
+                            if type(oag.streams[col][0])==str:
+                                add_clause = "ADD COLUMN %s %s" % (col, oag.streams[col][0])
+                                if oag.streams[col][1] is not None:
+                                    add_clause = "%s NOT NULL" % add_clause
+                            else:
+                                add_clause = "ADD COLUMN %s int" % (col)
+                                if oag.streams[col][1]:
+                                    add_clause = "%s NOT NULL" % add_clause
+
                         add_col_clauses.append(add_clause)
 
                 addcol_sql = dbp.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)

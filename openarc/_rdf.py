@@ -163,6 +163,7 @@ class PropProxy(object):
         from .graph import OAG_RootNode
 
         # Cache a few values
+        is_enum = self._oag.is_enum(stream)
         is_oagnode = self._oag.is_oagnode(stream)
         is_managed_oagprop = self.is_managed_oagprop(stream)
 
@@ -285,7 +286,10 @@ class PropProxy(object):
             fget.__name__ = stream
             cfval_prop = oagprop(fget)
         else:
-            cfval_prop = cfval
+            if is_enum:
+                cfval_prop = self._oag.streams[stream][0](cfval)
+            else:
+                cfval_prop = cfval
 
         self._oagprops[stream] = cfval_prop
 
@@ -489,10 +493,10 @@ class PropProxy(object):
                 cfkey = self._oag.stream_db_mapping[stream]
             cfval = getattr(self._oag, stream, None)
 
-            # Special handling for nullable items
+            # Special handling for nullable items.
             if type(self._oag.streams[stream][0])!=str\
                 and self._oag.streams[stream][1] is False:
-                cframe_tmp[cfkey] = cfval.id if cfval else None
+                cframe_tmp[cfkey] = (cfval.id if self._oag.is_oagnode(stream) else cfval.value) if cfval else None
                 continue
 
             # Is a value missing for this stream?
@@ -508,6 +512,9 @@ class PropProxy(object):
                     cfval = cfval.id
                 except KeyError:
                     pass
+            elif self._oag.is_enum(stream):
+                cfval = cfval.value
+
             cframe_tmp[cfkey] = cfval
 
         if fullhouse:

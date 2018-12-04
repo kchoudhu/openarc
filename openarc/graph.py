@@ -110,6 +110,23 @@ class OAG_RootNode(object):
         except KeyError:
             return False
 
+    @classmethod
+    def is_scalar(cls, stream):
+        try:
+            return type(cls.streams[stream][0])==str
+        except KeyError:
+            # Stay with me here: if there's a key error, you've either fed this
+            # function junk data, or an internal member beginning with '_'; return
+            # True.
+            return True
+
+    @classmethod
+    def is_enum(cls, stream):
+        try:
+            return cls.is_scalar(stream)==False and cls.is_oagnode(stream)==False
+        except KeyError:
+            return False
+
     @staticproperty
     def is_reversible(cls):
         if not getattr(cls, '_is_reversible', None):

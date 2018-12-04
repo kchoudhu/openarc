@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import enum
 import gevent
 import sys
 import unittest
@@ -1679,6 +1680,61 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         for i in range(a1as.size):
             self.__check_autonode_equivalence(a1as[i].subnode1, a2as[i])
 
+    def test_autonode_with_enum_autotranslation(self):
+
+        # Setting property with enum works as expected
+        a13 =\
+            OAG_AutoNode13(initprms={
+                'enum'   : FriezeEnum.PHASE_1,
+                'scalar' : 1,
+            })
+        self.assertEqual(a13.enum, FriezeEnum.PHASE_1)
+
+        # Can persist after setting via properties
+        a13.db.create()
+        self.assertEqual(a13.enum, FriezeEnum.PHASE_1)
+
+        a13_chk = OAG_AutoNode13(a13)[0]
+        self.assertEqual(a13_chk.enum, FriezeEnum.PHASE_1)
+        self.__check_autonode_equivalence(a13, a13_chk)
+
+        # Can persist enum via direct db set
+        a13 =\
+            OAG_AutoNode13().db.create({
+                'enum'   : FriezeEnum.PHASE_1,
+                'scalar' : 1
+            })
+        self.assertEqual(a13.enum, FriezeEnum.PHASE_1)
+
+        a13_chk = OAG_AutoNode13(a13)[0]
+        self.assertEqual(a13_chk.enum, FriezeEnum.PHASE_1)
+        self.__check_autonode_equivalence(a13, a13_chk)
+
+        # Can change enum via db.update()
+        a13.db.update({
+            'enum' : FriezeEnum.PHASE_2
+        })
+        self.assertEqual(a13.enum, FriezeEnum.PHASE_2)
+
+        a13_chk = OAG_AutoNode13(a13)[0]
+        self.assertEqual(a13_chk.enum, FriezeEnum.PHASE_2)
+        self.__check_autonode_equivalence(a13, a13_chk)
+
+        # Can change enum via property changes
+        a13 =\
+            OAG_AutoNode13(initprms={
+                'enum'   : FriezeEnum.PHASE_1,
+                'scalar' : 1,
+            })
+        a13.db.create()
+
+        a13.enum = FriezeEnum.PHASE_3
+        a13.db.update()
+
+        a13_chk = OAG_AutoNode13(a13)[0]
+        self.assertEqual(a13_chk.enum, FriezeEnum.PHASE_3)
+        self.__check_autonode_equivalence(a13, a13_chk)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""
@@ -1874,6 +1930,24 @@ class OAG_AutoNode12(OAG_RootNode):
     def streams(cls): return {
         'selfref1'  : [ OAG_AutoNode11, True,  None ],
         'selfref2'  : [ OAG_AutoNode11, True,  None ],
+    }
+
+class FriezeEnum(enum.IntEnum):
+    PHASE_1 = 1
+    PHASE_2 = 2
+    PHASE_3 = 3
+
+class OAG_AutoNode13(OAG_RootNode):
+    @staticproperty
+    def is_unique(cls): return False
+
+    @staticproperty
+    def context(cls): return "test"
+
+    @staticproperty
+    def streams(cls): return {
+        'enum'   : [ FriezeEnum, True,  None ],
+        'scalar' : [ 'int',      True,  None ],
     }
 
 class OAG_AUTONodeNonReversible(OAG_RootNode):
