@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+__all__ = ['oagprop', 'staticproperty']
+
 class oagprop(object):
     """Responsible for maitaining _oagcache on decorated properties"""
     def __init__(self, fget=None, fset=None, fdel=None, doc=None):
