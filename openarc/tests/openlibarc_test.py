@@ -8,7 +8,7 @@ import psycopg2
 sys.path.append('../')
 
 from openarc.test import TestOABase
-from openarc.dao  import OADao
+from openarc.dao  import OADao, OADbTransaction
 from openarc.env  import initenv, getenv
 
 class TestOADao(unittest.TestCase, TestOABase):
@@ -48,7 +48,7 @@ class TestOADao(unittest.TestCase, TestOABase):
 
         # Nothing committed if exception is raised in ctxmgr
         try:
-            with OADao("test", hold_commit=True) as dao:
+            with OADao("test", trans_commit_hold=True) as dao:
                 for i in range(10):
                     dao.execute(self.SQL.insert_sample_row, [i])
                 raise Exception()
@@ -60,7 +60,7 @@ class TestOADao(unittest.TestCase, TestOABase):
             self.assertEqual(testcur.rowcount, 0)
 
         # Nothing committed if rollback explicitly called
-        with OADao("test", hold_commit=True) as dao:
+        with OADao("test", trans_commit_hold=True) as dao:
             for i in range(10):
                 dao.execute(self.SQL.insert_sample_row, [i])
             dao.rollback()
@@ -70,7 +70,7 @@ class TestOADao(unittest.TestCase, TestOABase):
             self.assertEqual(testcur.rowcount, 0)
 
         # Data committed if commit() method is called
-        with OADao("test", hold_commit=True) as dao:
+        with OADao("test", trans_commit_hold=True) as dao:
             for i in range(10):
                 dao.execute(self.SQL.insert_sample_row, [i])
             dao.commit()
@@ -87,6 +87,19 @@ class TestOADao(unittest.TestCase, TestOABase):
         with self.dbconn.cursor() as testcur:
             testcur.execute(self.SQL.get_rows_from_sample_table)
             self.assertEqual(testcur.rowcount, 20)
+
+    def test_nested_transactions(self):
+        with OADbTransaction("Level 1") as trans1:
+            self.assertEqual(trans1.dao.trans_depth, 2)
+            with OADbTransaction("Level 2") as trans2:
+                self.assertEqual(trans1.dao, trans2.dao)
+                self.assertEqual(trans2.dao.trans_depth, 3)
+                with OADbTransaction("Level 3") as trans3:
+                    self.assertEqual(trans1.dao, trans3.dao)
+                    self.assertEqual(trans3.dao.trans_depth, 4)
+                self.assertEqual(trans2.dao.trans_depth, 3)
+            self.assertEqual(trans1.dao.trans_depth, 2)
+        self.assertEqual(trans1.dao, None)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""

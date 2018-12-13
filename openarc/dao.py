@@ -3,6 +3,8 @@
 from gevent import monkey
 monkey.patch_all()
 
+import binascii
+import os
 import psycopg2
 import psycopg2.extras
 import psycopg2.extensions
@@ -16,21 +18,28 @@ from   openarc.env import *
 class OADao(object):
     """Wrapper around psycopg2 with additional functionality
     for logging, connection management and sql execution"""
-    def __init__(self, schema, cdict=True, hold_commit=False):
+    def __init__(self, schema, cdict=True, trans_commit_hold=False):
         """Schema refers to the api entity we're referring
         to: auth, trading etc"""
         self.cdict   = cdict
         self.dbconn  = gctx().db_conn
         self.schema  = schema
+        self.trans_depth  = 1
+
         self._cursor = None
-        self._hold_commit = hold_commit
+        self._trans_commit_hold = trans_commit_hold
         self.__enter__()
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc, value, traceback):
-        self.cur_finalize(exc)
+    ##################################################
+    # OADaos should not be used in ctx, but whatever #
+    ##################################################
+    def __enter__(self):                             #
+        return self                                  #
+                                                     #
+    def __exit__(self, exc, value, traceback):       #
+        if not self._trans_commit_hold:              #
+            self.cur_finalize(exc)                   #
+    ##################################################
 
     def commit(self):
         """Proxy method for committing dbconnection actions"""
@@ -61,22 +70,46 @@ class OADao(object):
     def description(self):
         return self.cur.description
 
-    def execute(self, query, params=[]):
+    def execute(self, query, params=[], savepoint=False, cdict=True, extcur=None):
         results = None
+
+        cur = self.cur
+        if cdict != self.cdict:
+            cur = self.dbconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SET search_path TO %s", [self.schema])
+        if type(extcur)==list:
+            while len(extcur)>0:
+                extcur.pop()
+            extcur.append(cur)
+
+        if savepoint:
+            savepoint_name = 'sp_'+binascii.hexlify(os.urandom(7)).decode('utf-8')
+            cur.execute("SAVEPOINT %s" % savepoint_name)
+            if gctx().logger.SQL:
+                print("init savepoint %s" % savepoint_name)
+
         if gctx().logger.SQL:
-            print(td(self.cur.mogrify(query, params).decode('utf-8')))
+            print(td(cur.mogrify(query, params).decode('utf-8')))
+
         try:
-            self.cur.execute(query, params)
+            cur.execute(query, params)
             try:
-                results = self.cur.fetchall()
+                results = cur.fetchall()
             except:
                 pass
-            if not self._hold_commit:
-                self.commit()
         except:
-            if not self._hold_commit:
+            if savepoint:
+                if gctx().logger.SQL:
+                    print("rollback savepoint %s" % savepoint_name)
+                cur.execute("ROLLBACK TO SAVEPOINT %s" % savepoint_name)
+
+            if not self._trans_commit_hold:
                 self.rollback()
             raise
+        else:
+            if not self._trans_commit_hold:
+                self.commit()
+
         return results
 
     @property
@@ -96,17 +129,19 @@ class OADbTransaction(object):
     cursor. This is the functional equivalent of a semantic transaction. Captures
     non-OAG database transactions, but only as an unintended side effect."""
     def __init__(self, transname):
-        self.dao = None
+        self.dao = gctx().db_txndao
 
     def __enter__(self):
-
         if not self.dao:
-            gctx().db_txndao = OADao("openarc", hold_commit=True)
+            gctx().db_txndao = OADao("openarc", trans_commit_hold=True)
             self.dao = gctx().db_txndao
             self.dao.cur
+        self.dao.trans_depth += 1
         return self
 
     def __exit__(self, exc, value, traceback):
-        self.dao.cur_finalize(exc)
-        gctx().db_txndao = None
-        self.dao = None
+        self.dao.trans_depth -= 1
+        if self.dao.trans_depth == 1:
+            self.dao.cur_finalize(exc)
+            gctx().db_txndao = None
+            self.dao = None

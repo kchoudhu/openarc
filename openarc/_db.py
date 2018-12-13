@@ -24,25 +24,27 @@ class DbSchemaProxy(object):
         else:
             crstack.append(oag.__class__)
 
-        with OADao(oag.context, cdict=False) as dao:
+
+        with OADbTransaction("schema init") as tran: #, cdict=False) as dao:
             # Check that context schema exists
-            check = dao.execute(dbp.SQL['admin']['schema'])
+            check = tran.dao.execute(dbp.SQL['admin']['schema'])
             if len(check)==0:
                 if oag.logger.SQL:
                     print("Creating missing schema [%s]" % oag.context)
-                dao.execute(dbp.SQL['admin']['mkschema'])
+                tran.dao.execute(dbp.SQL['admin']['mkschema'])
 
             # Check for presence of table
+            extcur = []
             try:
-                dao.execute(dbp.SQL['admin']['table'])
-                db_columns = [desc[0] for desc in dao.description]
+                tran.dao.execute(dbp.SQL['admin']['table'], cdict=False, extcur=extcur, savepoint=True)
+                db_columns = [desc[0] for desc in extcur[0].description]
             except psycopg2.ProgrammingError as e:
                 if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e):
                     if oag.logger.SQL:
                         print("Creating missing table [%s]" % oag.dbtable)
-                    dao.execute(dbp.SQL['admin']['mktable'])
-                    dao.execute(dbp.SQL['admin']['table'])
-                    db_columns = [desc[0] for desc in dao.description]
+                    tran.dao.execute(dbp.SQL['admin']['mktable'])
+                    tran.dao.execute(dbp.SQL['admin']['table'], cdict=False, extcur=extcur)
+                    db_columns = [desc[0] for desc in extcur[0].description]
 
             # Check for table schema integrity
             oag_columns     = sorted(oag.streams.keys())
@@ -84,7 +86,7 @@ class DbSchemaProxy(object):
                         add_col_clauses.append(add_clause)
 
                 addcol_sql = dbp.SQLpp("ALTER TABLE {0}.{1} %s") % ",".join(add_col_clauses)
-                dao.execute(addcol_sql)
+                tran.dao.execute(addcol_sql)
 
                 for idx, idxinfo in oag.dbindices.items():
                     col_sql     = ','.join(map(lambda x: oag.stream_db_mapping[x], idxinfo[0]))
@@ -99,7 +101,7 @@ class DbSchemaProxy(object):
                             'WHERE %s' % ' AND '.join('%s=%s' % (oag.stream_db_mapping[k], idxinfo[2][k]) for k in idxinfo[2].keys())
 
                     exec_sql    = dbp.SQL['admin']['mkindex'] % (unique_sql, idx, col_sql, partial_sql)
-                    dao.execute(exec_sql)
+                    tran.dao.execute(exec_sql)
 
         crstack.pop()
 
@@ -113,14 +115,14 @@ class DbSchemaProxy(object):
         if oag.rpc.is_proxy:
             return
 
-        with OADao(oag.context) as dao:
+        with OADbTransaction("init fkey") as tran:
             for stream in oag.streams:
                 if oag.is_oagnode(stream):
                     currattr = getattr(oag, stream, None)
                     if currattr:
                         currattr.db.schema.init_fkeys()
 
-            results = dao.execute(dbp.SQL['admin']['fkeys'])
+            results = tran.dao.execute(dbp.SQL['admin']['fkeys'])
             setattr(oag.__class__, '_fkframe', results)
             dbp._oag.reset(idxreset=False)
 
@@ -153,7 +155,7 @@ class DbProxy(object):
         self._searchdesc     = searchdesc
 
     @property
-    def __dao(self):
+    def _dao(self):
         return OADao(self._oag.context) if not gctx().db_txndao else gctx().db_txndao
 
     def clone(self, src):
@@ -177,8 +179,7 @@ class DbProxy(object):
         formatstrs = ', '.join(['%s' for v in vals])
         insert_sql = self.SQL['insert']['id'] % (attrstr, formatstrs)
 
-
-        results = self.__dao.execute(insert_sql, vals)
+        results = self._dao.execute(insert_sql, vals)
         if self._searchidx=='id':
             index_val = results
             self._searchprms = list(index_val[0].values())
@@ -207,7 +208,7 @@ class DbProxy(object):
 
         delete_sql = self.SQL['delete']['id']
 
-        self.__dao.execute(delete_sql, [self._oag.id])
+        self._dao.execute(delete_sql, [self._oag.id])
         self.search(throw_on_empty=False, broadcast=broadcast)
 
         if self._oag.is_unique:
@@ -254,7 +255,7 @@ class DbProxy(object):
                         % (update_clause, getattr(self._oag, index_key, ""))
         update_values = [self._oag.props._cframe[attr] for attr in member_attrs]
 
-        self.__dao.execute(update_sql, update_values)
+        self._dao.execute(update_sql, update_values)
         if not norefresh:
             self.__refresh_from_cursor(broadcast=broadcast)
 
@@ -268,7 +269,7 @@ class DbProxy(object):
                                    for attr in updparms.keys()])
         update_sql    = self.SQL['update'][self._searchidx] % (update_clause, '%s')
 
-        self.__dao.execute(update_sql, list(updparms.values())+self._searchprms)
+        self._dao.execute(update_sql, list(updparms.values())+self._searchprms)
 
         if not norefresh:
             self.__refresh_from_cursor(broadcast=broadcast)
@@ -311,7 +312,7 @@ class DbProxy(object):
                 select_sql += ' OFFSET %s'
                 modified_searchprms = modified_searchprms + [self._searchoffset]
 
-            self._oag.rdf._rdf = self.__dao.execute(select_sql, modified_searchprms)
+            self._oag.rdf._rdf = self._dao.execute(select_sql, modified_searchprms, savepoint=True)
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
