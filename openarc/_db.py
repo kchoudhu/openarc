@@ -128,7 +128,7 @@ class DbSchemaProxy(object):
 
 class DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc):
+    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc, initschema):
         from .graph import OAG_RootNode
 
         # Store reference to outer object
@@ -136,6 +136,9 @@ class DbProxy(object):
 
         # Schema is unknown right now
         self._schema = None
+
+        # Use this flag to override environmental directive to initialize scehma in database
+        self._initschema = initschema
 
         # Intialize search parameters, if any
         if searchprms:
@@ -165,7 +168,7 @@ class DbProxy(object):
 
     def create(self, initprms={}):
 
-        if getenv().on_demand_oags:
+        if getenv().on_demand_oags and self._initschema:
             self.schema.init()
 
         self._oag.props._set_cframe_from_userprms(initprms, fullhouse=True)
@@ -188,7 +191,7 @@ class DbProxy(object):
         # Refresh to set iteridx
         self._oag.reset()
 
-        if getenv().on_demand_oags:
+        if getenv().on_demand_oags and self._initschema:
             self.schema.init_fkeys()
 
         # Autosetting a multinode is ok here, because it is technically
