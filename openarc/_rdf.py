@@ -405,7 +405,7 @@ class PropProxy(object):
             return
         for i, fk in enumerate(self._oag.__class__._fkframe):
             classname = gctx().db_class_mapping(fk['table'])
-            for cfcls in OAG_RootNode.__subclasses__():
+            for cfcls in OAG_RootNode.__graphsubclasses__():
 
                 if cfcls.__name__==classname:
 

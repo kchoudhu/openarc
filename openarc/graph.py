@@ -92,12 +92,13 @@ class OAG_RootNode(object):
 
     @staticproperty
     def dbtable(cls):
-        if not getattr(cls, '_dbtable_name', None):
+        ca_prop = getattr(cls, '_dbtable_name', ())
+        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
             db_table_name = inflection.underscore(cls.__name__)[4:]
-            setattr(cls, '_dbtable_name', db_table_name)
+            setattr(cls, '_dbtable_name', (cls, db_table_name))
             if not cls.is_reversible:
                 raise OAError("This table name isn't reversible: [%s]" % cls.__name__)
-        return cls._dbtable_name
+        return cls._dbtable_name[1]
 
     @classmethod
     def is_oagnode(cls, stream):
@@ -129,28 +130,31 @@ class OAG_RootNode(object):
 
     @staticproperty
     def is_reversible(cls):
-        if not getattr(cls, '_is_reversible', None):
-            reverse_class_name = "OAG_"+inflection.camelize(cls._dbtable_name)
-            setattr(cls, '_is_reversible', (reverse_class_name == cls.__name__))
-        return cls._is_reversible
+        ca_prop = getattr(cls, '_is_reversible', ())
+        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+            reverse_class_name = "OAG_"+inflection.camelize(cls.dbtable)
+            setattr(cls, '_is_reversible', (cls, reverse_class_name == cls.__name__))
+        return cls._is_reversible[1]
 
     @staticproperty
     def stream_db_mapping(cls):
-        if not getattr(cls, '_stream_db_mapping', None):
+        ca_prop = getattr(cls, '_stream_db_mapping', ())
+        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
             schema = {}
             for stream, streaminfo in cls.streams.items():
                 if cls.is_oagnode(stream):
                     schema[stream] = streaminfo[0].dbpkname[1:]+'_'+stream
                 else:
                     schema[stream] = stream
-            setattr(cls, '_stream_db_mapping', schema)
-        return cls._stream_db_mapping
+            setattr(cls, '_stream_db_mapping', (cls, schema))
+        return cls._stream_db_mapping[1]
 
     @staticproperty
     def db_stream_mapping(cls):
-        if not getattr(cls, '_db_stream_mapping', None):
-            setattr(cls, '_db_stream_mapping', {cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping})
-        return cls._db_stream_mapping
+        ca_prop = getattr(cls, '_db_stream_mapping', ())
+        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+            setattr(cls, '_db_stream_mapping', (cls, {cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}))
+        return cls._db_stream_mapping[1]
 
     ##### User API
     @property
@@ -331,6 +335,13 @@ class OAG_RootNode(object):
         self.props._set_attrs_from_cframe()
 
         return self
+
+    @classmethod
+    def __graphsubclasses__(cls):
+        subclasses = cls.__subclasses__()
+        for subclass in cls.__subclasses__():
+            subclasses += subclass.__graphsubclasses__()
+        return subclasses
 
     def __init__(
                  self,

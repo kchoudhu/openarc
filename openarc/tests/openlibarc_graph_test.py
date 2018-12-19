@@ -462,6 +462,12 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 'field5' : 'this is an autonode2'
             })
 
+        a2sub =\
+            OAG_AutoNode2sub().db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
         a3 =\
             OAG_AutoNode3().db.create({
                 'field7' :  8,
@@ -474,20 +480,31 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                     'field2'   : x,
                     'field3'   : 10-x,
                     'subnode1' : a2,
-                    'subnode2' : a3
+                    'subnode2' : a3,
+                    'subnode3' : a2sub if not x%2 else None
                 })
             a1b =\
                 OAG_AutoNode1b().db.create({
                     'field2'   : 10-x,
                     'field3'   : x,
                     'subnode1' : a2,
-                    'subnode2' : a3
+                    'subnode2' : a3,
+                    'subnode3' : a2sub if x%2 else None
                 })
 
         self.assertEqual(a2.auto_node1a.size, 10)
         self.assertEqual(a2.auto_node1b.size, 10)
         self.assertEqual(a3.auto_node1a.size, 10)
         self.assertEqual(a3.auto_node1b.size, 10)
+
+        # Test fwdoag creation for derived classes
+        self.assertEqual(a2sub.auto_node1a.size, 5)
+        self.assertEqual(a2sub.auto_node1b.size, 5)
+
+    def test_autonode_fwdoag_subclassing(self):
+        self.assertEqual(OAG_AutoNode2sub in OAG_AutoNode2.__graphsubclasses__(), True)
+        self.assertEqual(OAG_AutoNode2sub in OAG_RootNode.__graphsubclasses__(), True)
+        self.assertEqual(OAG_AutoNode2 in OAG_RootNode.__graphsubclasses__(), True)
 
     def test_oag_interconnection_with_dbpersist(self):
 
@@ -1759,10 +1776,11 @@ class OAG_AutoNode1a(OAG_RootNode):
 
     @staticproperty
     def streams(cls): return {
-        'field2'   : [ 'int',         0,    None ],
-        'field3'   : [ 'int',         None, None ],
-        'subnode1' : [ OAG_AutoNode2, True, None ],
-        'subnode2' : [ OAG_AutoNode3, True, None ],
+        'field2'   : [ 'int',            0,     None ],
+        'field3'   : [ 'int',            None,  None ],
+        'subnode1' : [ OAG_AutoNode2,    True,  None ],
+        'subnode2' : [ OAG_AutoNode3,    True,  None ],
+        'subnode3' : [ OAG_AutoNode2sub, False, None ]
     }
 
 class OAG_AutoNode1b(OAG_RootNode):
@@ -1771,10 +1789,11 @@ class OAG_AutoNode1b(OAG_RootNode):
 
     @staticproperty
     def streams(cls): return {
-        'field2'   : [ 'int',         0,    None ],
-        'field3'   : [ 'int',         0,    None ],
-        'subnode1' : [ OAG_AutoNode2, True, None ],
-        'subnode2' : [ OAG_AutoNode3, True, None ],
+        'field2'   : [ 'int',            0,     None ],
+        'field3'   : [ 'int',            0,     None ],
+        'subnode1' : [ OAG_AutoNode2,    True,  None ],
+        'subnode2' : [ OAG_AutoNode3,    True,  None ],
+        'subnode3' : [ OAG_AutoNode2sub, False, None ]
     }
 
 class OAG_AutoNode2(OAG_RootNode):
@@ -1804,6 +1823,9 @@ class OAG_AutoNode2(OAG_RootNode):
               ORDER BY {2}""")
           }
         }
+
+class OAG_AutoNode2sub(OAG_AutoNode2):
+    pass
 
 class OAG_AutoNode3(OAG_RootNode):
     @staticproperty
