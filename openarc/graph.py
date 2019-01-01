@@ -93,7 +93,7 @@ class OAG_RootNode(object):
     @staticproperty
     def dbtable(cls):
         ca_prop = getattr(cls, '_dbtable_name', ())
-        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+        if not ca_prop or (len(ca_prop)>0 and ca_prop[0]!=cls):
             db_table_name = inflection.underscore(cls.__name__)[4:]
             setattr(cls, '_dbtable_name', (cls, db_table_name))
             if not cls.is_reversible:
@@ -131,7 +131,7 @@ class OAG_RootNode(object):
     @staticproperty
     def is_reversible(cls):
         ca_prop = getattr(cls, '_is_reversible', ())
-        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+        if not ca_prop or (len(ca_prop)>0 and ca_prop[0]!=cls):
             reverse_class_name = "OAG_"+inflection.camelize(cls.dbtable)
             setattr(cls, '_is_reversible', (cls, reverse_class_name == cls.__name__))
         return cls._is_reversible[1]
@@ -139,7 +139,7 @@ class OAG_RootNode(object):
     @staticproperty
     def stream_db_mapping(cls):
         ca_prop = getattr(cls, '_stream_db_mapping', ())
-        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+        if not ca_prop or (len(ca_prop)>0 and ca_prop[0]!=cls):
             schema = {}
             for stream, streaminfo in cls.streams.items():
                 if cls.is_oagnode(stream):
@@ -152,7 +152,7 @@ class OAG_RootNode(object):
     @staticproperty
     def db_stream_mapping(cls):
         ca_prop = getattr(cls, '_db_stream_mapping', ())
-        if len(ca_prop)==0 or (len(ca_prop)>0 and ca_prop[0]!=cls):
+        if not ca_prop or (len(ca_prop)>0 and ca_prop[0]!=cls):
             setattr(cls, '_db_stream_mapping', (cls, {cls.stream_db_mapping[k]:k for k in cls.stream_db_mapping}))
         return cls._db_stream_mapping[1]
 
