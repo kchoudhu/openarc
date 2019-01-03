@@ -86,7 +86,7 @@ class RdfProxy(object):
         for i, frame in enumerate(self._rdf):
             self._oag.props._cframe = frame
             self._oag.cache.clear()
-            self._oag.props._set_attrs_from_cframe(fastiter=True, nofk=True)
+            self._oag.props._set_attrs_from_cframe()
             if predicate(self._oag):
                 self._rdf_window.append(self._rdf[i])
 
@@ -110,7 +110,8 @@ class RdfProxy(object):
 
         for i, frame in enumerate(self._rdf_window):
             oagcpy.props._cframe = frame
-            oagcpy.props._set_attrs_from_cframe(fastiter=True, nofk=True)
+            oagcpy.cache.clear()
+            oagcpy.props._set_attrs_from_cframe()
             ret_list.append(predicate(oagcpy))
 
         return ret_list
