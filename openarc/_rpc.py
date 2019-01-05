@@ -726,6 +726,10 @@ class RestProxy(object):
             rootfn = getattr(self._oag, details[0], None)
             self._app.route(endpoint, methods=details[1])(rootfn)
 
+        crash_view = self._oag.restcrash.view
+        crashfn    = getattr(self._oag, self._oag.restapi[crash_view][0], None)
+        self._app.errorhandler(404)(crashfn)
+
         from socket        import gethostname
         from gevent.pywsgi import WSGIServer
 
