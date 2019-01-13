@@ -9,6 +9,7 @@ import inspect
 import signal
 import socket
 import sys
+import toml
 
 from ._db   import *
 from ._rdf  import *
@@ -367,7 +368,7 @@ class OAG_RootNode(object):
         initenv(oag=self)
 
         # Alphabetize
-        self._iteridx        = None
+        self._iteridx        = 0
         self._logger         = logger
         self.is_proxy        = not initurl is None
 
@@ -521,7 +522,41 @@ class OAG_RootD(OAG_RootNode):
         self.db.delete()
         sys.exit(0)
 
-    def start(self):
+    def start(self, cfgfile=None):
+
+        def get_cfg_file_path():
+            if cfgfile is None:
+
+                cfg_name = "%s.conf" % self.daemonname
+
+                try:
+                    cfg_file_path = "./%s" % cfg_name
+                    with open(cfg_file_path, 'r'):
+                        return cfg_file_path
+                except IOError:
+                    pass
+
+                try:
+                    cfg_file_path = os.path.expanduser("~/.%s" % cfg_name)
+                    with open(cfg_file_path, 'r'):
+                        return cfg_file_path
+                except IOError:
+                    pass
+
+                cfg_file_path = "/usr/local/etc/%s" % cfg_name
+            else:
+                cfg_file_path = cfgfile
+
+            return cfg_file_path
+
+        cfg_file_path = get_cfg_file_path()
+        print("Loading APP config: [%s]" % (cfg_file_path))
+        try:
+            with open(cfg_file_path) as f:
+                appcfg = toml.loads(f.read())
+                getenv().merge_app_cfg(appcfg)
+        except IOError:
+            raise OAError("%s does not exist" % cfg_file_path)
 
         hostname = socket.gethostname()
         daemoncfg = getenv().cfg()[self.daemonname]

@@ -266,7 +266,7 @@ class OAEnv(object):
             return cfg_file_path
 
         cfg_file_path = get_cfg_file_path()
-        print("Loading OPENARC config: %s" % cfg_file_path)
+        print("Loading OPENARC config: [%s]" % cfg_file_path)
 
         try:
             with open( cfg_file_path ) as f:
@@ -276,12 +276,17 @@ class OAEnv(object):
                 # The highlights
                 self.crypto     = envcfg['crypto']
                 self.dbinfo     = envcfg['dbinfo']
-                self.extcreds   = envcfg['extcreds']
                 self.name       = envcfg['env']
                 self.rpctimeout = envcfg['graph']['heartbeat']
 
         except IOError:
             raise OAError("%s does not exist" % cfg_file_path)
+
+    def merge_app_cfg(self, appcfg):
+        self._envcfg = {**self._envcfg, **appcfg}
+
+        # Add in external credentials
+        self.extcreds   = self._envcfg['extcreds']
 
     def cfg(self):
         return self._envcfg
