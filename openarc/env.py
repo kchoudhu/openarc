@@ -231,37 +231,30 @@ def gctx():
 
 p_refcount_env = 0
 p_env = None
+p_testmode = False
 
 class OAEnv(object):
 
-    def __init__(self, on_demand_oags, cfgfile='openarc.toml'):
+    def __init__(self, on_demand_oags, cfgfile=None):
         self.envid = base64.b16encode(os.urandom(16)).decode('ascii')
         self.on_demand_oags = on_demand_oags
         self.rpctimeout = 5
 
         def get_cfg_file_path():
-            # Figure out configuration load information
 
-            cfg_dir = os.environ.get("OPENARC_CFG_DIR")
-            if not cfg_dir:
-                # Look in the following locations, in order of preference:
-                try:
-                    cfg_file_path = "./%s" % cfgfile
-                    with open(cfg_file_path, 'r'):
-                        return cfg_file_path
-                except IOError:
-                    pass
-
-                try:
-                    cfg_file_path = os.path.expanduser("~/.%s" % cfgfile)
-                    with open(cfg_file_path, 'r'):
-                        return cfg_file_path
-                except IOError:
-                    pass
-
-                cfg_file_path = "/usr/local/etc/%s" % cfgfile
+            # If cfgfile has been specified, you are lucky. If not, do song
+            # and dance to figure out where it is.
+            if cfgfile:
+                cfg_file_path = cfgfile
             else:
-                cfg_file_path = "%s/%s" % ( cfg_dir, cfgfile )
+                cfg_dir = os.environ.get("OPENARC_CFG_DIR")
+                if not cfg_dir:
+                    for l in ['./openarc.toml', '~/local/etc/.openarc.toml', '/usr/local/etc/openarc.toml' ]:
+                        cfg_file_path = os.path.expanduser(l)
+                        if os.path.exists(cfg_file_path):
+                            break
+                else:
+                    cfg_file_path = os.path.join(cfg_dir, 'openarc.toml')
 
             return cfg_file_path
 
@@ -285,8 +278,14 @@ class OAEnv(object):
     def merge_app_cfg(self, appcfg):
         self._envcfg = {**self._envcfg, **appcfg}
 
+        # Add some runtime information
+        self.runprops = self._envcfg['runprops'] if self._envcfg['runprops'] else {}
+
         # Add in external credentials
-        self.extcreds   = self._envcfg['extcreds']
+        self.extcreds = self._envcfg['extcreds'] if self._envcfg['extcreds'] else {}
+
+        # Add in rootca info if any
+        self.rootca = self._envcfg['rootca'] if self._envcfg['rootca'] else {}
 
     def cfg(self):
         return self._envcfg
@@ -296,19 +295,24 @@ def getenv():
     global p_env
     return p_env
 
-def initenv(oag=None, on_demand_oags=False):
-    """envstr: one of local, dev, qa, prod.
-    Does not return OAEnv variable; for that, you
-    must call getenv"""
+def initenv(reset=False,          # Reset the environment barring one special env prop...
+            on_demand_oags=False, # SPECAIL: make on demand OAG creation sticky across calls
+            oag=None,             # Reference to the OAG calling this function
+            cfgfile=None):        # Load environment from this cfgfile
+
     locale.setlocale(locale.LC_ALL, "")
 
     global p_env
     global p_refcount_env
 
+    if p_refcount_env==1 and reset:
+        on_demand_oags = p_env.on_demand_oags
+        p_refcount_env -= 1
+
     if p_refcount_env == 0:
 
         # Initialize environment
-        p_env = OAEnv(on_demand_oags)
+        p_env = OAEnv(on_demand_oags, cfgfile=cfgfile)
         p_refcount_env += 1
 
         # Create all OAGs if on demand oag creation is turned off
