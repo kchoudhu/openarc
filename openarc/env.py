@@ -57,7 +57,8 @@ def initoags():
             if 'OAG_RootNode' in [x.__name__ for x in inspect.getmro(fn[1])] and fn[1].__name__ != 'OAG_RootNode':
                 if fn[1].__name__ not in create_index:
                     try:
-                        create_index[fn[1].__name__] = fn[1]().db.schema.init()
+                        if fn[1].streamable:
+                            create_index[fn[1].__name__] = fn[1]().db.schema.init()
                     except OAError:
                         pass
 
@@ -296,7 +297,7 @@ def getenv():
     return p_env
 
 def initenv(reset=False,          # Reset the environment barring one special env prop...
-            on_demand_oags=False, # SPECAIL: make on demand OAG creation sticky across calls
+            on_demand_oags=False, # SPECIAL: make on demand OAG creation sticky across calls
             oag=None,             # Reference to the OAG calling this function
             cfgfile=None):        # Load environment from this cfgfile
 
