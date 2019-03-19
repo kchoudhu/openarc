@@ -16,6 +16,7 @@ setup(name='openarc',
       license='BSD',
       packages=['openarc'],
       install_requires=[
+          'attrdict',
           'gevent',
           'inflection',
           'msgpack-python',

@@ -2,7 +2,7 @@
 
 A functional reactive graph database backed by PostgreSQL
 
-In layman's terms, OpenARC let's you build graphs of objects that react to one another.
+In layman's terms, OpenARC lets you build graphs of objects that react to one another.
 
 # Getting Started
 
@@ -39,15 +39,13 @@ make dbmshardinit
 
 ### Configure OpenARC
 
-Tell OpenARC where to find its configuration information:
+OpenARC follows the XDG specification, and looks for ```openarc.conf``` in the following locations:
 
-```sh
-export OPENARC_CFG_DIR=/config/lives/here
-```
+* ```XDG_CONFIG_HOME```
+* ```$HOME/.config/```
+* ```/usr/local/etc/```
 
-If ```OPENARC_CFG_DIR``` is not set, OpenARC will assume that its configuration is in the current directory.
-
-OpenARC's configuration file is, unsurprisingly, called ```openarc.toml```. A sample file is available in the ```/cfg``` directory of the project distribution.
+An annotated sample ```openarc.conf``` is available in the ```cfg``` directory of the project distribution.
 
 # Quickstart
 

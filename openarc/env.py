@@ -4,6 +4,7 @@ from gevent import monkey
 monkey.patch_all()
 
 import atexit
+import attrdict
 import base64
 import gevent
 import gevent.queue
@@ -239,7 +240,6 @@ class OAEnv(object):
     def __init__(self, on_demand_oags, cfgfile=None):
         self.envid = base64.b16encode(os.urandom(16)).decode('ascii')
         self.on_demand_oags = on_demand_oags
-        self.rpctimeout = 5
 
         def get_cfg_file_path():
 
@@ -248,19 +248,20 @@ class OAEnv(object):
             if cfgfile:
                 cfg_file_path = cfgfile
             else:
-                cfg_dir = os.environ.get("OPENARC_CFG_DIR")
+                cfgname = 'openarc.conf'
+                cfg_dir = os.environ.get("XDG_CONFIG_HOME")
                 if not cfg_dir:
-                    for l in ['./openarc.toml', '~/local/etc/.openarc.toml', '/usr/local/etc/openarc.toml' ]:
+                    for l in [f'~/.config/{cfgname}', f'/usr/local/etc/{cfgname}' ]:
                         cfg_file_path = os.path.expanduser(l)
                         if os.path.exists(cfg_file_path):
                             break
                 else:
-                    cfg_file_path = os.path.join(cfg_dir, 'openarc.toml')
+                    cfg_file_path = os.path.join(cfg_dir, f'{cfgname}')
 
             return cfg_file_path
 
         cfg_file_path = get_cfg_file_path()
-        print("Loading OPENARC config: [%s]" % cfg_file_path)
+        print(f'Loading OPENARC config: [{cfg_file_path}]')
 
         try:
             with open( cfg_file_path ) as f:
@@ -268,26 +269,22 @@ class OAEnv(object):
                 self._envcfg = envcfg
 
                 # The highlights
-                self.crypto     = envcfg['crypto']
-                self.dbinfo     = envcfg['dbinfo']
-                self.name       = envcfg['env']
+                self.crypto     = attrdict.AttrDict(envcfg['crypto'])
+                self.dbinfo     = attrdict.AttrDict(envcfg['dbinfo'])
                 self.rpctimeout = envcfg['graph']['heartbeat']
-
         except IOError:
-            raise OAError("%s does not exist" % cfg_file_path)
+            raise OAError(f'{cfg_file_path} does not exist')
 
-    def merge_app_cfg(self, appcfg):
-        self._envcfg = {**self._envcfg, **appcfg}
+    def merge_app_cfg(self, app, appcfg):
 
-        # Add some runtime information
-        self.runprops = self._envcfg['runprops'] if self._envcfg['runprops'] else {}
+        self._envcfg = {**self._envcfg, **{ app : appcfg }}
 
-        # Add in external credentials
-        self.extcreds = self._envcfg['extcreds'] if self._envcfg['extcreds'] else {}
+        if getattr(self, app, None):
+            raise OAError(f'Configuration for {app} already exists')
 
-        # Add in rootca info if any
-        self.rootca = self._envcfg['rootca'] if self._envcfg['rootca'] else {}
+        setattr(self, app, attrdict.AttrDict(appcfg))
 
+    @property
     def cfg(self):
         return self._envcfg
 

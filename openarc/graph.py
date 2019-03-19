@@ -518,56 +518,44 @@ class OAG_RootD(OAG_RootNode):
         return self
 
     def __exit__(self, *args):
-
         self.db.delete()
         sys.exit(0)
 
     def start(self, cfgfile=None):
 
         def get_cfg_file_path():
-            if cfgfile is None:
 
-                cfg_name = "%s.conf" % self.daemonname
-
-                try:
-                    cfg_file_path = "./%s" % cfg_name
-                    with open(cfg_file_path, 'r'):
-                        return cfg_file_path
-                except IOError:
-                    pass
-
-                try:
-                    cfg_file_path = os.path.expanduser("~/.%s" % cfg_name)
-                    with open(cfg_file_path, 'r'):
-                        return cfg_file_path
-                except IOError:
-                    pass
-
-                cfg_file_path = "/usr/local/etc/%s" % cfg_name
-            else:
+            # If cfgfile has been specified, you are lucky. If not, do song
+            # and dance to figure out where it is.
+            if cfgfile:
                 cfg_file_path = cfgfile
+            else:
+                cfgname = f'{self.daemonname}.conf'
+                cfg_dir = os.environ.get("XDG_CONFIG_HOME")
+                if not cfg_dir:
+                    for l in [f'~/.config/{cfgname}', f'/usr/local/etc/{cfgname}' ]:
+                        cfg_file_path = os.path.expanduser(l)
+                        if os.path.exists(cfg_file_path):
+                            break
+                else:
+                    cfg_file_path = os.path.join(cfg_dir, f'{cfgname}')
 
             return cfg_file_path
 
         cfg_file_path = get_cfg_file_path()
-        print("Loading APP config: [%s]" % (cfg_file_path))
+        print(f'Loading {self.daemonname.upper()} config: [{cfg_file_path}]')
         try:
             with open(cfg_file_path) as f:
                 appcfg = toml.loads(f.read())
-                getenv().merge_app_cfg(appcfg)
+                getenv().merge_app_cfg(self.daemonname, appcfg)
         except IOError:
-            raise OAError("%s does not exist" % cfg_file_path)
+            raise OAError(f'{cfg_file_path} does not exist')
 
         hostname = socket.gethostname()
-        daemoncfg = getenv().cfg()[self.daemonname]
-        stripe_info = [hosts for hosts in daemoncfg['hosts'] if hosts['host']==hostname]
-
-        # Am I even allowed to run on this host?
-        if len(stripe_info)==0:
-            raise OAError("[%s] is not configured to run on [%s]." % (self.daemonname, hostname))
+        daemoncfg = getattr(getenv(), self.daemonname, {})
 
         # Are there too many stripes?
-        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(stripe_info[0]['stripes'])]
+        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(daemoncfg.stripes)]
         try:
             _d = self.__class__(hostname, 'by_host')
             occupied_ports = [dd.port for dd in _d]
