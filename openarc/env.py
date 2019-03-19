@@ -288,10 +288,10 @@ class OAEnv(object):
     def cfg(self):
         return self._envcfg
 
-def getenv():
+def getenv(node=None):
     """Accessor method for global state"""
     global p_env
-    return p_env
+    return getattr(p_env, node, None) if node else p_env
 
 def initenv(reset=False,          # Reset the environment barring one special env prop...
             on_demand_oags=False, # SPECIAL: make on demand OAG creation sticky across calls
