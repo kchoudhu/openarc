@@ -1752,6 +1752,51 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a13_chk.enum, FriezeEnum.PHASE_3)
         self.__check_autonode_equivalence(a13, a13_chk)
 
+    def test_autonode_filter_caching(self):
+        """By default, filter operations are carried out on a clone of an OAG. If
+        cache=True is set, then filter occurs on the actual OAG"""
+        a2 =\
+            OAG_AutoNode2().db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a2sub =\
+            OAG_AutoNode2sub().db.create({
+                'field4' :  1,
+                'field5' : 'this is an autonode2'
+            })
+
+        a3 =\
+            OAG_AutoNode3().db.create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        for x in range(0,10):
+            a1a =\
+                OAG_AutoNode1a().db.create({
+                    'field2'   : x,
+                    'field3'   : 10-x,
+                    'subnode1' : a2,
+                    'subnode2' : a3,
+                    'subnode3' : a2sub if not x%2 else None
+                })
+            a1b =\
+                OAG_AutoNode1b().db.create({
+                    'field2'   : 10-x,
+                    'field3'   : x,
+                    'subnode1' : a2,
+                    'subnode2' : a3,
+                    'subnode3' : a2sub if x%2 else None
+                })
+
+        filter_oag = a3.auto_node1a
+        self.assertEqual(filter_oag.rdf.filter(lambda x: x.field2==2).size, 1)
+        self.assertEqual(filter_oag.size, 10)
+        self.assertEqual(filter_oag.rdf.filter(lambda x: x.field2==2, cache=True).size, 1)
+        self.assertEqual(filter_oag.size, 1)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path = td("""

@@ -73,32 +73,37 @@ class RdfProxy(object):
         # self._rdf_filter_cache =\
         #                         list(src.rdf._rdf_filter_cache)
 
-    def filter(self, predicate, rerun=False):
-        if self._oag.is_unique:
+    def filter(self, predicate, rerun=False, cache=False):
+
+        oag = self._oag
+        if not cache:
+            oag = self._oag.clone()
+
+        if oag.is_unique:
             raise OAError("Cannot filter OAG that is marked unique")
 
-        self._rdf_window = self._rdf
+        oag.rdf._rdf_window = oag.rdf._rdf
 
         if rerun is False:
-            self._rdf_filter_cache.append(predicate)
+            oag.rdf._rdf_filter_cache.append(predicate)
 
-        self._rdf_window = []
+        oag.rdf._rdf_window = []
         for i, frame in enumerate(self._rdf):
-            self._oag.props._cframe = frame
-            self._oag.cache.clear()
-            self._oag.props._set_attrs_from_cframe()
-            if predicate(self._oag):
-                self._rdf_window.append(self._rdf[i])
+            oag.props._cframe = frame
+            oag.cache.clear()
+            oag.props._set_attrs_from_cframe()
+            if predicate(oag):
+                oag.rdf._rdf_window.append(oag.rdf._rdf[i])
 
-        if len(self._rdf_window)>0:
-            self._oag.props._cframe = self._rdf_window[0]
+        if len(oag.rdf._rdf_window)>0:
+            oag.props._cframe = oag.rdf._rdf_window[0]
         else:
-            self._rdf_window = []
-            self._oag.props._cframe = {}
+            oag.rdf._rdf_window = []
+            oag.props._cframe = {}
 
-        self._oag.props._set_attrs_from_cframe()
+        oag.props._set_attrs_from_cframe()
 
-        return self._oag
+        return oag
 
     def map(self, predicate, rerun=False):
         if self._oag.is_unique:
