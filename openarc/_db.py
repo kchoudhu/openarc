@@ -319,7 +319,7 @@ class DbProxy(object):
             self._oag.rdf._rdf_window = self._oag.rdf._rdf
 
             for predicate in self._oag.rdf._rdf_filter_cache:
-                self._oag.rdf.filter(predicate, rerun=True)
+                self._oag.rdf.filter(predicate, cache=True, rerun=True)
 
             if broadcast:
                 from .graph import OAG_RpcDiscoverable
