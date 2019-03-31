@@ -513,15 +513,29 @@ class OAG_RootD(OAG_RootNode):
     def streamable(cls): return False
 
     def __enter__(self):
+        try:
+            self.db.create()
+            with open(self.pidfile, 'w') as f:
+                f.write(str(os.getpid()))
+            return self
+        except Exception as e:
+            print('[STARTUP ERROR]', e)
+            self.__exit__(code=1)
 
-        self.db.create()
-        return self
+    def __exit__(self, *args, code=0):
+        try:
+            self.db.delete()
+        except Exception as e:
+            print('[CLEANUP WARNING]', e)
 
-    def __exit__(self, *args):
-        self.db.delete()
-        sys.exit(0)
+        try:
+            os.unlink(self.pidfile)
+        except Exception as e:
+            print('[CLEANUP WARNING]', e)
 
-    def start(self, cfgfile=None):
+        sys.exit(code)
+
+    def start(self, pidfile=None, cfgfile=None):
 
         def get_cfg_file_path():
 
@@ -550,6 +564,17 @@ class OAG_RootD(OAG_RootNode):
                 getenv().merge_app_cfg(self.daemonname, appcfg)
         except IOError:
             raise OAError(f'{cfg_file_path} does not exist')
+
+        def get_pid_file_path():
+            if pidfile:
+                return pidfile
+            else:
+                pidname = f'{self.daemonname}.pid'
+                xdg_rdir = os.environ.get("XDG_RUNTIME_DIR")
+                rdir = xdg_rdir if xdg_rdir else '/var/run'
+                return f'{rdir}/{pidname}'
+
+        self.pidfile = get_pid_file_path()
 
         hostname = socket.gethostname()
         daemoncfg = getattr(getenv(), self.daemonname, {})
