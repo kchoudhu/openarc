@@ -75,9 +75,7 @@ class RdfProxy(object):
 
     def filter(self, predicate, rerun=False, cache=False):
 
-        oag = self._oag
-        if not cache:
-            oag = self._oag.clone()
+        oag = self._oag if cache else self._oag.clone()
 
         if oag.is_unique:
             raise OAError("Cannot filter OAG that is marked unique")
@@ -94,6 +92,7 @@ class RdfProxy(object):
             oag.props._set_attrs_from_cframe()
             if predicate(oag):
                 oag.rdf._rdf_window.append(oag.rdf._rdf[i])
+            oag.cache.clear()
 
         if len(oag.rdf._rdf_window)>0:
             oag.props._cframe = oag.rdf._rdf_window[0]
@@ -118,6 +117,7 @@ class RdfProxy(object):
             oagcpy.cache.clear()
             oagcpy.props._set_attrs_from_cframe()
             ret_list.append(predicate(oagcpy))
+            oagcpy.cache.clear()
 
         return ret_list
 
