@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-
 import decimal
 import pprint
 
-from openarc.graph  import *
-from openarc.oatime import *
+from openarc        import *
+from openarc.time   import *
 
 from gevent import spawn
 

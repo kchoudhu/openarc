@@ -1,15 +1,13 @@
-#!/usr/bin/env python3
-
-import unittest
-import sys
-from textwrap import dedent as td
 import psycopg2
+import sys
+import unittest
 
 sys.path.append('../')
 
-from openarc.test import TestOABase
-from openarc.dao  import OADao, OADbTransaction
-from openarc.env  import initenv, getenv
+from test         import TestOABase
+
+from openarc      import *
+from openarc._dao import *
 
 class TestOADao(unittest.TestCase, TestOABase):
     def setUp(self):
@@ -103,11 +101,11 @@ class TestOADao(unittest.TestCase, TestOABase):
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
-        get_search_path = td("""
-            SHOW search_path""")
-        create_sample_table = td("""
-            CREATE TABLE test.sample_table( field1 serial, field2 int NOT NULL)""")
-        insert_sample_row = td("""
-            INSERT INTO test.sample_table( field2 ) VALUES ( %s )""")
-        get_rows_from_sample_table = td("""
-            SELECT field2 FROM test.sample_table""")
+        get_search_path =\
+            "SHOW search_path"
+        create_sample_table =\
+            "CREATE TABLE test.sample_table(field1 serial, field2 int NOT NULL)"
+        insert_sample_row =\
+            "INSERT INTO test.sample_table( field2 ) VALUES ( %s )"
+        get_rows_from_sample_table =\
+            "SELECT field2 FROM test.sample_table"

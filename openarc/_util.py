@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 __all__ = ['oagprop', 'staticproperty']
 
 class oagprop(object):
@@ -24,7 +22,7 @@ class oagprop(object):
         except:
             subnode = self.fget(obj, searchwin=searchwin, searchoffset=searchoffset, searchdesc=searchdesc)
             if subnode is not None:
-                from .graph import OAG_RootNode
+                from ._graph import OAG_RootNode
                 if isinstance(subnode, OAG_RootNode):
                     from ._rpc import reqcls
                     reqcls(obj).register(subnode.rpc.url, self.fget.__name__)

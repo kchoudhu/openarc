@@ -1,18 +1,15 @@
-#!/usr/bin/env python3
-
 import enum
 import gevent
+import openarc
 import sys
 import unittest
 
-from textwrap import dedent as td
-
 sys.path.append('../')
 
-from openarc.dao       import *
+from test              import TestOABase
+
+from openarc           import *
 from openarc.exception import *
-from openarc.graph     import *
-from openarc.test      import *
 
 class TestOAGraphRootNode(unittest.TestCase, TestOABase):
     def setUp(self):
@@ -1100,7 +1097,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 a2_dupe.rpc.discoverable = True
 
             # Wait 5 seconds, and then try to make duplicate discoverable
-            time.sleep(getenv().rpctimeout)
+            time.sleep(oaenv.rpctimeout)
             a2_dupe.rpc.discoverable = True
             rpcdisc =\
                 OAG_RpcDiscoverable({
@@ -1134,7 +1131,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                         with self.dbconn.cursor() as setupcur:
                             setupcur.execute("update openarc.rpc_discoverable set envid='%s'" % 'this_is_a_fake_id')
                             self.dbconn.commit()
-                    gevent.sleep(getenv().rpctimeout)
+                    gevent.sleep(oaenv.rpctimeout)
                     i += 1
 
         with self.assertRaises(SystemExit):
@@ -1159,7 +1156,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                         with self.dbconn.cursor() as setupcur:
                             setupcur.execute("delete from openarc.rpc_discoverable where 1=1")
                             self.dbconn.commit()
-                    gevent.sleep(getenv().rpctimeout)
+                    gevent.sleep(oaenv.rpctimeout)
                     i += 1
 
         with self.assertRaises(SystemExit):
@@ -1799,14 +1796,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
-        get_search_path = td("""
-            SHOW search_path""")
-        create_sample_table = td("""
-            CREATE TABLE test.sample_table( _field1 serial, field2 int NOT NULL, field3 int NOT NULL)""")
-        insert_sample_row = td("""
-            INSERT INTO test.sample_table( field2, field3 ) VALUES ( %s, %s )""")
-        get_rows_from_sample_table = td("""
-            SELECT field2 FROM test.sample_table""")
+        get_search_path =\
+            "SHOW search_path"
+        create_sample_table =\
+            "CREATE TABLE test.sample_table( _field1 serial, field2 int NOT NULL, field3 int NOT NULL )"
+        insert_sample_row =\
+            "INSERT INTO test.sample_table( field2, field3 ) VALUES ( %s, %s )"
+        get_rows_from_sample_table =\
+            "SELECT field2 FROM test.sample_table"
 
 class OAG_AutoNode1a(OAG_RootNode):
     @staticproperty

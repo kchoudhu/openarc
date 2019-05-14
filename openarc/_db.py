@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
-
 from textwrap    import dedent as td
 
-from openarc.dao import *
+from ._dao             import *
+from ._env             import oaenv, oactx
+
+from openarc.exception import OAGraphRetrieveError, OAGraphStorageError
 
 class DbSchemaProxy(object):
     def __init__(self, dbproxy):
@@ -38,8 +39,8 @@ class DbSchemaProxy(object):
             try:
                 tran.dao.execute(dbp.SQL['admin']['table'], cdict=False, extcur=extcur, savepoint=True)
                 db_columns = [desc[0] for desc in extcur[0].description]
-            except psycopg2.ProgrammingError as e:
-                if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e):
+            except OAGraphStorageError as e:
+                if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e.underlyer):
                     if oag.logger.SQL:
                         print("Creating missing table [%s]" % oag.dbtable)
                     tran.dao.execute(dbp.SQL['admin']['mktable'])
@@ -129,7 +130,7 @@ class DbSchemaProxy(object):
 class DbProxy(object):
     """Responsible for manipulation of database"""
     def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc, initschema):
-        from .graph import OAG_RootNode
+        from ._graph import OAG_RootNode
 
         # Store reference to outer object
         self._oag = oag
@@ -159,7 +160,7 @@ class DbProxy(object):
 
     @property
     def _dao(self):
-        return OADao(self._oag.context) if not gctx().db_txndao else gctx().db_txndao
+        return OADao(self._oag.context) if not oactx.db_txndao else oactx.db_txndao
 
     def clone(self, src):
         self._schema     = src.db.schema
@@ -168,7 +169,7 @@ class DbProxy(object):
 
     def create(self, initprms={}):
 
-        if getenv().on_demand_oags and self._initschema:
+        if oaenv.dbinfo['on_demand_schema'] and self._initschema:
             self.schema.init()
 
         self._oag.props._set_cframe_from_userprms(initprms, fullhouse=True)
@@ -191,7 +192,7 @@ class DbProxy(object):
         # Refresh to set iteridx
         self._oag.reset()
 
-        if getenv().on_demand_oags and self._initschema:
+        if oaenv.dbinfo['on_demand_schema'] and self._initschema:
             self.schema.init_fkeys()
 
         # Autosetting a multinode is ok here, because it is technically
@@ -322,7 +323,7 @@ class DbProxy(object):
                 self._oag.rdf.filter(predicate, cache=True, rerun=True)
 
             if broadcast:
-                from .graph import OAG_RpcDiscoverable
+                from ._graph import OAG_RpcDiscoverable
                 remote_oags =\
                     OAG_RpcDiscoverable({
                         'rpcinfname' : self._oag.infname_semantic
@@ -335,7 +336,7 @@ class DbProxy(object):
                 for listener in listeners:
                     OARpc_REQ_Request(self._oag).update_broadcast(listener)
 
-        except psycopg2.ProgrammingError:
+        except OAGraphStorageError:
             raise OAGraphRetrieveError("Missing database table")
 
     @property
@@ -397,7 +398,7 @@ class DbProxy(object):
               "mkindex"  : self.SQLpp("""
                  CREATE %s INDEX IF NOT EXISTS {1}_%s ON {0}.{1} (%s) %s"""),
               "mkschema" : self.SQLpp("""
-                 CREATE SCHEMA {0}"""),
+                 SELECT public.frieze_schema_create('{0}')"""),
               "mktable"  : self.SQLpp("""
                   CREATE table {0}.{1}({2} serial primary key)"""),
               "schema"   : self.SQLpp("""

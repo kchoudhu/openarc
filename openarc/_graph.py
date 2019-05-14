@@ -1,24 +1,27 @@
-#!/usr/bin/env python3
-
-from gevent import monkey
-monkey.patch_all()
+__all__ = [
+    'OAG_RootNode',
+    'OAG_RootD',
+    'OAG_RpcDiscoverable'
+]
 
 import datetime
 import hashlib
+import inflection
 import inspect
+import os
 import signal
 import socket
 import sys
 import toml
 
 from ._db   import *
+from ._env  import *
 from ._rdf  import *
-from ._rpc  import reqcls, RpcTransaction, RpcProxy, RestProxy
+from ._rpc  import reqcls, RpcTransaction, RpcProxy, RestProxy, RpcACL
 from ._util import oagprop, staticproperty
 
-from openarc.env       import *
 from openarc.exception import *
-from openarc.oatime    import *
+from openarc.time      import *
 
 class OAG_RootNode(object):
 
@@ -251,7 +254,7 @@ class OAG_RootNode(object):
             if self.rpc.is_proxy:
                 if self.logger.GC:
                     print("--> %s" % self.rpc.proxied_url)
-                gctx().rm_ka_via_rpc(self.rpc.url, self.rpc.proxied_url, 'proxy')
+                oactx.rm_ka_via_rpc(self.rpc.url, self.rpc.proxied_url, 'proxy')
 
             # Tell upstream registrations that we are going away
             if self.logger.GC:
@@ -266,7 +269,7 @@ class OAG_RootNode(object):
 
             if self.logger.GC:
                 print("Delete: queue size")
-                print("--> %d" % gctx().rm_queue_size)
+                print("--> %d" % oactx.rm_queue_size)
 
             # print("Delete: stop router")
             # self.rpc._glets[0].kill()
@@ -357,15 +360,15 @@ class OAG_RootNode(object):
                  initprms={},
                  initurl=None,
                  initschema=True,
-                 logger=gctx().logger,
+                 logger=oactx.logger,
                  rest=False,
                  rpc=True,
-                 rpc_acl=ACL.LOCAL_ALL,
+                 rpc_acl=RpcACL.LOCAL_ALL,
                  rpc_dbupdate_listen=False,
                  rpc_discovery_timeout=0):
 
         # Initialize environment
-        initenv(oag=self)
+        oainit(oag=self)
 
         # Alphabetize
         self._iteridx        = 0
@@ -489,7 +492,7 @@ class OAG_RpcDiscoverable(OAG_RootNode):
 
     @property
     def is_valid(self):
-        return OATime().now-self.heartbeat < datetime.timedelta(seconds=getenv().rpctimeout)
+        return OATime().now-self.heartbeat < datetime.timedelta(seconds=oaenv.rpctimeout)
 
 class OAG_RootD(OAG_RootNode):
     @staticproperty
@@ -561,7 +564,7 @@ class OAG_RootD(OAG_RootNode):
         try:
             with open(cfg_file_path) as f:
                 appcfg = toml.loads(f.read())
-                getenv().merge_app_cfg(self.daemonname, appcfg)
+                oaenv.merge_app_cfg(self.daemonname, appcfg)
         except IOError:
             raise OAError(f'{cfg_file_path} does not exist')
 
@@ -577,7 +580,7 @@ class OAG_RootD(OAG_RootNode):
         self.pidfile = get_pid_file_path()
 
         hostname = socket.gethostname()
-        daemoncfg = getattr(getenv(), self.daemonname, {})
+        daemoncfg = getattr(oaenv, self.daemonname, {})
 
         # Are there too many stripes?
         allowed_ports = [daemoncfg['startport']+stripe for stripe in range(daemoncfg.stripes)]

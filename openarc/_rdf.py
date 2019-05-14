@@ -1,13 +1,10 @@
-#!/usr/local/env python3
-
 import collections
 import copy
 import weakref
 
-from ._rpc  import reqcls
+from ._env  import oactx
 from ._util import oagprop
 
-from openarc.env       import gctx
 from openarc.exception import *
 
 class CacheProxy(object):
@@ -21,7 +18,7 @@ class CacheProxy(object):
     def clear(self):
         for stream, oag in self._oagcache.items():
             if self._oag.is_oagnode(stream):
-                gctx().rm_ka_via_rpc(self._oag.rpc.url, oag.rpc.url, stream)
+                oactx.rm_ka_via_rpc(self._oag.rpc.url, oag.rpc.url, stream)
         self._oagcache = {}
 
     def clone(self, src):
@@ -166,7 +163,8 @@ class PropProxy(object):
         """Add new cfval to the property management dict. If cfval is an
         oagprop or a non-OAG stream, add it directly. If cfval is a subnode
         wrap it in an oagprop and then add it to the dict."""
-        from .graph import OAG_RootNode
+        from ._graph import OAG_RootNode
+        from ._rpc   import reqcls
 
         # Cache a few values
         is_enum = self._oag.is_enum(stream)
@@ -387,7 +385,7 @@ class PropProxy(object):
         list(set(self._managed_oagprops))
 
     def _set_attrs_from_cframe(self, fastiter=False, nofk=False):
-        from .graph import OAG_RootNode
+        from ._graph import OAG_RootNode
 
         # Blank everything if _cframe isn't set
         if len(self._cframe)==0:
@@ -410,7 +408,7 @@ class PropProxy(object):
         if nofk:
             return
         for i, fk in enumerate(self._oag.__class__._fkframe):
-            classname = gctx().db_class_mapping(fk['table'])
+            classname = oactx.db_class_mapping(fk['table'])
             for cfcls in OAG_RootNode.__graphsubclasses__():
 
                 if cfcls.__name__==classname:

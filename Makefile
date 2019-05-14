@@ -1,37 +1,41 @@
-DBRUNDIR?=~/run/db
-DBCFGDIR?=./cfg/
-DBSOCKDIR?=/tmp
-DBLOGDIR?=/tmp
-PGCTL?=/usr/local/bin/pg_ctl
-PYTEST_BIN?="python -m unittest discover"
-PYTEST_FILE_PATTERN?="*_test.py"
 PROJECT=openarc
+
+# Build environment
+EXECDIR!=pwd
+BUILD=${EXECDIR}/build
+BUILD_PKG=${BUILD}/remote/pkg/freebsd
+BUILD_FRIEZE=${BUILD}/remote/frieze
+
+# Configurations
+CFGDIR!=realpath ${BUILD}/local/cfg
+
+# Database
+PSQL?=/usr/local/bin/psql
+DBNAME=${PROJECT}
+PYTHON=/usr/local/bin/python3
+PYTEST_FILE_PATTERN?="*_test.py"
 
 clean:
 	@rm ./${PROJECT}/*.pyc
 	@rm ./${PROJECT}/tests/*.pyc
 
-dbmsinit:
-	-@pkill postgres
-	@rm -rf /tmp/.s.PGSQL*
-	@rm -rf ${DBRUNDIR}/${PROJECT}
-	@/bin/mkdir -p ${DBRUNDIR}/${PROJECT}
-	@${PGCTL} init -D ${DBRUNDIR}/${PROJECT}
-	@cp ${DBCFGDIR}/*.conf ${DBRUNDIR}/${PROJECT}
-	@${PGCTL} -D ${DBRUNDIR}/${PROJECT} -l ${DBLOGDIR}/logfile start
-	@sleep 3
+dbcfg:
+	(cd ~ && make cfg=${CFGDIR}/postgresql.conf pgcfgadd)
+	(cd ~ && make cfg=${CFGDIR}/pg_hba.conf     pgcfgadd)
+	(cd ~ && make cfg=${CFGDIR}/pg_bouncer.ini  pgcfgadd)
+	cp ${CFGDIR}/openarc.conf   ~/.config/
 
-dbcreate:
-	-dropdb -h ${DBSOCKDIR} ${PROJECT}
-	createdb -h ${DBSOCKDIR} ${PROJECT}
+dbstop:
+	(cd ~ && make db=${DBNAME} pgstop)
 
-dbinit: dbcreate
+dbstart: dbcfg
+	(cd ~ && make db=${DBNAME} pgstart)
+	${PSQL} -d ${DBNAME} < ${CFGDIR}/pg_init.sql
 
-dbhardinit: dbmsinit dbinit
+dbinit: dbcfg
+	createdb -h /tmp ${DBNAME}
 
-test:
+test: dbstart
 	# Todo: replace this with TAP output
 	@echo "Running tests"
-	@export OPENARC_CFG_DIR=./cfg && python3 -m unittest discover ./openarc/tests -p ${PYTEST_FILE_PATTERN}
-
-testclean: dbrefresh test
+	${PYTHON} -m unittest discover ./${PROJECT}/tests -p ${PYTEST_FILE_PATTERN}

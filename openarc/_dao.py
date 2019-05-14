@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
-from gevent import monkey
-monkey.patch_all()
+__all__ = [
+    'OADao',
+    'OADbTransaction'
+]
 
 import binascii
 import os
@@ -10,8 +10,10 @@ import psycopg2.extras
 import psycopg2.extensions
 
 from   textwrap    import dedent as td
-from   openarc.env import *
 
+from   ._env       import oactx
+
+from   openarc.exception import OAGraphStorageError
 
 ## Exportable classes
 
@@ -22,7 +24,7 @@ class OADao(object):
         """Schema refers to the api entity we're referring
         to: auth, trading etc"""
         self.cdict   = cdict
-        self.dbconn  = gctx().db_conn
+        self.dbconn  = oactx.db_conn
         self.schema  = schema
         self.trans_depth  = 1
 
@@ -85,21 +87,24 @@ class OADao(object):
         if savepoint:
             savepoint_name = 'sp_'+binascii.hexlify(os.urandom(7)).decode('utf-8')
             cur.execute("SAVEPOINT %s" % savepoint_name)
-            if gctx().logger.SQL:
+            if oactx.logger.SQL:
                 print("init savepoint %s" % savepoint_name)
 
-        if gctx().logger.SQL:
+        if oactx.logger.SQL:
             print(td(cur.mogrify(query, params).decode('utf-8')))
 
         try:
-            cur.execute(query, params)
+            try:
+                cur.execute(query, params)
+            except Exception as e:
+                raise OAGraphStorageError(str(e), e)
             try:
                 results = cur.fetchall()
             except:
                 pass
         except:
             if savepoint:
-                if gctx().logger.SQL:
+                if oactx.logger.SQL:
                     print("rollback savepoint %s" % savepoint_name)
                 cur.execute("ROLLBACK TO SAVEPOINT %s" % savepoint_name)
 
@@ -129,12 +134,12 @@ class OADbTransaction(object):
     cursor. This is the functional equivalent of a semantic transaction. Captures
     non-OAG database transactions, but only as an unintended side effect."""
     def __init__(self, transname):
-        self.dao = gctx().db_txndao
+        self.dao = oactx.db_txndao
 
     def __enter__(self):
         if not self.dao:
-            gctx().db_txndao = OADao("openarc", trans_commit_hold=True)
-            self.dao = gctx().db_txndao
+            oactx.db_txndao = OADao("openarc", trans_commit_hold=True)
+            self.dao = oactx.db_txndao
             self.dao.cur
         self.dao.trans_depth += 1
         return self
@@ -143,5 +148,5 @@ class OADbTransaction(object):
         self.dao.trans_depth -= 1
         if self.dao.trans_depth == 1:
             self.dao.cur_finalize(exc)
-            gctx().db_txndao = None
+            oactx.db_txndao = None
             self.dao = None

@@ -1,12 +1,6 @@
-#!/usr/bin/env python3
+__all__ = [ "OATime" ]
 
-from gevent import monkey
-monkey.patch_all()
-
-import time
-
-from textwrap    import dedent as td
-from openarc.dao import OADao
+import time as coretime
 
 class OATime(object):
     """Executes time queries on database, returning
@@ -18,15 +12,16 @@ class OATime(object):
     @property
     def now(self):
         if self.cur is None:
+            from ._dao import OADao
             self.cur = OADao("openarc").cur
         self.cur.execute(self.SQL.get_current_time)
         return self.cur.fetchall()[0]['timezone']
 
     def to_unixtime(self):
         ms = (self.dt.microsecond/1000000.0)
-        timetuple = time.mktime(self.dt.timetuple())
+        timetuple = coretime.mktime(self.dt.timetuple())
         return timetuple + ms
 
     class SQL(object):
-        get_current_time = td("""
-            select now() at time zone 'utc'""")
+        get_current_time =\
+            "select now() at time zone 'utc'"
