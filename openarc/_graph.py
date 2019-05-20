@@ -4,6 +4,7 @@ __all__ = [
     'OAG_RpcDiscoverable'
 ]
 
+import attrdict
 import datetime
 import hashlib
 import inflection
@@ -580,10 +581,9 @@ class OAG_RootD(OAG_RootNode):
         self.pidfile = get_pid_file_path()
 
         hostname = socket.gethostname()
-        daemoncfg = getattr(oaenv, self.daemonname, {})
 
         # Are there too many stripes?
-        allowed_ports = [daemoncfg['startport']+stripe for stripe in range(daemoncfg.stripes)]
+        allowed_ports = [oaenv.app.startport+stripe for stripe in range(oaenv.app.stripes)]
         try:
             _d = self.__class__(hostname, 'by_host')
             occupied_ports = [dd.port for dd in _d]

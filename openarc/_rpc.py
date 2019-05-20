@@ -7,6 +7,7 @@ gc.context = _zmqctx
 import base64
 import datetime
 import gevent
+import gevent.pywsgi
 import msgpack
 import os
 import secrets
@@ -718,22 +719,64 @@ class RestProxy(object):
             OAError("REST API has not yet been enabled")
 
     def start(self, port):
-        if self._rest_enabled:
-            from flask import Flask, request, redirect, make_response
-            self._app = Flask(oaenv.envid)
+        if not self._rest_enabled:
+            return
 
+        # Create a flask application
+        from flask import Flask
+        self._app = Flask(oaenv.envid)
+
+        # Flask mod: Add API endpoints
         for endpoint, details in self._oag.restapi.items():
             rootfn = getattr(self._oag, details[0], None)
             self._app.route(endpoint, methods=details[1])(rootfn)
 
+        # Flask mod: crash view
         crash_view = self._oag.restcrash.view
         crashfn    = getattr(self._oag, self._oag.restapi[crash_view][0], None)
         self._app.errorhandler(404)(crashfn)
 
-        from socket        import gethostname
-        from gevent.pywsgi import WSGIServer
+        # Flask mod: update logger
+        from flask.logging import default_handler
+        self._app.logger.removeHandler(default_handler)
+        self._app.logger.addHandler(oalog.handler)
+        log_adapter =\
+            gevent.pywsgi.LoggingLogAdapter(oalog.logger)
 
-        http_server = WSGIServer(('0.0.0.0', port), self._app)
-        self._rest_addr = "%s:%d" % (gethostname(), port)
+        # Start server using gevent
+        self._rest_addr = "%s:%d" % (socket.gethostname(), port)
         print('Serving on: [%s]' % self.addr)
+        http_server =\
+            gevent.pywsgi.WSGIServer(
+                ('0.0.0.0', port),
+                self._app,
+                log=log_adapter,
+                error_log=log_adapter,
+                handler_class=OA_WSGIHandler
+            )
         http_server.serve_forever()
+
+class OA_WSGIHandler(gevent.pywsgi.WSGIHandler):
+
+    @property
+    def corrid(self):
+        try:
+            corrid = self.environ['HTTP_X_OPENARC_CORRID']
+        except KeyError:
+            corrid = None
+        return corrid
+
+    def run_application(self):
+        with oactx.logger(corrid=self.corrid):
+            super(OA_WSGIHandler, self).run_application()
+
+    def log_request(self):
+        with oactx.logger(corrid=self.corrid):
+            oalog.info(self.format_request())
+
+    def format_request(self):
+        delta   = self.time_finish - self.time_start
+        length  = self.response_length
+        request = self.requestline
+        status  = self._orig_status or self.status or '000'
+        return f"{request} {status} {length} {delta}"
