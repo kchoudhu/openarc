@@ -52,8 +52,7 @@ class OARpc(object):
             try:
                 # Quick cleanup
                 self._routing_table = {k:v for k,v in self._routing_table.items() if v() is not None}
-                if oactx.logger.RPC:
-                    print("rtr: %d items in routing table" % len(self._routing_table))
+                oalog.debug(f"rtr: {len(self._routing_table)} items in routing table", f='rpc')
 
                 # Find OAG request relates
                 oag = self._routing_table[args[0]['to']]()
@@ -103,8 +102,7 @@ class OARpc(object):
 
             to = protocol+'//'+tcpaddr
 
-            if oactx.logger.TRANSPORT:
-                print('Connecting %s' % to)
+            oalog.debug(f"Connecting [{to}]", f='transport')
             self._ctxsoc.connect(to)
 
             payload = fn(self, args, kwargs)
@@ -120,26 +118,20 @@ class OARpc(object):
             # An identifier for this conversation
             payload['conv_id'] = base64.b16encode(os.urandom(5)).decode('utf-8')
 
-            if self._oag.logger.RPC:
-                print("========>")
-                if addr==target:
-                    toaddr = addr
-                else:
-                    toaddr = target.id
-                print("[%s:req:%s] Sending RPC request with payload [%s] to [%s]" % (payload['conv_id'], self._oag.rpc.id, payload, toaddr))
+
+            toaddr = addr if addr==target else target.id
+            oalog.debug(f"========>", f='rpc')
+            oalog.debug(f"[{payload['conv_id']}:req:{self._oag.rpc.id}] Sending RPC request with payload [{payload}] to [{toaddr}]", f='rpc')
 
             self._ctxsoc.send(msgpack.dumps(payload))
             reply = self._ctxsoc.recv()
 
-            if oactx.logger.TRANSPORT:
-                print('Disconnecting from %s' % to)
+            oalog.debug(f"Disconnecting from [{to}]", f='transport')
             self._ctxsoc.close()
 
             rpcret = msgpack.loads(reply, raw=False)
-
-            if self._oag.logger.RPC:
-                print("[%s:req:%s] Received reply [%s]" % (rpcret['conv_id'], self._oag.rpc.id, rpcret))
-                print("<======== ")
+            oalog.debug(f"[{rpcret['conv_id']}:req:{self._oag.rpc.id}] Received reply [{rpcret}]", f='rpc')
+            oalog.debug(f"<========", f='rpc')
 
             if rpcret['status'] == 'OK':
                 return rpcret
@@ -176,20 +168,18 @@ class OARpc_RTR_Requests(OARpc):
         empty   = self._ctxsoc.recv()
         payload = msgpack.loads(self._ctxsoc.recv(), raw=False)
 
-        if oactx.logger.TRANSPORT:
-            print("=======>")
-            print('rtrrecv [conns]  : ', self.__class__.cxncount)
-            print('rtrrecv [sender] : ', sender)
-            print('rtrrecv [payload]: ', payload)
+        oalog.debug(f"=======>", f='transport')
+        oalog.debug(f"rtrrecv [conns]  : {self.__class__.cxncount}", f='transport')
+        oalog.debug(f"rtrrecv [sender] : {sender}", f='transport')
+        oalog.debug(f"rtrrecv [payload]: {payload}", f='transport')
 
         return (sender, payload)
 
     def _send(self, sender, payload):
 
-        if oactx.logger.TRANSPORT:
-            print('rtrsend [sender] : ', sender)
-            print('rtrsend [payload]: ', payload)
-            print("<=======")
+        oalog.debug(f"rtrsend [sender] : {sender}", f='transport')
+        oalog.debug(f"rtrsend [payload]: {payload}", f='transport')
+        oalog.debug(f"<=======", f='transport')
 
         self._ctxsoc.send(sender, zmq.SNDMORE)
         self._ctxsoc.send(str().encode('utf-8'), zmq.SNDMORE)
@@ -217,8 +207,7 @@ class OARpc_RTR_Requests(OARpc):
 
         invstream = args['stream']
 
-        if oag.logger.RPC:
-            print('[%s:rtr] invalidation signal received' % (ret['conv_id']))
+        oalog.debug(f"[{ret['conv_id']}:rtr] invalidation signal received", f='transport')
 
         oag.cache.invalidate(invstream)
 
@@ -252,13 +241,12 @@ class OARpc_RTR_Requests(OARpc):
 
     @OARpc.rpcprocfn
     def proc_update_broadcast(self, oag, ret, args):
-        if oag.logger.RPC:
-            print('[%s:rtr:%s] update broadcast signal received from %s' % (oag.rpc.id, ret['conv_id'], args['addr']))
+        oalog.debug(f"[{oag.rpc.id}:rtr:{ret['conv_id']}] update broadcast signal received from {args['addr']}", f='rpc')
+
         oag.db.search()
 
         # Tell upstream
-        if oag.logger.RPC:
-            print('[%s:rtr:%s] sending updates to %s' % (oag.rpc.id, ret['conv_id'], oag.rpc.registrations))
+        oaglog.debug(f"[{oag.rpc.id}:rtr:{ret['conv_id']}] sending updates to {oag.rpc.registrations}", f='rpc')
         for addr, stream in oag.rpc.registrations.items():
             OARpc_REQ_Request(oag).invalidate(addr, stream)
 
@@ -290,14 +278,12 @@ class OARpc_RTR_Requests(OARpc):
         # Bind to incoming port
         self._ctxsoc.bind("tcp://*:0")
 
-        if oactx.logger.RPC:
-            print("[rtr] Listening for RPC requests")
+        oalog.debug("[rtr] Listening for RPC requests", f='rpc')
 
         while True:
             (sender, payload) = self._recv()
 
-            if oactx.logger.RPC:
-                print("[%s:rtr] Received message [%s]" % (payload['conv_id'], payload))
+            oalog.debug(f"[{payload['conv_id']}:rtr] Received message [{payload}]", f='rpc')
 
             gevent.spawn(rpcproc, sender, payload)
 
@@ -502,11 +488,11 @@ class RpcProxy(object):
 
         if value is False:
             kill_count = oactx.kill_glet(self, 'heartbeat')
-            if self._oag.logger.RPC:
-                print("[%s] Killing [%d] heartbeat greenlets" % (self.id, kill_count))
+            oalog.debug(f"[{self.id}] Killing [{kill_count}] heartbeat greenlets", f="rpc")
+
             kill_count = oactx.kill_glet(self, 'discovery')
-            if self._oag.logger.RPC:
-                print("[%s] Killing [%d] discovery greenlets" % (self.id, kill_count))
+            oalog.debug(f"[{self.id}] Killing [{kill_count}] discovery greenlets", f="rpc")
+
             self._rpc_discovery.db.delete()
             self._rpc_discovery = None
         else:
@@ -519,18 +505,13 @@ class RpcProxy(object):
                     if rpc.is_valid:
                         number_active += 1
                     else:
-                        if self._oag.logger.RPC:
-                            print("[%s] Removing stale discoverable [%s]-[%d], last HA at [%s]"
-                                   % (self.id, rpc.type, rpc.stripe, rpc.heartbeat))
+                        oalog.debug(f"[{self.id}] Removing stale discoverable [{rpc.type}]-[{rpc.stripe}], last HA at [{rpc.heartbeat}]", f='rpc')
                         rpc.db.delete()
 
                 # Is there already an active subscription there?
                 if number_active > 0:
                     if not self.fanout:
-                        message = "[%s] Active OAG already on inferred name [%s], last HA at [%s]"\
-                                   % (self.id, rpc.rpcinfname, rpc.heartbeat)
-                        if self._oag.logger.RPC:
-                            print(message)
+                        oalog.debug(f"[{self.id}] Active OAG already on inferred name [{rpc.rpcinfname}], last HA at [{rpc.heartbeat}]", f='rpc')
                         raise OAError(message)
                     else:
                         raise OAError("Fanout not implemented yet")
@@ -614,14 +595,12 @@ class RpcProxy(object):
 
     def start_discovery_timeout(self):
         if self.is_timedout:
-            if self._oag.logger.RPC:
-                print("[%s] Starting timeout greenlet at [%s]" % (self.id, datetime.datetime.now().isoformat()))
+            oalog.debug(f"[{self.id}] Starting timeout greenlet at [{datetime.datetime.now().isoformat()}]", f='rpc')
             oactx.put_glet(self, gevent.spawn(self.__cb_discovery_timeout), glet_type='discovery')
 
     def start_heartbeat(self):
         if self.is_heartbeat:
-            if self._oag.logger.RPC:
-                print("[%s] Starting heartbeat greenlet at [%s]" % (self.id, datetime.datetime.now().isoformat()))
+            oalog.debug(f"[{self.id}] Starting heartbeat greenlet at [{datetime.datetime.now().isoformat()}]", f='rpc')
             oactx.put_glet(self, gevent.spawn(self.__cb_heartbeat), glet_type='heartbeat')
 
     @property
@@ -643,35 +622,27 @@ class RpcProxy(object):
                 from ._graph import OAG_RpcDiscoverable
                 rpcdisc = OAG_RpcDiscoverable(self._rpc_discovery.id, rpc=False)[0]
             except OAGraphRetrieveError as e:
-                if self._oag.logger.RPC:
-                    print("[%s] Underlying db controller row is missing for [%s]-[%d], exiting"
-                            % (self.id, self._rpc_discovery.rpcinfname, self._rpc_discovery.stripe))
+                oalog.critical(f"[{self.id}] Underlying db controller row is missing for [{self._rpc_discovery.rpcinfname}]-[{self._rpc_discovery.stripe}], exiting")
                 sys.exit(1)
 
             # Did environment change?
             if self._rpc_discovery.envid != rpcdisc.envid:
-                if self._oag.logger.RPC:
-                    print("[%s] Environment changed from [%s] to [%s], exiting"
-                            % (self.id, self._rpc_discovery.envid, rpcdisc.envid))
+                oalog.critical(f"[{self.id}] Environment changed from [{self._rpc_discovery.envid}] to [{rpcdisc.envid}], exiting")
                 sys.exit(1)
 
             self._rpc_discovery.heartbeat = OATime().now
-            if self._oag.logger.RPC:
-                print("[%s] heartbeat %s" % (self.id, self._rpc_discovery.heartbeat))
+            oalog.debug(f"[{self.id}] heartbeat {self._rpc_discovery.heartbeat}", f='rpc')
             self._rpc_discovery.db.update()
 
             gevent.sleep(oaenv.rpctimeout)
 
     def __cb_discovery_timeout(self):
-        if self._oag.logger.RPC:
-            print("[%s] Starting discovery timeout at [%s]" % (self.id, datetime.datetime.now().isoformat()))
+        oalog.debug(f"[{self.id}] Starting discovery timeout at [{datetime.datetime.now().isoformat()}]", f='rpc')
 
         gevent.sleep(self._rpc_discovery_timeout)
 
         if len(self._rpcreqs)==0:
-            if self._oag.logger.RPC:
-                print("[%s] After [%d] second timeout, [%s] has no clients, making it undiscoverable at [%s]"
-                    % (self.id, self._rpc_discovery_timeout, self._oag, datetime.datetime.now().isoformat()))
+            oalog.debug(f"[{self.id}] After [{self._rpc_discovery_timeout}] second timeout, [{self._oag}] has no clients, making it undiscoverable at [{datetime.datetime.now().isoformat()}]", f='rpc')
             self.discoverable = False
 
 class RestProxy(object):
@@ -767,11 +738,11 @@ class OA_WSGIHandler(gevent.pywsgi.WSGIHandler):
         return corrid
 
     def run_application(self):
-        with oactx.logger(corrid=self.corrid):
+        with oalog(corrid=self.corrid):
             super(OA_WSGIHandler, self).run_application()
 
     def log_request(self):
-        with oactx.logger(corrid=self.corrid):
+        with oalog(corrid=self.corrid):
             oalog.info(self.format_request())
 
     def format_request(self):

@@ -1,7 +1,7 @@
 from textwrap    import dedent as td
 
 from ._dao             import *
-from ._env             import oaenv, oactx
+from ._env             import oaenv, oactx, oalog
 
 from openarc.exception import OAGraphRetrieveError, OAGraphStorageError
 
@@ -14,13 +14,11 @@ class DbSchemaProxy(object):
         oag = dbp._oag
 
         if not oag.streamable:
-            if oag.logger.SQL:
-                print("[%s] is not streamable, not creating" % oag.dbtable)
+            oalog.debug(f"[{oag.dbtable}] is not streamable, not creating", f='sql')
             return oag
 
         if oag.__class__ in crstack:
-            if oag.logger.SQL:
-                print("Class %s is already in the process of being creating, not recursing" % oag.__class__)
+            oalog.debug(f"Class [{oag.__class__}] is already in the process of being creating, not recursing", f='sql')
             return oag
         else:
             crstack.append(oag.__class__)
@@ -30,8 +28,7 @@ class DbSchemaProxy(object):
             # Check that context schema exists
             check = tran.dao.execute(dbp.SQL['admin']['schema'])
             if len(check)==0:
-                if oag.logger.SQL:
-                    print("Creating missing schema [%s]" % oag.context)
+                oalog.debug(f"Creating missing schema [{oag.context}]", f='sql')
                 tran.dao.execute(dbp.SQL['admin']['mkschema'])
 
             # Check for presence of table
@@ -41,8 +38,7 @@ class DbSchemaProxy(object):
                 db_columns = [desc[0] for desc in extcur[0].description]
             except OAGraphStorageError as e:
                 if ('relation "%s.%s" does not exist' % (oag.context, oag.dbtable)) in str(e.underlyer):
-                    if oag.logger.SQL:
-                        print("Creating missing table [%s]" % oag.dbtable)
+                    oalog.debug(f"Creating missing table [{oag.dbtable}]", f='sql')
                     tran.dao.execute(dbp.SQL['admin']['mktable'])
                     tran.dao.execute(dbp.SQL['admin']['table'], cdict=False, extcur=extcur)
                     db_columns = [desc[0] for desc in extcur[0].description]
@@ -58,8 +54,7 @@ class DbSchemaProxy(object):
 
             add_cols = [rdb for rdb in db_columns_reqd if rdb not in db_columns_ext]
             if len(add_cols)>0:
-                if oag.logger.SQL:
-                    print("Adding new columns %s to [%s]" % (add_cols, oag.dbtable))
+                oalog.debug(f"Adding new columns {add_cols} to [{oag.dbtable}]", f='sql')
                 add_col_clauses = []
                 for i, col in enumerate(oag_columns):
                     if db_columns_reqd[i] in add_cols:

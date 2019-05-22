@@ -11,7 +11,7 @@ import psycopg2.extensions
 
 from   textwrap    import dedent as td
 
-from   ._env       import oactx
+from   ._env       import oactx, oalog
 
 from   openarc.exception import OAGraphStorageError
 
@@ -86,12 +86,10 @@ class OADao(object):
 
         if savepoint:
             savepoint_name = 'sp_'+binascii.hexlify(os.urandom(7)).decode('utf-8')
+            oalog.debug(f"Initializing savepoint [{savepoint_name}]", f='sql')
             cur.execute("SAVEPOINT %s" % savepoint_name)
-            if oactx.logger.SQL:
-                print("init savepoint %s" % savepoint_name)
 
-        if oactx.logger.SQL:
-            print(td(cur.mogrify(query, params).decode('utf-8')))
+        oalog.debug(f"{td(cur.mogrify(query, params).decode('utf-8'))}", f='sql')
 
         try:
             try:
@@ -104,8 +102,7 @@ class OADao(object):
                 pass
         except:
             if savepoint:
-                if oactx.logger.SQL:
-                    print("rollback savepoint %s" % savepoint_name)
+                oalog.debug(f"Rolling back to savepoint {savepoint_name}", f='sql')
                 cur.execute("ROLLBACK TO SAVEPOINT %s" % savepoint_name)
 
             if not self._trans_commit_hold:

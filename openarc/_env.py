@@ -64,7 +64,7 @@ class OALogManager(object):
         try:
             for family, value in oaenv.logging.debug.items():
                 setattr(self, family.upper(), value)
-        except KeyError:
+        except AttributeError:
             pass
 
         self._correlation_id = {}
@@ -76,6 +76,8 @@ class OALogManager(object):
 
         # Set up core logger
         self._logger = logging.getLogger(name)
+        if self._logger.handlers:
+            return
 
         # Set loglevel from config
         self._logger.setLevel(getattr(logging, oaenv.logging.level.upper(), 0))
@@ -112,8 +114,11 @@ class OALogManager(object):
             return None
 
     # Minimal pseudo logger interface with debug sugar thrown in
-    def debug(self, msg, *args, family=None, **kwargs):
-        if getattr(self, family.upper(), None):
+    def critical(self, msg, *args, **kwargs):
+        self._logger.critical(msg, *args, **kwargs)
+
+    def debug(self, msg, *args, f=None, **kwargs):
+        if f is None or getattr(self, f.upper(), None):
             self._logger.debug(msg, *args, **kwargs)
 
     def error(self, msg, *args, **kwargs):

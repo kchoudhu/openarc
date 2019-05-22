@@ -2,7 +2,7 @@ import collections
 import copy
 import weakref
 
-from ._env  import oactx
+from ._env  import oactx, oalog
 from ._util import oagprop
 
 from openarc.exception import *
@@ -312,16 +312,11 @@ class PropProxy(object):
                 if isinstance(cfval, OAG_RootNode):
                     # Regenerate connections to surrounding nodes
                     if currval is None:
-                        if self._oag.logger.RPC:
-                            print("[%s:req] Connecting to subnode [%s], stream [%s] in initmode" % (self._oag.rpc.id, cfval.rpc.id, stream))
+                        oalog.debug(f"[{self._oag.rpc.id}:req] Connecting to subnode [{cfval.rpc.id}], stream [{stream}] in initmode", f='rpc')
                         reqcls(self._oag).register(cfval.rpc.url, stream)
                     else:
                         if currval != cfval:
-                            if self._oag.logger.RPC:
-                                print("[%s:req] Detected stream change on [%s] from [%s]->[%s]" % (self._oag.rpc.id,
-                                                                                                   stream,
-                                                                                                   currval.rpc.id,
-                                                                                                   cfval.rpc.id))
+                            oalog.debug(f"[{self._oag.rpc.id}:req] Detected stream change on [{stream}] from [{currval.rpc.id}]->[{cfval.rpc.id}]", f='rpc')
                             if currval:
                                 reqcls(self._oag).deregister(currval.rpc.url, self._oag.rpc.url, stream)
                             reqcls(self._oag).register(cfval.rpc.url, stream)
@@ -332,8 +327,7 @@ class PropProxy(object):
 
                 if invalidate_upstream:
                     if len(self._oag.rpc.registrations)>0:
-                        if self._oag.logger.RPC:
-                            print("[%s:req] Informing upstream of [%s] invalidation [%s]->[%s]" % (self._oag.rpc.id, stream, currval, cfval))
+                        oalog.debug(f"[{self._oag.rpc.id}:req] Informing upstream of [{stream}] invalidation [{currval}]->[{cfval}]", f='rpc')
                         if self._oag.rpc.transaction.is_active:
                             self._oag.rpc.transaction.notify_upstream = True
                         else:

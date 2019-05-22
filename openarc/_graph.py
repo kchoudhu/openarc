@@ -195,9 +195,6 @@ class OAG_RootNode(object):
 
         return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
 
-    @property
-    def logger(self): return self._logger
-
     def clone(self):
         oagcopy = self.__class__()
 
@@ -240,43 +237,39 @@ class OAG_RootNode(object):
         if not self.is_reversible:
             return
 
-        if self.logger.GC:
-            print("GC=========>")
-            print("Deleting %s %s, %s, proxy: %s" % (self,
-                                                     self.rpc.id if self.rpc.is_enabled else str(),
-                                                     self.rpc.url if self.rpc.is_enabled else str(),
-                                                     self.rpc.is_proxy))
+        oalog.debug(f"GC=========>", f='gc')
+        oalog.debug("Deleting {} {}, {}, proxy: {}".format(
+                self,
+                self.rpc.id if self.rpc.is_enabled else str(),
+                self.rpc.url if self.rpc.is_enabled else str(),
+                self.rpc.is_proxy
+            ), f='gc')
 
         if self.rpc.is_enabled:
 
             # Tell upstream proxies that we are going away
-            if self.logger.GC:
-                print("Delete: proxies")
+
             if self.rpc.is_proxy:
-                if self.logger.GC:
-                    print("--> %s" % self.rpc.proxied_url)
+                oalog.debug(f"Delete: proxies", f='gc')
+                oalog.debug(f"--> {self.rpc.proxied_url}", f='gc')
                 oactx.rm_ka_via_rpc(self.rpc.url, self.rpc.proxied_url, 'proxy')
 
             # Tell upstream registrations that we are going away
-            if self.logger.GC:
-                print("Delete: registrations")
-                print("--> %s" % self.rpc.registrations)
+            oalog.debug(f"Delete: registrations", f='gc')
+            oalog.debug(f"--> {self.rpc.registrations}", f='gc')
 
             # Tell subnodes we are going away
-            if self.logger.GC:
-                print("Delete: cache")
-                print("--> %s" % self.cache.state)
+            oalog.debug(f"Delete cache", f='gc')
+            oalog.debug(f"--> {self.cache.state}", f='gc')
             self.cache.clear()
 
-            if self.logger.GC:
-                print("Delete: queue size")
-                print("--> %d" % oactx.rm_queue_size)
+            oalog.debug(f"Delete: queue size", f='gc')
+            oalog.debug(f"--> {oactx.rm_queue_size}", f='gc')
 
             # print("Delete: stop router")
             # self.rpc._glets[0].kill()
 
-        if self.logger.GC:
-            print("<=========GC")
+        oalog.debug("<=========GC", f='gc')
 
     def __enter__(self):
         self.rpc.discoverable = True
@@ -302,11 +295,9 @@ class OAG_RootNode(object):
 
         try:
             if object.__getattribute__(self, 'is_proxy'):
-                logger  = object.__getattribute__(self, '_logger')
                 rpc     = object.__getattribute__(self, '_rpc_proxy')
                 if attr in rpc.proxied_streams:
-                    if logger.RPC:
-                        print("[%s] proxying request for [%s] to [%s]" % (rpc.id, attr, rpc.proxied_url))
+                    oalog.debug(f"[{rpc.id}] proxying request for [{attr}] to [{rpc.proxied_url}]", f='rpc')
                     payload = reqcls(self).getstream(rpc.proxied_url, attr)['payload']
                     if payload['value']:
                         if payload['type'] == 'redirect':
@@ -361,7 +352,6 @@ class OAG_RootNode(object):
                  initprms={},
                  initurl=None,
                  initschema=True,
-                 logger=oactx.logger,
                  rest=False,
                  rpc=True,
                  rpc_acl=RpcACL.LOCAL_ALL,
@@ -373,7 +363,6 @@ class OAG_RootNode(object):
 
         # Alphabetize
         self._iteridx        = 0
-        self._logger         = logger
         self.is_proxy        = not initurl is None
 
         #### Set up proxies
@@ -411,10 +400,11 @@ class OAG_RootNode(object):
         else:
             self._rpc_proxy.proxied_streams = reqcls(self).register_proxy(self._rpc_proxy.proxied_url, 'proxy')['payload']
 
-        if self.logger.GC:
-            print("Creating %s, %s, %s" % (self,
-                                           self.rpc.id if self.rpc.is_enabled else str(),
-                                          'listening on %s' % self.rpc.url if self.rpc.is_enabled else str()))
+        oalog.debug("Create {}, {}, {}".format(
+                self,
+                self.rpc.id if self.rpc.is_enabled else str(),
+                f"listening on {self.rpc.url}" if self.rpc.is_enabled else str()
+            ), f='gc')
 
     def __iter__(self):
         if self.is_unique:
