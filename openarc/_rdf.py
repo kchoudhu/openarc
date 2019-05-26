@@ -322,7 +322,7 @@ class PropProxy(object):
                             reqcls(self._oag).register(cfval.rpc.url, stream)
                             invalidate_upstream = True
                 else:
-                    if currval and currval != cfval:
+                    if currval is not None and currval != cfval:
                         invalidate_upstream  = True
 
                 if invalidate_upstream:
