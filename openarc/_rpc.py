@@ -82,6 +82,8 @@ class OARpc(object):
     def rpcfn(fn):
         def wrapfn(self, target, *args, gc_run=True, **kwargs):
 
+            rpcret = {'status' : 'OK'}
+
             # Let's take a moment to process all garbage collected items
             if gc_run:
                 try:
@@ -97,6 +99,10 @@ class OARpc(object):
                 addr = target.addr
             else:
                 addr = target
+
+            # Attempt to connect to self, infinite loops are bad, m'kay?
+            if self._oag.url==addr:
+                return rpcret
 
             (protocol, tcpaddr, oagbang) = [c for c in addr.split('/') if len(c)>0]
 
