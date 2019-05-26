@@ -17,12 +17,15 @@ from ._util  import *
 
 oaenv.init_db()
 
-# Clean up internal symbols
-del(bootstrap)
-del(_dao)
-del(_db)
-del(_env)
-del(_graph)
-del(_rdf)
-del(_rpc)
-del(_util)
+def cleanup(symbol):
+    if symbol in globals():
+        del(globals()[symbol])
+
+cleanup('bootstrap')
+cleanup('_dao')
+cleanup('_db')
+cleanup('_env')
+cleanup('_graph')
+cleanup('_rdf')
+cleanup('_rpc')
+cleanup('_util')

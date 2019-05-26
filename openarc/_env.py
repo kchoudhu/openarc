@@ -24,6 +24,20 @@ import weakref
 
 from openarc.exception import *
 
+class OASingleton(object):
+    """There can only be one canonical source of information for anything
+    deriving from this class. Proxy all requests to the canonical gvar if current
+    instance is determined to be non-canonical"""
+    def __init__(self, gvar):
+        self.gvar = gvar
+
+    def __getattribute__(self, attr):
+        gvar = globals()[object.__getattribute__(self, 'gvar')]
+        if not gvar or self==gvar:
+            return object.__getattribute__(self, attr)
+        else:
+            return object.__getattribute__(gvar, attr)
+
 # Logging
 #
 # Globally, there is one logger, initialized within the OAGlobalContext, and
@@ -53,9 +67,11 @@ class OALogFormatter(logging.Formatter):
         record.corrid = oalog.correlation_id
         return super().format(record)
 
-class OALogManager(object):
+class OALogManager(OASingleton):
 
-    def __init__(self, name='openarc.core'):
+    def __init__(self, gvar, name='openarc.core'):
+        super(OALogManager, self).__init__(gvar)
+
         # In debug mode log turn off all logging first. Reset these nodes from
         # config as necessary
         global oaenv
@@ -299,9 +315,11 @@ oaenv = None
 p_refcount_env = 0
 p_testmode = False
 
-class OAEnv(object):
+class OAEnv(OASingleton):
 
-    def __init__(self, cfgfile=None):
+    def __init__(self, gvar, cfgfile=None):
+        super(OAEnv, self).__init__(gvar)
+
         self.envid = base64.b16encode(os.urandom(16)).decode('ascii')
 
         def get_cfg_file_path():
@@ -343,12 +361,6 @@ class OAEnv(object):
         global oaenv
         oaenv = self
 
-        # Initialize database schema
-        self.init_db()
-
-        # Initialize logging
-        self.init_logging('openarc.core')
-
     def __call__(self, node):
         return getattr(self, node, None) if node else oaenv
 
@@ -389,11 +401,11 @@ class OAEnv(object):
                 except OAError:
                     pass
 
-    def init_logging(self, name):
+    def init_logging(self, name, reset=False):
         # Global logger
         global oalog
-        if not oalog:
-            oalog = OALogManager(name)
+        if not oalog or reset:
+            oalog = OALogManager('oalog', name)
         oalog.set_logger(name)
 
     def merge_app_cfg(self, app, appcfg):
@@ -432,10 +444,17 @@ def oainit(reset=False,          # Reset the environment barring one special env
     if p_refcount_env == 0:
 
         # Initialize environment
-        OAEnv(cfgfile=cfgfile)
+        OAEnv('oaenv', cfgfile=cfgfile)
 
         # Initialize global context to get logging+object sink set up
         OAGlobalContext()
 
-    # Make sure we can't reinit environment
-    p_refcount_env += 1
+        # Make sure we can't reinit environment
+        p_refcount_env += 1
+
+        # Now that configs have been read in, do some other stuff
+        # Initialize database schema
+        oaenv.init_db()
+
+        # Initialize logging
+        oaenv.init_logging('openarc.core', reset=reset)
