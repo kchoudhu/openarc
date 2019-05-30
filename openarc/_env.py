@@ -408,21 +408,28 @@ class OAEnv(OASingleton):
             oalog = OALogManager('oalog', name)
         oalog.set_logger(name)
 
-    def merge_app_cfg(self, app, appcfg):
+    def merge_app_cfg(self, cfg_file_path):
+        try:
+            with open(cfg_file_path) as f:
+                # Create new node in OAEnv
+                appcfg = toml.loads(f.read())
+                app = appcfg['app']['name']
+                self._envcfg = attrdict.AttrDict({**self._envcfg, **attrdict.AttrDict({ app : appcfg })})
+                if getattr(self, app, None) or getattr(self, 'app', None):
+                    raise OAError(f'Configuration for {app} already exists')
+                setattr(self,  app,  attrdict.AttrDict(appcfg))
+                setattr(self, 'app', getattr(self, app, attrdict.AttrDict()).app)
+                print(f'Loaded {app.upper()} config: [{cfg_file_path}]')
 
-        self._envcfg = attrdict.AttrDict({**self._envcfg, **attrdict.AttrDict({ app : appcfg })})
+                # Refresh database to create entries from new application
+                self.init_db()
 
-        if getattr(self, app, None) or getattr(self, 'app', None):
-            raise OAError(f'Configuration for {app} already exists')
-
-        setattr(self,  app,  attrdict.AttrDict(appcfg))
-        setattr(self, 'app', getattr(self, app, attrdict.AttrDict()).app)
-
-        # Refresh database to create entries from new application
-        self.init_db()
-
-        # And renew logger with the appname
-        self.init_logging(self.app.name)
+                # And renew logger with the appname
+                self.init_logging(self.app.name)
+        except IOError:
+            raise OAError(f'{cfg_file_path} does not exist')
+        except OAError:
+            return
 
     @property
     def cfg(self):

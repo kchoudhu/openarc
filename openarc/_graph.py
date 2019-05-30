@@ -13,7 +13,6 @@ import os
 import signal
 import socket
 import sys
-import toml
 
 from ._db   import *
 from ._env  import *
@@ -550,14 +549,7 @@ class OAG_RootD(OAG_RootNode):
 
             return cfg_file_path
 
-        cfg_file_path = get_cfg_file_path()
-        print(f'Loading {self.daemonname.upper()} config: [{cfg_file_path}]')
-        try:
-            with open(cfg_file_path) as f:
-                appcfg = toml.loads(f.read())
-                oaenv.merge_app_cfg(self.daemonname, appcfg)
-        except IOError:
-            raise OAError(f'{cfg_file_path} does not exist')
+        oaenv.merge_app_cfg(get_cfg_file_path())
 
         def get_pid_file_path():
             if pidfile:
