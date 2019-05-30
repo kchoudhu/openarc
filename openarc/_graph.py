@@ -80,6 +80,9 @@ class OAG_RootNode(object):
     def is_unique(cls): return False
 
     @staticproperty
+    def nonstream_deps(cls): return []
+
+    @staticproperty
     def restapi(cls): return {}
 
     @staticproperty

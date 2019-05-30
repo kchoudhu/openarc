@@ -15,6 +15,11 @@ class DbSchemaProxy(object):
 
         if not oag.streamable:
             oalog.debug(f"[{oag.dbtable}] is not streamable, not creating", f='sql')
+
+            # Non-streamable OAGs may still depend on streamable OAGs; ensure they
+            # are initialized in database
+            for stream in oag.nonstream_deps:
+                stream(rpc=False).db.schema.init(crstack=crstack)
             return oag
 
         if oag.__class__ in crstack:
@@ -152,6 +157,11 @@ class DbProxy(object):
         self._searchwin      = searchwin
         self._searchoffset   = searchoffset
         self._searchdesc     = searchdesc
+
+        if not self._oag.streamable\
+            and oaenv.dbinfo['on_demand_schema']\
+            and self._initschema:
+            self.schema.init()
 
     @property
     def _dao(self):
