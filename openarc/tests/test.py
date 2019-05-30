@@ -8,12 +8,7 @@ class TestOABase(object):
         from openarc._env import oaenv, oainit
 
         oainit()
-        dbinfo = oaenv.dbinfo
-        self.dbconn = psycopg2.connect(dbname='openarc',
-                                       user=dbinfo['user'],
-                                       password=dbinfo['password'],
-                                       host=dbinfo['host'],
-                                       port=dbinfo['port'])
+        self.dbconn = psycopg2.connect(**{k:v for k, v in oaenv.dbinfo.items() if k!='on_demand_schema'})
         with self.dbconn.cursor() as cur:
             cur.execute(self.SQL.drop_test_schema)
             cur.execute(self.SQL.create_test_schema)
