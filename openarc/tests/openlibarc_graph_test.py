@@ -1,6 +1,8 @@
+import base64
 import enum
 import gevent
 import openarc
+import os
 import sys
 import unittest
 
@@ -1066,8 +1068,8 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a2.rpc.discoverable, False)
 
         with a2:
-            a2_remote =\
-                OAG_AutoNode2(a2.id).rpc.discover()
+            tmp = OAG_AutoNode2(a2.id)
+            a2_remote = tmp.rpc.discover()
 
             self.__check_autonode_equivalence(a2, a2_remote)
 
@@ -1097,7 +1099,7 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
                 a2_dupe.rpc.discoverable = True
 
             # Wait 5 seconds, and then try to make duplicate discoverable
-            time.sleep(oaenv.rpctimeout)
+            openarc.time.coretime.sleep(oaenv.rpctimeout)
             a2_dupe.rpc.discoverable = True
             rpcdisc =\
                 OAG_RpcDiscoverable({
@@ -1794,6 +1796,28 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(filter_oag.rdf.filter(lambda x: x.field2==2, cache=True).size, 1)
         self.assertEqual(filter_oag.size, 1)
 
+    def test_autonode_self_reference_ensure_no_recursion(self):
+        """Do not send RPC requests to yourself. The easiest way to test this
+        is to ensure have an oagprop on a node that returns itself and then
+        invalidate the node"""
+        a3 =\
+            OAG_AutoNode3().db.create({
+                'field7' :  8,
+                'field8' : 'this is an autonode3'
+            })
+
+        self.assertEqual(len(a3.rpc.registrations), 0)
+
+        self.assertEqual(a3, a3.selfref)
+
+        self.assertEqual(len(a3.rpc.registrations), 0)
+
+        # Special wrinkle: communications with proxied OAGs *should* still work
+        a3_proxy = OAG_AutoNode3(initurl=a3.url)
+
+        self.assertEqual(a3_proxy.url, a3.url)
+        self.assertEqual(a3_proxy.selfref.field7, a3.field7)
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path =\
@@ -1881,6 +1905,10 @@ class OAG_AutoNode3(OAG_RootNode):
         'field7'   : [ 'int',         0, None ],
         'field8'   : [ 'varchar(50)', 0, None ],
     }
+
+    @oagprop
+    def selfref(self, **kwargs):
+        return self
 
 class OAG_AutoNode4(OAG_RootNode):
     @staticproperty

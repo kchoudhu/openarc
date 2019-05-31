@@ -101,7 +101,7 @@ class OARpc(object):
                 addr = target
 
             # Attempt to connect to self, infinite loops are bad, m'kay?
-            if self._oag.url==addr:
+            if not self._oag.rpc.is_proxy and self._oag.url==addr:
                 return rpcret
 
             (protocol, tcpaddr, oagbang) = [c for c in addr.split('/') if len(c)>0]
@@ -517,7 +517,8 @@ class RpcProxy(object):
                 # Is there already an active subscription there?
                 if number_active > 0:
                     if not self.fanout:
-                        oalog.debug(f"[{self.id}] Active OAG already on inferred name [{rpc.rpcinfname}], last HA at [{rpc.heartbeat}]", f='rpc')
+                        message = f"[{self.id}] Active OAG already on inferred name [{rpc.rpcinfname}], last HA at [{rpc.heartbeat}]"
+                        oalog.debug(message, f='rpc')
                         raise OAError(message)
                     else:
                         raise OAError("Fanout not implemented yet")
