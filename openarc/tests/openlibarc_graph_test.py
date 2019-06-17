@@ -1818,6 +1818,23 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         self.assertEqual(a3_proxy.url, a3.url)
         self.assertEqual(a3_proxy.selfref.field7, a3.field7)
 
+    def test_autonode_falsey_oagprop_caching(self):
+        """Ensure that false-ey oagprops are properly cached and are not accidentally
+        dropped by the caching code. This avoids unnecessary recomputation """
+        a3 = OAG_AutoNode3()
+
+        # Items that return None are not cached
+        a3.noneprop
+        self.assertEqual(len(a3.cache.state), 0)
+
+        a3.trueprop
+        a3.falseprop
+        a3.dictprop
+        a3.listprop
+
+        self.assertEqual(len(a3.cache.state), 4)
+
+
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
         get_search_path =\
@@ -1909,6 +1926,27 @@ class OAG_AutoNode3(OAG_RootNode):
     @oagprop
     def selfref(self, **kwargs):
         return self
+
+    @oagprop
+    def noneprop(self, **kwargs):
+        return None
+
+    @oagprop
+    def trueprop(self, **kwargs):
+        return True
+
+    @oagprop
+    def falseprop(self, **kwargs):
+        return False
+
+    @oagprop
+    def dictprop(self, **kwargs):
+        return {}
+
+    @oagprop
+    def listprop(self, **kwargs):
+        return []
+
 
 class OAG_AutoNode4(OAG_RootNode):
     @staticproperty

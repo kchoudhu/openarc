@@ -36,7 +36,7 @@ class CacheProxy(object):
         return self._oagcache[stream]
 
     def put(self, stream, new_value):
-        if not new_value:
+        if new_value is None:
             return
         self._oagcache[stream] = new_value
 
