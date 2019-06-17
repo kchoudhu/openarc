@@ -197,6 +197,11 @@ class OAG_RootNode(object):
 
         return hashlib.sha256(hashstr.encode('utf-8')).hexdigest()
 
+    @property
+    def is_materialized(self):
+        """Has been persisted to the database"""
+        return self.id is not None
+
     def clone(self):
         oagcopy = self.__class__()
 

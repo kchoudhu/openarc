@@ -3,7 +3,7 @@ from textwrap    import dedent as td
 from ._dao             import *
 from ._env             import oaenv, oactx, oalog
 
-from openarc.exception import OAGraphRetrieveError, OAGraphStorageError
+from openarc.exception import OAGraphRetrieveError, OAGraphStorageError, OAGraphIntegrityError
 
 class DbSchemaProxy(object):
     def __init__(self, dbproxy):
@@ -172,15 +172,17 @@ class DbProxy(object):
         self._searchprms = src.db.searchprms
         self._searchidx  = src.db.searchidx
 
-    def create(self, initprms={}):
+    def create(self, initprms={}, norefresh=False):
+
+        is_materialized = self._oag.is_materialized
 
         if oaenv.dbinfo['on_demand_schema'] and self._initschema:
             self.schema.init()
 
         self._oag.props._set_cframe_from_userprms(initprms, fullhouse=True)
 
-        if self._oag.rdf._rdf is not None:
-            raise OAError("Cannot create item that has already been initiated")
+        if is_materialized:
+            raise OAError("Cannot create OAG that has already been materialized")
 
         filtered_cframe = {k:self._oag.props._cframe[k] for k in self._oag.props._cframe if k[0] != '_'}
         attrstr    = ', '.join([k for k in filtered_cframe])
@@ -192,10 +194,16 @@ class DbProxy(object):
         if self._searchidx=='id':
             index_val = results
             self._searchprms = list(index_val[0].values())
-        self.__refresh_from_cursor()
+            if not is_materialized and self._oag.rdf._rdf:
+                for pk, idx in index_val[0].items():
+                    self._oag.rdf._rdf_window[self._oag._iteridx-1][pk] = idx
+                norefresh = True
+
+        if not norefresh:
+            self.__refresh_from_cursor()
 
         # Refresh to set iteridx
-        self._oag.reset()
+        self._oag.reset(idxreset=False)
 
         if oaenv.dbinfo['on_demand_schema'] and self._initschema:
             self.schema.init_fkeys()
@@ -207,7 +215,9 @@ class DbProxy(object):
         # DO preserve cache though, we don't want to kill OAGs that were
         # set as part of the initialization process.
         if not self._oag.is_unique and len(self._oag.rdf._rdf_window)>0:
-            self._oag.__getitem__(self._oag.rdf._rdf_window_index, preserve_cache=True)
+            self._oag\
+                .__getitem__(self._oag.rdf._rdf_window_index, preserve_cache=True)\
+                .__getitem__(self._oag._iteridx-1, preserve_cache=True)
         else:
             self._oag.props._set_attrs_from_cframe_uniq()
 
