@@ -142,7 +142,7 @@ class DbProxy(object):
         self._initschema = initschema
 
         # Intialize search parameters, if any
-        if searchprms:
+        if searchprms is not []:
             if type(searchprms).__name__ in ['dict']:
                 rawprms = [searchprms[prm] for prm in sorted(searchprms.keys())]
             elif type(searchprms).__name__ in ['list', 'tuple']:

@@ -1834,6 +1834,33 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
 
         self.assertEqual(len(a3.cache.state), 4)
 
+    def test_autonode_search_on_falsey_params(self):
+        """Ensure that false-ey search parameters do not accidentally result in
+        searchprms not being set on OAG"""
+
+        a3 =\
+            OAG_AutoNode8().db.create({
+                'field3' : 0,
+                'field4' : 0,
+                'field5' : str()
+            })
+
+        a7 =\
+            OAG_AutoNode7().db.create({
+                'subnode1':  None,
+                'field1':    False
+            })
+
+        # integer 0
+        self.assertEqual(OAG_AutoNode8(0, "by_f4_idx").size, 1)
+
+        # empty string
+        self.assertEqual(OAG_AutoNode8(str(), "by_f5_idx").size, 1)
+
+
+        # boolean false
+        self.assertEqual(OAG_AutoNode7(False, 'by_f1_idx').size, 1)
+
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""
@@ -2004,6 +2031,11 @@ class OAG_AutoNode7(OAG_RootNode):
         'field1'   : [ 'boolean',      None,   None ],
     }
 
+    @staticproperty
+    def dbindices(cls) : return {
+        'f1_idx' : [['field1'], False,   None ]
+    }
+
 class OAG_AutoNode8(OAG_RootNode):
     @staticproperty
     def context(cls): return "test"
@@ -2018,6 +2050,7 @@ class OAG_AutoNode8(OAG_RootNode):
     @staticproperty
     def dbindices(cls) : return {
         'f4_idx' : [['field4'], False,   None ],
+        'f5_idx' : [['field5'], False,   None ]
     }
 
     @staticproperty
