@@ -1861,6 +1861,14 @@ class TestOAGraphRootNode(unittest.TestCase, TestOABase):
         # boolean false
         self.assertEqual(OAG_AutoNode7(False, 'by_f1_idx').size, 1)
 
+    def test_autonode_nothrow(self):
+        """throw_on_empty=False should result in OAGraphRetrieveError not being
+        thrown when OAG is hydrated from datastore"""
+        with self.assertRaises(OAGraphRetrieveError):
+            a8_a = OAG_AutoNode8(0, "by_f4_idx")
+
+        a8_b = OAG_AutoNode8(0, "by_f4_idx", throw_on_empty=False)
+        self.assertEqual(a8_b.size, 0)
 
     class SQL(TestOABase.SQL):
         """Boilerplate SQL needed for rest of class"""

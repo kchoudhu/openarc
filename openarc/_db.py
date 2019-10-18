@@ -129,7 +129,7 @@ class DbSchemaProxy(object):
 
 class DbProxy(object):
     """Responsible for manipulation of database"""
-    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc, initschema):
+    def __init__(self, oag, searchprms, searchidx, searchwin, searchoffset, searchdesc, initschema, throw_on_empty):
         from ._graph import OAG_RootNode
 
         # Store reference to outer object
@@ -157,6 +157,8 @@ class DbProxy(object):
         self._searchwin      = searchwin
         self._searchoffset   = searchoffset
         self._searchdesc     = searchdesc
+
+        self._throw_on_empty = throw_on_empty
 
         if not self._oag.streamable\
             and oaenv.dbinfo['on_demand_schema']\
@@ -228,21 +230,22 @@ class DbProxy(object):
         delete_sql = self.SQL['delete']['id']
 
         self._dao.execute(delete_sql, [self._oag.id])
-        self.search(throw_on_empty=False, broadcast=broadcast)
+        self.search(throw_on_empty_local=False, broadcast=broadcast)
 
         if self._oag.is_unique:
             self._oag.props._set_attrs_from_cframe_uniq()
 
         return self
 
-    def search(self, throw_on_empty=True, broadcast=False):
+    def search(self, throw_on_empty_local=True, broadcast=False):
         """Generally we want to simply reset the iterator; set gotodb=True to also
         refresh instreams from the database"""
         self.__refresh_from_cursor(broadcast=broadcast)
 
-        # Is the new rdf empty?
-        if throw_on_empty and len(self._oag.rdf._rdf) == 0:
-            raise OAGraphRetrieveError("No results found in database")
+        # Is the new rdf empty? If OAG is marked self._throw_
+        if self._throw_on_empty and len(self._oag.rdf._rdf) == 0:
+            if throw_on_empty_local:
+                raise OAGraphRetrieveError("No results found in database")
 
         # Reset cache
         self._oag.cache.clear()
@@ -352,7 +355,8 @@ class DbProxy(object):
                     OARpc_REQ_Request(self._oag).update_broadcast(listener)
 
         except OAGraphStorageError:
-            raise OAGraphRetrieveError("Missing database table")
+            if self._throw_on_empty:
+                raise OAGraphRetrieveError("Missing database table")
 
     @property
     def schema(self):
